@@ -1890,6 +1890,26 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   // 2. Add state for secondary dashboard tab
   const [dashboardTab, setDashboardTab] = useState("overview");
 
+  // Define the column type
+  type Column = {
+    key: string;
+    label: string;
+    sortable?: boolean;
+  };
+
+  // Define the columns with proper typing
+  const columns: Column[] = [
+    { key: "photoUrl", label: "Face", sortable: false },
+    { key: "id", label: "Temporary ID", sortable: true },
+    { key: "firstSeen", label: "First Seen", sortable: true },
+    { key: "lastSeen", label: "Last Seen", sortable: true },
+    { key: "tempAccesses", label: "Temp Accesses", sortable: true },
+    { key: "accessedZones", label: "Accessed Zones", sortable: true },
+    { key: "status", label: "Status", sortable: true },
+    { key: "aiAction", label: "AI Suggested Action", sortable: true },
+    { key: "actions", label: "Admin Actions", sortable: false },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800">
       {/* Header */}
@@ -1947,8 +1967,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         {activeTab === "dashboard" && (
           <div className="space-y-8">
             {/* Secondary Tab Navigation */}
-            <div className="mb-8">
-              <nav className="flex border-b border-gray-200 bg-white/70 rounded-t-lg">
+            <div className="mb-6">
+              <nav className="flex space-x-6">
                 {[
                   { id: "overview", label: "Overview" },
                   { id: "observed", label: "Observed Users" },
@@ -1958,12 +1978,11 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   <button
                     key={tab.id}
                     onClick={() => setDashboardTab(tab.id)}
-                    className={`px-4 py-2 -mb-px border-b-2 text-sm font-medium transition-colors focus:outline-none ${
+                    className={`text-sm font-medium transition-colors duration-200 ${
                       dashboardTab === tab.id
-                        ? "border-teal-600 text-teal-700 bg-white"
-                        : "border-transparent text-gray-500 hover:text-teal-700 hover:border-teal-300 bg-transparent"
+                        ? "text-green-400 border-b-2 border-green-400 pb-1 font-semibold"
+                        : "text-purple-200 hover:text-purple-100"
                     }`}
-                    style={{ minWidth: 120 }}
                   >
                     {tab.label}
                   </button>
@@ -2097,29 +2116,14 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="text-gray-500 border-b">
-                          {[
-                            { key: "photoUrl", label: "Face" },
-                            { key: "id", label: "Temporary ID" },
-                            { key: "firstSeen", label: "First Seen" },
-                            { key: "lastSeen", label: "Last Seen" },
-                            { key: "tempAccesses", label: "Temp Accesses" },
-                            { key: "accessedZones", label: "Accessed Zones" },
-                            { key: "status", label: "Status" },
-                            { key: "aiAction", label: "AI Suggested Action" },
-                            { key: "actions", label: "Admin Actions" },
-                          ].map((col) => (
+                          {columns.map((col) => (
                             <th
                               key={col.key}
                               className={`py-2 px-2 text-left ${
-                                col.key !== "photoUrl" && col.key !== "actions"
-                                  ? "cursor-pointer select-none"
-                                  : ""
+                                col.sortable ? "cursor-pointer select-none" : ""
                               }`}
                               onClick={() => {
-                                if (
-                                  col.key !== "photoUrl" &&
-                                  col.key !== "actions"
-                                ) {
+                                if (col.sortable) {
                                   if (observedSortField === col.key) {
                                     setObservedSortDirection(
                                       observedSortDirection === "asc"
@@ -2127,7 +2131,9 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                         : "asc"
                                     );
                                   } else {
-                                    setObservedSortField(col.key);
+                                    setObservedSortField(
+                                      col.key as ObservedUserSortField
+                                    );
                                     setObservedSortDirection("asc");
                                   }
                                 }
@@ -2135,9 +2141,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             >
                               <span className="flex items-center">
                                 {col.label}
-                                {observedSortField === col.key &&
-                                  col.key !== "photoUrl" &&
-                                  col.key !== "actions" &&
+                                {col.sortable &&
+                                  observedSortField === col.key &&
                                   (observedSortDirection === "asc" ? (
                                     <svg
                                       className="w-3 h-3 ml-1"
