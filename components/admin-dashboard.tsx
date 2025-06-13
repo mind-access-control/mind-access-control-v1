@@ -1584,11 +1584,29 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 <tr key={u.id} className="border-b hover:bg-red-50 transition">
                   <td className="py-2 px-2 flex items-center gap-2">
                     {u.photoUrl ? (
-                      <img
-                        src={u.photoUrl}
-                        alt={u.name}
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
+                      <div className="relative w-8 h-8">
+                        <img
+                          src={u.photoUrl}
+                          alt={u.name}
+                          className="w-8 h-8 rounded-full object-cover"
+                          onError={(e) => {
+                            // Hide the broken image
+                            (e.target as HTMLImageElement).style.display =
+                              "none";
+                            // Show the fallback icon
+                            const fallback =
+                              e.currentTarget.parentElement?.querySelector(
+                                ".fallback-icon"
+                              );
+                            if (fallback) {
+                              (fallback as HTMLElement).style.display = "block";
+                            }
+                          }}
+                        />
+                        <div className="fallback-icon hidden absolute inset-0">
+                          <UserCircle2 className="w-8 h-8 text-gray-400" />
+                        </div>
+                      </div>
                     ) : (
                       <UserCircle2 className="w-8 h-8 text-gray-400" />
                     )}
@@ -1910,6 +1928,16 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     { key: "actions", label: "Admin Actions", sortable: false },
   ];
 
+  // Add this function at the component level, before the return statement
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  const handleImageError = (userId: number, photoUrl: string) => {
+    setImageErrors((prev) => ({
+      ...prev,
+      [photoUrl]: true,
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800">
       {/* Header */}
@@ -2184,12 +2212,17 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             className="border-b hover:bg-blue-50 transition"
                           >
                             <td className="py-2 px-2">
-                              {u.photoUrl ? (
-                                <img
-                                  src={u.photoUrl}
-                                  alt={u.id}
-                                  className="w-8 h-8 rounded-full object-cover"
-                                />
+                              {u.photoUrl && !imageErrors[u.photoUrl] ? (
+                                <div className="relative w-8 h-8">
+                                  <img
+                                    src={u.photoUrl}
+                                    alt={u.name}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                    onError={() =>
+                                      handleImageError(u.id, u.photoUrl)
+                                    }
+                                  />
+                                </div>
                               ) : (
                                 <UserCircle2 className="w-8 h-8 text-gray-400" />
                               )}
