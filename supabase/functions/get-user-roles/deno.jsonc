@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.window", "deno.unstable"],
+    "types": [
+      "https://deno.land/x/deno_supabase_type_extensions@v0.0.1/lib.deno.unstable.d.ts"
+    ]
+  },
+  "importMap": "import_map.json"
+}

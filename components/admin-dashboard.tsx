@@ -1,8 +1,16 @@
 "use client";
 
 import React from "react";
-
-import { useState, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js"; // Importa el cliente de Supabase JS
+// --- Configuración del Cliente Supabase para el Frontend ---
+// Estas variables de entorno deben estar definidas en tu archivo .env.local
+// y ser accesibles públicamente (por eso el prefijo NEXT_PUBLIC_ en Next.js).
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Crea la instancia del cliente Supabase.
+// Usamos '!' para indicar a TypeScript que confiamos en que estas variables no serán null/undefined en runtime.
+const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,38 +135,20 @@ const recentAccesses = [
 ];
 
 // Updated user data with new fields
-const initialUsers = [
+const initialUsers: User[] = [
   {
     id: 1,
-    name: "John Smith",
-    email: "john.smith@company.com",
+    name: "John Doe",
+    email: "john@example.com",
     role: "Admin",
-    jobTitle: "Security Officer",
-    accessZones: ["Main Entrance", "Server Room", "Zone A"],
+    accessZones: ["Main Entrance", "Server Room"],
   },
   {
     id: 2,
-    name: "Sarah Johnson",
-    email: "sarah.johnson@company.com",
+    name: "Jane Smith",
+    email: "jane@example.com",
     role: "User",
-    jobTitle: "Software Engineer",
-    accessZones: ["Main Entrance", "Zone B"],
-  },
-  {
-    id: 3,
-    name: "Mike Wilson",
-    email: "mike.wilson@company.com",
-    role: "User",
-    jobTitle: "Human Resources",
-    accessZones: ["Main Entrance"],
-  },
-  {
-    id: 4,
-    name: "Emily Davis",
-    email: "emily.davis@company.com",
-    role: "Admin",
-    jobTitle: "Operations Manager",
-    accessZones: ["Main Entrance", "Warehouse", "Zone A", "Zone B"],
+    accessZones: ["Main Entrance", "Office Area"],
   },
 ];
 
@@ -169,7 +159,6 @@ const accessLogs = [
     user: "John Smith",
     email: "john.smith@company.com",
     role: "Admin",
-    jobTitle: "Security Officer",
     zone: "Main Entrance",
     status: "Successful",
     method: "Facial",
@@ -180,7 +169,6 @@ const accessLogs = [
     user: "Sarah Johnson",
     email: "sarah.johnson@company.com",
     role: "User",
-    jobTitle: "Software Engineer",
     zone: "Zone B",
     status: "Successful",
     method: "Facial",
@@ -191,7 +179,6 @@ const accessLogs = [
     user: "Mike Wilson",
     email: "mike.wilson@company.com",
     role: "User",
-    jobTitle: "Human Resources",
     zone: "Server Room",
     status: "Failed",
     method: "Facial",
@@ -202,7 +189,6 @@ const accessLogs = [
     user: "Emily Davis",
     email: "emily.davis@company.com",
     role: "Admin",
-    jobTitle: "Operations Manager",
     zone: "Warehouse",
     status: "Successful",
     method: "Manual",
@@ -213,7 +199,6 @@ const accessLogs = [
     user: "Robert Brown",
     email: "robert.brown@company.com",
     role: "User",
-    jobTitle: "Marketing Specialist",
     zone: "Main Entrance",
     status: "Successful",
     method: "Facial",
@@ -224,7 +209,6 @@ const accessLogs = [
     user: "John Smith",
     email: "john.smith@company.com",
     role: "Admin",
-    jobTitle: "Security Officer",
     zone: "Server Room",
     status: "Successful",
     method: "Facial",
@@ -235,7 +219,6 @@ const accessLogs = [
     user: "Sarah Johnson",
     email: "sarah.johnson@company.com",
     role: "User",
-    jobTitle: "Software Engineer",
     zone: "Main Entrance",
     status: "Successful",
     method: "Facial",
@@ -246,7 +229,6 @@ const accessLogs = [
     user: "Emily Davis",
     email: "emily.davis@company.com",
     role: "Admin",
-    jobTitle: "Operations Manager",
     zone: "Zone A",
     status: "Failed",
     method: "Facial",
@@ -257,7 +239,6 @@ const accessLogs = [
     user: "Mike Wilson",
     email: "mike.wilson@company.com",
     role: "User",
-    jobTitle: "Human Resources",
     zone: "Main Entrance",
     status: "Successful",
     method: "Manual",
@@ -268,7 +249,6 @@ const accessLogs = [
     user: "Robert Brown",
     email: "robert.brown@company.com",
     role: "User",
-    jobTitle: "Marketing Specialist",
     zone: "Cafeteria",
     status: "Successful",
     method: "Facial",
@@ -279,7 +259,6 @@ const accessLogs = [
     user: "John Smith",
     email: "john.smith@company.com",
     role: "Admin",
-    jobTitle: "Security Officer",
     zone: "Executive Suite",
     status: "Failed",
     method: "Facial",
@@ -290,7 +269,6 @@ const accessLogs = [
     user: "Sarah Johnson",
     email: "sarah.johnson@company.com",
     role: "User",
-    jobTitle: "Software Engineer",
     zone: "Zone B",
     status: "Successful",
     method: "Manual",
@@ -301,7 +279,6 @@ const accessLogs = [
     user: "Mike Wilson",
     email: "mike.wilson@company.com",
     role: "User",
-    jobTitle: "Human Resources",
     zone: "Main Entrance",
     status: "Successful",
     method: "Facial",
@@ -312,7 +289,6 @@ const accessLogs = [
     user: "Emily Davis",
     email: "emily.davis@company.com",
     role: "Admin",
-    jobTitle: "Operations Manager",
     zone: "Warehouse",
     status: "Failed",
     method: "Facial",
@@ -323,34 +299,10 @@ const accessLogs = [
     user: "Robert Brown",
     email: "robert.brown@company.com",
     role: "User",
-    jobTitle: "Marketing Specialist",
     zone: "Main Entrance",
     status: "Successful",
     method: "Facial",
   },
-];
-
-// Access zones options
-const accessZonesOptions = [
-  "Main Entrance",
-  "Zone A",
-  "Zone B",
-  "Server Room",
-  "Warehouse",
-  "Executive Suite",
-  "Cafeteria",
-];
-
-// Job title options
-const jobTitleOptions = [
-  "Software Engineer",
-  "Product Manager",
-  "Security Officer",
-  "Human Resources",
-  "Marketing Specialist",
-  "Operations Manager",
-  "IT Administrator",
-  "Executive",
 ];
 
 // CSV template content
@@ -359,7 +311,7 @@ John Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,
 Jane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg
 `;
 
-type SortField = "name" | "email" | "role" | "jobTitle";
+type SortField = "name" | "email" | "role";
 type SortDirection = "asc" | "desc";
 
 // Access logs sorting types
@@ -368,7 +320,6 @@ type LogSortField =
   | "user"
   | "email"
   | "role"
-  | "jobTitle"
   | "zone"
   | "method"
   | "status";
@@ -382,6 +333,25 @@ type SummarySortField =
   | "totalAccesses"
   | "successRate";
 
+type User = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  accessZones: string[];
+};
+
+type Log = {
+  id: number;
+  timestamp: string;
+  user: string;
+  email: string;
+  role: string;
+  zone: string;
+  status: string;
+  method: string;
+};
+
 export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -394,7 +364,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   // User management state
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editingAccessZones, setEditingAccessZones] = useState<string[]>([]);
@@ -419,7 +389,9 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>("");
-  const [selectedJobTitle, setSelectedJobTitle] = useState<string>("");
+  const [selectedUserStatus, setSelectedUserStatus] =
+    useState<string>("inactive"); // Por defecto 'Inactive'
+
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
   const [accessZonesOpen, setAccessZonesOpen] = useState(false);
 
@@ -489,7 +461,182 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [cameraToDelete, setCameraToDelete] = useState<any>(null);
   const [cameraDeleteModalOpen, setCameraDeleteModalOpen] = useState(false);
 
+  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(true);
+  const [errorRoles, setErrorRoles] = useState<string | null>(null);
+
+  const [zonesData, setZonesData] = useState<{ id: string; name: string }[]>(
+    []
+  );
+  const [loadingZones, setLoadingZones] = useState(true);
+  const [errorZones, setErrorZones] = useState<string | null>(null);
+
+  const [userStatuses, setUserStatuses] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [loadingUserStatuses, setLoadingUserStatuses] = useState(true);
+  const [errorUserStatuses, setErrorUserStatuses] = useState<string | null>(
+    null
+  );
+
   // --- AI-ENHANCED DASHBOARD STATE & DATA ---
+
+  useEffect(() => {
+    // Función asíncrona para obtener los roles
+    const fetchRoles = async () => {
+      setLoadingRoles(true); // Inicia el estado de carga
+      setErrorRoles(null); // Reinicia cualquier error previo
+
+      // URL de tu Edge Function 'get-user-roles'
+      // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-user-roles -> INVOKE URL
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-roles";
+      try {
+        const response = await fetch(edgeFunctionUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            // Opcional: Si tu Edge Function REQUIERE autenticación de frontend (no es el caso de --no-verify-jwt)
+            // 'Authorization': `Bearer ${await supabase.auth.getSession()?.then(s => s.data.session?.access_token)}`,
+          },
+        });
+
+        if (!response.ok) {
+          // Si la respuesta no es exitosa (ej. 404, 500)
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log("Roles obtenidos de Edge Function:", result.roles); // Para depuración en la consola del navegador
+
+        // Actualiza el estado 'roles' con los datos obtenidos
+        setRoles(result.roles || []);
+
+        // Opcional: Si el `selectedRole` inicial está vacío, selecciona el primero de la lista
+        if (result.roles && result.roles.length > 0 && !selectedRole) {
+          setSelectedRole(result.roles[0].name);
+        }
+      } catch (error: any) {
+        // Captura cualquier error durante la petición o procesamiento
+        console.error("Error al obtener roles de Edge Function:", error);
+        setErrorRoles(error.message || "Fallo al cargar los roles.");
+      } finally {
+        setLoadingRoles(false); // Finaliza el estado de carga
+      }
+    };
+
+    fetchRoles(); // Llama a la función para cargar los roles
+  }, []); // Array de dependencias vacío: esto asegura que useEffect se ejecute solo una vez al montar el componente
+
+  useEffect(() => {
+    // Función asíncrona para obtener las zonas
+    const fetchZones = async () => {
+      setLoadingZones(true); // Inicia el estado de carga para las zonas
+      setErrorZones(null); // Reinicia cualquier error previo para las zonas
+
+      // URL de tu Edge Function 'get-access-zones'
+      // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-access-zones -> INVOKE URL
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones";
+
+      try {
+        const response = await fetch(edgeFunctionUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          // Si la respuesta no es exitosa (ej. 404, 500)
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log("Zonas obtenidas de Edge Function:", result.zones); // Para depuración en la consola del navegador
+
+        // Actualiza el estado 'zonesData' con los datos obtenidos
+        setZonesData(result.zones || []);
+      } catch (error: any) {
+        // Captura cualquier error durante la petición o procesamiento
+        console.error("Error al obtener zonas de Edge Function:", error);
+        setErrorZones(error.message || "Fallo al cargar las zonas.");
+      } finally {
+        setLoadingZones(false); // Finaliza el estado de carga para las zonas
+      }
+    };
+
+    fetchZones(); // Llama a la función para cargar las zonas
+  }, []); // Array de dependencias vacío: esto asegura que useEffect se ejecute solo una vez al montar el componente
+  // useEffect to get the user statuses
+  useEffect(() => {
+    // Función asíncrona para obtener los estados de usuario
+    const fetchUserStatuses = async () => {
+      setLoadingUserStatuses(true); // Inicia el estado de carga
+      setErrorUserStatuses(null); // Reinicia cualquier error previo
+
+      // URL de tu Edge Function 'get-user-statuses'
+      // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-user-statuses -> INVOKE URL
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-statuses";
+
+      try {
+        const response = await fetch(edgeFunctionUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          // Si la respuesta no es exitosa (ej. 404, 500)
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log(
+          "Estados de usuario obtenidos de Edge Function:",
+          result.statuses
+        ); // Para depuración en la consola del navegador
+
+        // Actualiza el estado 'userStatuses' con los datos obtenidos
+        setUserStatuses(result.statuses || []);
+
+        // Opcional: Establecer "Inactive" como el estado seleccionado por defecto si se encuentra
+        if (result.statuses && result.statuses.length > 0) {
+          const inactiveStatus = result.statuses.find(
+            (status: { name: string }) => status.name === "Inactive"
+          );
+          if (inactiveStatus) {
+            // Asumiendo que 'selectedUserStatus' ya existe o lo crearás.
+            // Necesitas un estado `selectedUserStatus` similar a `selectedRole`.
+            // setSelectedUserStatus(inactiveStatus.name);
+          } else {
+            // Si 'Inactive' no existe, puedes seleccionar el primero o no seleccionar nada.
+            // setSelectedUserStatus(result.statuses[0].name);
+          }
+        }
+      } catch (error: any) {
+        // Captura cualquier error durante la petición o procesamiento
+        console.error(
+          "Error al obtener estados de usuario de Edge Function:",
+          error
+        );
+        setErrorUserStatuses(
+          error.message || "Fallo al cargar los estados de usuario."
+        );
+      } finally {
+        setLoadingUserStatuses(false); // Finaliza el estado de carga
+      }
+    };
+
+    fetchUserStatuses(); // Llama a la función para cargar los estados
+  }, []);
+
+  // --- Finishiing useEffect ---
   // Place these inside the AdminDashboard component, before the return
   const [riskScore] = useState<{
     score: number;
@@ -848,7 +995,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       email,
       emailError,
       selectedRole,
-      selectedJobTitle,
       selectedAccessZones,
       selectedImage,
     });
@@ -860,7 +1006,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     if (!fullName) missingFields.push("Full Name");
     if (!isEmailValid) missingFields.push("Valid Email");
     if (!selectedRole) missingFields.push("User Role");
-    if (!selectedJobTitle) missingFields.push("Job Title");
     if (selectedAccessZones.length === 0) missingFields.push("Access Zones");
     if (!selectedImage) missingFields.push("Photo");
 
@@ -874,7 +1019,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       name: fullName,
       email,
       role: selectedRole,
-      jobTitle: selectedJobTitle,
       accessZones: selectedAccessZones,
     };
 
@@ -886,7 +1030,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setEmail("");
     setEmailError(null);
     setSelectedRole("");
-    setSelectedJobTitle("");
     setSelectedAccessZones([]);
     setSelectedImage(null);
     setImagePreview(null);
@@ -925,8 +1068,8 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const sortedUsers = [...users].sort((a, b) => {
-    let aValue = a[sortField];
-    let bValue = b[sortField];
+    const aValue = a[sortField] as string;
+    const bValue = b[sortField] as string;
 
     if (sortDirection === "asc") {
       return aValue.localeCompare(bValue);
@@ -940,8 +1083,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     (user) =>
       user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      user.jobTitle.toLowerCase().includes(userSearchTerm.toLowerCase())
+      user.role.toLowerCase().includes(userSearchTerm.toLowerCase())
   );
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -1058,7 +1200,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           name: "Alex Johnson",
           email: "alex.johnson@example.com",
           role: "User",
-          jobTitle: "Marketing Specialist",
           accessZones: ["Main Entrance", "Cafeteria"],
         },
         {
@@ -1066,7 +1207,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           name: "Taylor Smith",
           email: "taylor.smith@example.com",
           role: "Admin",
-          jobTitle: "IT Administrator",
           accessZones: ["Main Entrance", "Server Room", "Zone A"],
         },
       ];
@@ -1112,8 +1252,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           log.email.toLowerCase().includes(searchLower) ||
           log.zone.toLowerCase().includes(searchLower) ||
           log.status.toLowerCase().includes(searchLower) ||
-          log.method.toLowerCase().includes(searchLower) ||
-          log.jobTitle.toLowerCase().includes(searchLower)
+          log.method.toLowerCase().includes(searchLower)
         );
       }
 
@@ -1139,21 +1278,18 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   // Sort filtered logs
   const sortedLogs = useMemo(() => {
     return [...filteredLogs].sort((a, b) => {
-      let aValue: any = a[logSortField];
-      let bValue: any = b[logSortField];
+      const aValue = a[logSortField] as string;
+      const bValue = b[logSortField] as string;
 
-      // Special case for timestamp sorting
       if (logSortField === "timestamp") {
-        // Convert to comparable format (this is simplified)
-        aValue = new Date(aValue).getTime();
-        bValue = new Date(bValue).getTime();
+        return logSortDirection === "asc"
+          ? new Date(aValue).getTime() - new Date(bValue).getTime()
+          : new Date(bValue).getTime() - new Date(aValue).getTime();
       }
 
-      if (logSortDirection === "asc") {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
+      return logSortDirection === "asc"
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
     });
   }, [filteredLogs, logSortField, logSortDirection]);
 
@@ -1931,13 +2067,17 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   // Add this function at the component level, before the return statement
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  const handleImageError = (userId: number, photoUrl: string) => {
+  function handleImageError(userId: number, photoUrl: string): void;
+  function handleImageError(userId: string, photoUrl: string): void;
+  function handleImageError(userId: number | string, photoUrl: string) {
     setImageErrors((prev) => ({
       ...prev,
       [photoUrl]: true,
     }));
-  };
-
+    console.error(
+      `Error loading image for user ID: ${userId}, URL: ${photoUrl}`
+    ); // Añadí un console.error para mejor depuración
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800">
       {/* Header */}
@@ -2216,7 +2356,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                 <div className="relative w-8 h-8">
                                   <img
                                     src={u.photoUrl}
-                                    alt={u.name}
+                                    alt={u.id}
                                     className="w-8 h-8 rounded-full object-cover"
                                     onError={() =>
                                       handleImageError(u.id, u.photoUrl)
@@ -2392,42 +2532,96 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     <Select
                       value={selectedRole}
                       onValueChange={setSelectedRole}
+                      // Deshabilita el Select si está cargando o si hay un error
+                      disabled={loadingRoles || !!errorRoles}
                     >
                       <SelectTrigger
                         id="userRole"
                         className="bg-slate-50 border-0 h-12"
                       >
-                        <SelectValue placeholder="Select role" />
+                        {/* Muestra un mensaje de carga, error o el placeholder normal */}
+                        {loadingRoles ? (
+                          <SelectValue placeholder="Loading roles..." />
+                        ) : errorRoles ? (
+                          <SelectValue
+                            placeholder={`Error loading roles: ${errorRoles}`}
+                          />
+                        ) : (
+                          <SelectValue placeholder="Select role" />
+                        )}
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="Admin">Admin</SelectItem>
-                          <SelectItem value="User">User</SelectItem>
+                          {/* Si hay error, mostrar un SelectItem deshabilitado con el error */}
+                          {errorRoles ? (
+                            <SelectItem value="" disabled>
+                              Error: {errorRoles}
+                            </SelectItem>
+                          ) : roles.length > 0 ? (
+                            // Mapea sobre el array 'roles' para crear los SelectItems dinámicamente
+                            roles.map((role) => (
+                              <SelectItem key={role.id} value={role.name}>
+                                {role.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            // Si no hay roles y no hay error, mostrar un mensaje "No roles available"
+                            !loadingRoles && (
+                              <SelectItem value="" disabled>
+                                No roles available
+                              </SelectItem>
+                            )
+                          )}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {/* Job Title Dropdown */}
+                  {/* User Status Dropdown */}
                   <div>
-                    <Label htmlFor="jobTitle">Job Title/Position</Label>
+                    <Label htmlFor="userStatus">User Status</Label>
                     <Select
-                      value={selectedJobTitle}
-                      onValueChange={setSelectedJobTitle}
+                      value={selectedUserStatus}
+                      onValueChange={setSelectedUserStatus}
+                      disabled={loadingUserStatuses || !!errorUserStatuses} // Deshabilita si está cargando o hay error
                     >
                       <SelectTrigger
-                        id="jobTitle"
+                        id="userStatus"
                         className="bg-slate-50 border-0 h-12"
                       >
-                        <SelectValue placeholder="Select job title" />
+                        <span>
+                          {
+                            loadingUserStatuses
+                              ? "Loading statuses..."
+                              : errorUserStatuses
+                              ? `Error: ${errorUserStatuses}`
+                              : selectedUserStatus // Muestra el estado seleccionado
+                              ? selectedUserStatus
+                              : "Select status" // Placeholder si no hay nada seleccionado
+                          }
+                        </span>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          {jobTitleOptions.map((title) => (
-                            <SelectItem key={title} value={title}>
-                              {title}
+                          {/* Renderizar los estados de usuario dinámicamente */}
+                          {errorUserStatuses ? (
+                            <SelectItem value="" disabled>
+                              Error: {errorUserStatuses}
                             </SelectItem>
-                          ))}
+                          ) : userStatuses.length > 0 ? (
+                            userStatuses.map((status) => (
+                              <SelectItem key={status.id} value={status.name}>
+                                {status.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            // Mensaje si no hay estados o si hay un error persistente
+                            !loadingUserStatuses &&
+                            !errorUserStatuses && (
+                              <SelectItem value="" disabled>
+                                No statuses available
+                              </SelectItem>
+                            )
+                          )}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -2447,55 +2641,93 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         role="combobox"
                         aria-expanded={accessZonesOpen}
                         className="w-full justify-between bg-slate-50 border-0 h-12 text-left font-normal"
+                        disabled={loadingZones || !!errorZones}
                       >
-                        {selectedAccessZones.length > 0
-                          ? `${selectedAccessZones.length} zone${
-                              selectedAccessZones.length > 1 ? "s" : ""
-                            } selected`
-                          : "Select access zones"}
+                        {/* >>>>> REEMPLAZA ESTE CONTENIDO DEL BOTÓN <<<<< */}
+                        <span>
+                          {loadingZones
+                            ? "Loading zones..."
+                            : errorZones
+                            ? `Error: ${errorZones}`
+                            : selectedAccessZones.length > 0
+                            ? `${selectedAccessZones.length} zone${
+                                selectedAccessZones.length > 1 ? "s" : ""
+                              } selected` // <<< ESTO ES LO CORRECTO
+                            : "Select access zones"}
+                        </span>
                         <span className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        {/* >>>>> HASTA AQUÍ <<<<< */}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-full p-0" align="start">
                       <div className="p-2 space-y-2 max-h-[300px] overflow-auto">
-                        {accessZonesOptions.map((zone) => (
-                          <div
-                            key={zone}
-                            className="flex items-center space-x-2"
-                          >
-                            <Checkbox
-                              id={`zone-${zone}`}
-                              checked={selectedAccessZones.includes(zone)}
-                              onCheckedChange={() => toggleAccessZone(zone)}
-                            />
-                            <label
-                              htmlFor={`zone-${zone}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                            >
-                              {zone}
-                            </label>
+                        {/* Si hay error, muestra un mensaje de error */}
+                        {errorZones ? (
+                          <div className="text-red-500 p-2">
+                            Error: {errorZones}
                           </div>
-                        ))}
-                      </div>
+                        ) : loadingZones ? ( // Agregué loading aquí también por si el popover se abre antes de terminar la carga
+                          <div className="text-gray-500 p-2">
+                            Loading zones...
+                          </div>
+                        ) : zonesData.length > 0 ? (
+                          // Mapea sobre el array 'zonesData' para crear los Checkboxes dinámicamente
+                          zonesData.map((zone) => (
+                            <div
+                              key={zone.id} // Usa zone.id como key
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`zone-${zone.id}`} // Usa zone.id en el ID
+                                checked={selectedAccessZones.includes(
+                                  zone.name
+                                )} // Compara por el nombre de la zona
+                                onCheckedChange={() =>
+                                  toggleAccessZone(zone.name)
+                                } // Pasa el nombre para el toggle
+                              />
+                              <label
+                                htmlFor={`zone-${zone.id}`} // Usa zone.id en el htmlFor
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {zone.name}
+                              </label>
+                            </div>
+                          ))
+                        ) : (
+                          // Si no hay zonas y no está cargando ni hay error
+                          !loadingZones &&
+                          !errorZones && (
+                            <div className="p-2 text-gray-500">
+                              No zones available
+                            </div>
+                          )
+                        )}
+                      </div>{" "}
+                      {/* Cierre del div p-2 space-y-2 */}
                     </PopoverContent>
                   </Popover>
                   {selectedAccessZones.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {selectedAccessZones.map((zone) => (
-                        <Badge
-                          key={zone}
-                          variant="secondary"
-                          className="bg-slate-100"
-                        >
-                          {zone}
-                          <button
-                            className="ml-1 hover:text-red-500"
-                            onClick={() => toggleAccessZone(zone)}
+                      {selectedAccessZones.map(
+                        (
+                          zoneName // Cambiado a zoneName para claridad
+                        ) => (
+                          <Badge
+                            key={zoneName} // Usa zoneName como key
+                            variant="secondary"
+                            className="bg-slate-100"
                           >
-                            ×
-                          </button>
-                        </Badge>
-                      ))}
+                            {zoneName}
+                            <button
+                              className="ml-1 hover:text-red-500"
+                              onClick={() => toggleAccessZone(zoneName)}
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
@@ -2689,20 +2921,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             ))}
                         </div>
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSort("jobTitle")}
-                      >
-                        <div className="flex items-center">
-                          Job Title
-                          {sortField === "jobTitle" &&
-                            (sortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
-                        </div>
-                      </TableHead>
                       <TableHead>Access Zones</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -2759,29 +2977,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                           </TableCell>
                           <TableCell>
                             {editingUserId === user.id ? (
-                              <Select
-                                value={editingUser.jobTitle}
-                                onValueChange={(value) =>
-                                  updateEditingUser("jobTitle", value)
-                                }
-                              >
-                                <SelectTrigger className="h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {jobTitleOptions.map((title) => (
-                                    <SelectItem key={title} value={title}>
-                                      {title}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              user.jobTitle
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {editingUserId === user.id ? (
                               <div>
                                 <Popover
                                   open={editingAccessZonesOpen}
@@ -2808,28 +3003,51 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                     align="start"
                                   >
                                     <div className="p-2 space-y-1 max-h-[200px] overflow-auto">
-                                      {accessZonesOptions.map((zone) => (
-                                        <div
-                                          key={zone}
-                                          className="flex items-center space-x-2"
-                                        >
-                                          <Checkbox
-                                            id={`edit-zone-${zone}-${user.id}`}
-                                            checked={editingAccessZones.includes(
-                                              zone
-                                            )}
-                                            onCheckedChange={() =>
-                                              toggleEditingAccessZone(zone)
-                                            }
-                                          />
-                                          <label
-                                            htmlFor={`edit-zone-${zone}-${user.id}`}
-                                            className="text-sm font-medium leading-none cursor-pointer"
-                                          >
-                                            {zone}
-                                          </label>
+                                      {/* Si hay error, muestra un mensaje de error */}
+                                      {errorZones ? (
+                                        <div className="text-red-500 p-2">
+                                          Error: {errorZones}
                                         </div>
-                                      ))}
+                                      ) : loadingZones ? ( // Agregado mensaje de carga aquí también
+                                        <div className="text-gray-500 p-2">
+                                          Loading zones...
+                                        </div>
+                                      ) : zonesData.length > 0 ? (
+                                        // Mapea sobre el array 'zonesData' para crear los Checkboxes dinámicamente
+                                        zonesData.map((zone) => (
+                                          <div
+                                            key={zone.id} // Usa zone.id como key
+                                            className="flex items-center space-x-2"
+                                          >
+                                            <Checkbox
+                                              // Asegúrate de que user.id esté disponible en este contexto para el ID del checkbox
+                                              id={`edit-zone-<span class="math-inline">\{zone\.id\}\-</span>{editingUser?.id || ''}`} // Usar editingUser.id
+                                              checked={editingAccessZones.includes(
+                                                zone.name
+                                              )} // Compara por el nombre de la zona
+                                              onCheckedChange={() =>
+                                                toggleEditingAccessZone(
+                                                  zone.name
+                                                )
+                                              } // Pasa el nombre para el toggle
+                                            />
+                                            <label
+                                              htmlFor={`edit-zone-<span class="math-inline">\{zone\.id\}\-</span>{editingUser?.id || ''}`} // Usar editingUser.id en el htmlFor
+                                              className="text-sm font-medium leading-none cursor-pointer"
+                                            >
+                                              {zone.name}
+                                            </label>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        // Si no hay zonas y no está cargando ni hay error
+                                        !loadingZones &&
+                                        !errorZones && (
+                                          <div className="p-2 text-gray-500">
+                                            No zones available
+                                          </div>
+                                        )
+                                      )}
                                     </div>
                                   </PopoverContent>
                                 </Popover>
@@ -3271,20 +3489,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         </TableHead>
                         <TableHead
                           className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("jobTitle")}
-                        >
-                          <div className="flex items-center">
-                            Job Title
-                            {logSortField === "jobTitle" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
-                          </div>
-                        </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
                           onClick={() => handleLogSort("zone")}
                         >
                           <div className="flex items-center">
@@ -3348,9 +3552,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                               >
                                 {log.role}
                               </Badge>
-                            </TableCell>
-                            <TableCell className="text-gray-600">
-                              {log.jobTitle}
                             </TableCell>
                             <TableCell>
                               <Badge
