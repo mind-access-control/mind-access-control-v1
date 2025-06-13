@@ -1,29 +1,12 @@
 {
-  "name": "mind-access-control",
+  "name": "mind-access-control-frontend",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@8.15.4",
-  "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
-  },
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
   "scripts": {
-    "install:all": "pnpm install && pnpm run install:frontend && pnpm run install:backend",
-    "install:frontend": "cd frontend && pnpm install",
-    "install:backend": "cd backend && pnpm install",
-    "dev": "pnpm run --parallel dev",
-    "dev:frontend": "cd frontend && pnpm dev",
-    "dev:backend": "cd backend && pnpm dev",
-    "build": "pnpm run build:frontend && pnpm run build:backend",
-    "build:frontend": "cd frontend && pnpm build",
-    "build:backend": "cd backend && pnpm build",
-    "start": "pnpm run --parallel start",
-    "start:frontend": "cd frontend && pnpm start",
-    "start:backend": "cd backend && pnpm start"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -54,6 +37,7 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
+    "@supabase/supabase-js": "latest",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -82,7 +66,6 @@
     "@types/react-dom": "^19",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5",
-    "concurrently": "^8.2.2"
+    "typescript": "^5"
   }
-}
+} 

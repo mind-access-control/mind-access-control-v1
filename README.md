@@ -1,30 +1,100 @@
-# New Project
+# Mind Access Control
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+A modular access control system with separate frontend and backend components.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/jonathan-hernandezs-projects-0f262da2/v0-new-project-vqc8psai52u)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/vQC8psAI52u)
+## Project Structure
 
-## Overview
+```
+mind-access-control-v1/
+├── frontend/           # Next.js frontend application
+│   ├── app/           # Next.js app directory
+│   │   ├── admin/     # Admin routes
+│   │   └── page.tsx   # Main page
+│   ├── components/    # React components
+│   │   └── ui/        # UI components
+│   ├── hooks/         # Custom React hooks
+│   ├── lib/           # Utility functions and shared code
+│   ├── public/        # Static assets
+│   └── styles/        # Global styles and Tailwind configuration
+│
+└── backend/           # Express.js backend application
+    ├── src/
+    │   ├── config/    # Configuration files
+    │   ├── controllers/ # Route controllers
+    │   ├── middleware/  # Express middleware
+    │   └── routes/     # API routes
+    └── dist/          # Compiled TypeScript files
+```
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Getting Started
 
-## Deployment
+### Prerequisites
+- Node.js (v18 or higher)
+- pnpm (v8 or higher)
+- Supabase account and project
 
-Your project is live at:
+### Installation
 
-**[https://vercel.com/jonathan-hernandezs-projects-0f262da2/v0-new-project-vqc8psai52u](https://vercel.com/jonathan-hernandezs-projects-0f262da2/v0-new-project-vqc8psai52u)**
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd mind-access-control-v1
+   ```
 
-## Build your app
+2. Install dependencies for all workspaces:
+   ```bash
+   pnpm install
+   ```
 
-Continue building your app on:
+3. Set up environment variables:
+   - Frontend: Create `.env.local` in the frontend directory
+   - Backend: Create `.env` in the backend directory
+   
+   Required variables:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
 
-**[https://v0.dev/chat/projects/vQC8psAI52u](https://v0.dev/chat/projects/vQC8psAI52u)**
+### Development
 
-## How It Works
+Run both frontend and backend in development mode:
+```bash
+pnpm dev
+```
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+This will start:
+- Frontend at http://localhost:3000
+- Backend at http://localhost:3001
+
+### Available Scripts
+
+- `pnpm dev` - Run both frontend and backend in development mode
+- `pnpm build` - Build both frontend and backend
+- `pnpm start` - Start both in production mode
+- `pnpm install:all` - Install dependencies for all workspaces
+- `pnpm install:frontend` - Install frontend dependencies
+- `pnpm install:backend` - Install backend dependencies
+
+## Technologies Used
+
+### Frontend
+- Next.js 15
+- React 19
+- Tailwind CSS
+- Radix UI
+- Supabase Client
+
+### Backend
+- Express.js
+- TypeScript
+- Supabase
+- CORS
+- dotenv
+
+## Features
+- Admin authentication
+- Role-based access control
+- Modern UI with Tailwind CSS
+- Type-safe development with TypeScript
+- Modular architecture for scalability
