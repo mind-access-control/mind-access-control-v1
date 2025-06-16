@@ -1,0 +1,2 @@
+public/models/*.weights filter=lfs diff=lfs merge=lfs -text
+public/models/*.json filter=lfs diff=lfs merge=lfs -text
