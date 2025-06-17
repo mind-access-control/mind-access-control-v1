@@ -5,35 +5,35 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Este console.log aparecerá en los logs de la Edge Function cuando se inicie.
 console.log('Edge Function "validate-user-face" started!');
 
-// --- Definiciones de Tipos para Supabase Data (AHORA PRECISOS) ---
-// Un elemento básico con propiedad 'name'
-interface ItemWithName {
+// --- Definiciones de Tipos para Supabase Data (ACTUALIZADO CON ID DE ZONA) ---
+// Un elemento básico con propiedad 'id' y 'name'
+interface ItemWithNameAndId {
+  id: string; // Añadido 'id' para las zonas
   name: string;
 }
 
 // Tipo para roles_catalog y user_statuses_catalog (son objetos directos)
-type RelatedCatalogObject = ItemWithName; // No es un array, es un objeto
+type RelatedCatalogObject = ItemWithNameAndId;
 
 // Tipo para un elemento dentro de user_zone_access
-// Aquí 'zones' es un objeto directo, no un array anidado
+// Aquí 'zones' es un objeto directo (ItemWithNameAndId), no un array anidado
 interface AccessZoneEntry {
-  zones: ItemWithName;
+  zones: ItemWithNameAndId; // Ahora 'zones' contendrá id y name
 }
 
 // Tipo para la respuesta completa de los datos del usuario desde Supabase
 interface SupabaseUserResponse {
   id: string;
   full_name: string;
-  roles_catalog: RelatedCatalogObject | null; // Ahora es un objeto directo o null
-  user_statuses_catalog: RelatedCatalogObject | null; // Ahora es un objeto directo o null
+  roles_catalog: RelatedCatalogObject | null;
+  user_statuses_catalog: RelatedCatalogObject | null;
   user_zone_access: AccessZoneEntry[] | null; // Esto sigue siendo un array de AccessZoneEntry
 }
 
 // Interfaz para la estructura del cuerpo de la petición que esperamos del frontend.
 interface ValidateFacePayload {
   faceEmbedding: number[];
-  // Opcionalmente, puedes enviar el ID de la cámara si tu frontend lo tiene disponible
-  // cameraId?: string;
+  zoneId?: string; // El ID de la zona de donde se hace la validación
 }
 
 // Define un umbral de similitud para la detección de rostros.
@@ -97,6 +97,9 @@ serve(async (req: Request) => {
   }
 
   const queryEmbedding = payload.faceEmbedding;
+  const requestedZoneId = payload.zoneId; // Capturamos el ID de la zona desde el frontend
+  let hasAccess = false; // Variable para controlar el acceso
+
   const logEntry = {
     timestamp: new Date().toISOString(),
     user_id: null as string | null,
@@ -109,6 +112,8 @@ serve(async (req: Request) => {
     decision: "access_denied" as string,
     reason: null as string | null,
     confidence_score: null as number | null,
+    // Aquí puedes añadir más detalles al log si es necesario, como la zona solicitada
+    requested_zone_id: requestedZoneId || null,
   };
 
   try {
@@ -136,19 +141,19 @@ serve(async (req: Request) => {
       const matchedFace = matchedUsers[0];
       const userId = matchedFace.user_id;
 
+      // MODIFICACIÓN CRUCIAL: Obtener ID y NAME de las zonas
       const { data: rawUserData, error: userFetchError } = await supabase
         .from("users")
         .select(`
                     id, full_name,
                     roles_catalog(name),
                     user_statuses_catalog(name),
-                    user_zone_access(zones(name))
+                    user_zone_access(zones(id, name)) -- <--- AHORA PEDIMOS ID Y NAME
                 `)
         .eq("id", userId)
         .is("deleted_at", null)
         .single();
 
-      // Casteamos a nuestro tipo preciso
       const userData = rawUserData as SupabaseUserResponse | null;
 
       if (userFetchError || !userData) {
@@ -157,21 +162,51 @@ serve(async (req: Request) => {
           userFetchError,
         );
       } else {
-        // --- ACCESO A PROPIEDADES AHORA CORRECTO BASADO EN LOS LOGS ---
-        const roleName = userData.roles_catalog?.name || "N/A"; // Directo .name, no [0]
-        const statusName = userData.user_statuses_catalog?.name || "N/A"; // Directo .name, no [0]
-        const accessZones = (userData.user_zone_access || []).map((uza) =>
-          uza.zones?.name || "N/A"
-        ); // Directo .name, no [0]
+        const roleName = userData.roles_catalog?.name || "N/A";
+        const statusName = userData.user_statuses_catalog?.name || "N/A";
 
+        // Extraemos los objetos completos de zona ({id, name})
+        const userAccessZonesRaw = (userData.user_zone_access || []).map(
+          (uza) => uza.zones,
+        );
+        // Para la respuesta, seguimos enviando solo los nombres como un array de strings
+        const accessZoneNames = userAccessZonesRaw.map((zone) =>
+          zone.name || "N/A"
+        );
+
+        // --- LÓGICA DE ACCESO COMPLETA: ZONA + ESTATUS ---
+        let isZoneAllowed = false;
+        if (requestedZoneId && userAccessZonesRaw.length > 0) {
+          isZoneAllowed = userAccessZonesRaw.some((zone) =>
+            zone.id === requestedZoneId
+          );
+        }
+        // Definimos los estatus permitidos
+        const allowedStatuses = ["active", "active_temporal"];
+        const isStatusAllowed = allowedStatuses.includes(
+          statusName.toLowerCase(),
+        ); // Convertir a minúsculas para comparar
+        // El acceso se concede SOLO si la zona es permitida Y el estatus es permitido
+        hasAccess = isZoneAllowed && isStatusAllowed;
+        console.log(
+          `Requested Zone ID: ${requestedZoneId}, Is Zone Allowed: ${isZoneAllowed}`,
+        );
+        console.log(
+          `User Status: ${statusName}, Is Status Allowed: ${isStatusAllowed}`,
+        );
+        console.log(`Final Access Decision (hasAccess): ${hasAccess}`);
         const confidence = parseFloat((1 - matchedFace.distance).toFixed(4));
 
         logEntry.user_id = userData.id;
         logEntry.result = true;
         logEntry.user_type = "registered";
         logEntry.match_status = "matched_registered";
-        logEntry.decision = "access_granted";
-        logEntry.reason = "Face matched with a registered and active user.";
+        logEntry.decision = hasAccess ? "access_granted" : "access_denied"; // Decisión basada en hasAccess
+        logEntry.reason = hasAccess
+          ? `Face matched and access granted for requested zone (${requestedZoneId}).`
+          : `Face matched but access denied for requested zone (${
+            requestedZoneId || "N/A"
+          }).`;
         logEntry.confidence_score = confidence;
 
         const { error: logInsertError } = await supabase.from("logs").insert([
@@ -188,8 +223,9 @@ serve(async (req: Request) => {
               full_name: userData.full_name,
               role_name: roleName,
               status_name: statusName,
-              access_zones: accessZones,
+              access_zones: accessZoneNames, // Mantenemos solo nombres para el FE
               distance: matchedFace.distance,
+              hasAccess: hasAccess, // ¡ENVIAMOS EL RESULTADO DE ACCESO AL FRONTEND!
             },
           }),
           {
@@ -237,14 +273,13 @@ serve(async (req: Request) => {
           .eq("id", observedUserId)
           .single();
 
-      // Casteamos a nuestro tipo preciso (simplified for observed_users)
       const observedUserData = rawObservedUserData as {
         id: string;
         first_seen_at: string;
         last_seen_at: string;
         access_count: number;
-        last_accessed_zones: string[]; // Asumiendo que es un array de strings (jsonb)
-        user_statuses_catalog: RelatedCatalogObject | null; // También objeto directo aquí
+        last_accessed_zones: string[];
+        user_statuses_catalog: RelatedCatalogObject | null;
       } | null;
 
       if (observedFetchError || !observedUserData) {
@@ -253,10 +288,12 @@ serve(async (req: Request) => {
           observedFetchError,
         );
       } else {
+        // Para usuarios observados, el acceso siempre es denegado por defecto
+        hasAccess = false;
+
         const confidence = parseFloat(
           (1 - matchedObservedFace.distance).toFixed(4),
         );
-        // Acceder a la propiedad 'name' directamente
         const observedStatusName =
           observedUserData.user_statuses_catalog?.name || "N/A";
 
@@ -275,8 +312,9 @@ serve(async (req: Request) => {
         logEntry.result = true;
         logEntry.user_type = "observed";
         logEntry.match_status = "matched_observed";
-        logEntry.decision = "access_denied";
-        logEntry.reason = "Face matched with an observed (unregistered) user.";
+        logEntry.decision = "access_denied"; // Siempre denegado para observados
+        logEntry.reason =
+          "Face matched with an observed (unregistered) user. Access denied by policy.";
         logEntry.confidence_score = confidence;
 
         const { error: logInsertError } = await supabase.from("logs").insert([
@@ -299,6 +337,7 @@ serve(async (req: Request) => {
               last_accessed_zones: observedUserData.last_accessed_zones,
               status_name: observedStatusName,
               distance: matchedObservedFace.distance,
+              hasAccess: hasAccess, // ¡ENVIAMOS EL RESULTADO DE ACCESO AL FRONTEND! (será false)
             },
           }),
           {
@@ -320,6 +359,7 @@ serve(async (req: Request) => {
     logEntry.decision = "access_denied";
     logEntry.reason = "No match found in registered or observed users.";
     logEntry.confidence_score = null;
+    hasAccess = false; // Sin match, sin acceso
 
     const { error: logInsertError } = await supabase.from("logs").insert([
       logEntry,
@@ -332,6 +372,7 @@ serve(async (req: Request) => {
       JSON.stringify({
         message:
           "No registered or observed user matched the provided face embedding.",
+        hasAccess: hasAccess, // También enviamos hasAccess false si no hay match
       }),
       {
         status: 200,
@@ -359,6 +400,7 @@ serve(async (req: Request) => {
     logEntry.reason =
       `Validation failed due to internal error: ${errorMessage}`;
     logEntry.match_status = "error";
+    hasAccess = false; // Error en la función, sin acceso
 
     const { error: logInsertError } = await supabase.from("logs").insert([
       logEntry,
@@ -371,7 +413,7 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, hasAccess: hasAccess }), // También enviamos hasAccess false en caso de error
       {
         status: 500,
         headers: {

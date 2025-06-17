@@ -10,6 +10,12 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+interface Zone {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 const FacialValidationScreen: React.FC = () => {
   const webcamRef = useRef<Webcam>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -26,6 +32,9 @@ const FacialValidationScreen: React.FC = () => {
   const [faceDetectionError, setFaceDetectionError] = useState<string | null>(
     null
   );
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>("");
+  const [isLoadingZones, setIsLoadingZones] = useState<boolean>(true);
 
   // NUEVOS ESTADOS para la selección de cámara
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]); // Lista de dispositivos de video disponibles
@@ -43,7 +52,7 @@ const FacialValidationScreen: React.FC = () => {
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
         setFaceApiModelsLoaded(true);
-        console.log("Face-API.js models loaded successfully!");
+        //console.log("Face-API.js models loaded successfully!");
       } catch (error) {
         console.error("Error loading Face-API.js models:", error);
         setFaceDetectionError(
@@ -93,6 +102,48 @@ const FacialValidationScreen: React.FC = () => {
       });
   }, [selectedDeviceId]); // Re-ejecutar si selectedDeviceId cambia para re-seleccionar la cámara
 
+  // --- Fetch zones from Supabase ---
+  useEffect(() => {
+    const fetchZones = async () => {
+      setIsLoadingZones(true);
+      try {
+        const response = await fetch(
+          "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones"
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch zones");
+        }
+        const data = await response.json();
+        //console.log("ZONES RESPONSE:", data);
+
+        // SOPORTA VARIAS FORMAS DE RESPUESTA
+        let zonesArray: Zone[] = [];
+        if (Array.isArray(data)) {
+          zonesArray = data;
+        } else if (data && Array.isArray(data.data)) {
+          zonesArray = data.data;
+        } else if (data && Array.isArray(data.zones)) {
+          zonesArray = data.zones;
+        } else if (data && data.id && data.name) {
+          zonesArray = [data];
+        }
+
+        setZones(zonesArray);
+
+        if (zonesArray.length > 0) {
+          setSelectedZone(zonesArray[0].id);
+        }
+      } catch (error) {
+        console.error("Error fetching zones:", error);
+        setFaceDetectionError("Failed to load access zones. Please try again.");
+      } finally {
+        setIsLoadingZones(false);
+      }
+    };
+
+    fetchZones();
+  }, []);
+
   // --- Manejador de cambio de cámara ---
   const handleDeviceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedDeviceId(event.target.value);
@@ -133,7 +184,7 @@ const FacialValidationScreen: React.FC = () => {
         if (detections) {
           setFaceDescriptor(detections.descriptor);
           setValidationMessage("Face detected! Proceeding to validation...");
-          console.log("Captured Face Embedding:", detections.descriptor);
+          //console.log("Captured Face Embedding:", detections.descriptor);
         } else {
           setFaceDescriptor(null);
           setFaceDetectionError(
@@ -167,6 +218,7 @@ const FacialValidationScreen: React.FC = () => {
 
           const payload = {
             faceEmbedding: Array.from(faceDescriptor),
+            zoneId: selectedZone,
           };
 
           const response = await fetch(validateEdgeFunctionUrl, {
@@ -188,22 +240,39 @@ const FacialValidationScreen: React.FC = () => {
 
           const result = await response.json();
           // *** ESTO MANTIENE EL LOG COMPLETO EN LA CONSOLA ***
-          console.log("Validation Result:", result);
+          console.log("validate-user-face result:", result);
 
           if (result.matchedUser) {
-            const { id, full_name } = result.matchedUser; // Solo extraemos lo necesario para la UI
-            // *** MENSAJE SIMPLIFICADO PARA LA UI ***
+            const { id, full_name } = result.matchedUser;
+            const accessStatusMessage = result.matchedUser.hasAccess // <-- Accede directamente al booleano de la respuesta
+              ? "Access Granted"
+              : "Access Denied";
+            console.log("Access Status:", accessStatusMessage);
             setValidationMessage(
-              `Match Found! User: ${full_name} (ID: ${id.substring(0, 8)}...)`
+              `${accessStatusMessage} - User: ${full_name} (ID: ${id.substring(
+                0,
+                8
+              )}...)`
             );
           } else if (result.observedUser) {
-            const { id } = result.observedUser; // Solo extraemos lo necesario para la UI
-            // *** MENSAJE SIMPLIFICADO PARA LA UI ***
+            const { id } = result.observedUser;
+            // Para Observed Users, la política es 'Access Denied', incluso si hasAccess viene como true de la Edge Function
+            // porque no son usuarios registrados. Si quieres que se muestre como 'Access Granted' para observados,
+            // tendrías que cambiar la política en la Edge Function y aquí.
+            const accessStatusMessage = result.observedUser.hasAccess // Accede directamente al booleano de la respuesta
+              ? "Access Granted" // Esto solo se mostraría si tu Edge Function permite acceso a observados
+              : "Access Denied";
+            console.log("Access Status:", accessStatusMessage); // Log para depuración
             setValidationMessage(
-              `Observed User Detected! ID: ${id.substring(0, 8)}...`
+              `${accessStatusMessage} - Observed User ID: ${id.substring(
+                0,
+                8
+              )}...`
             );
           } else {
-            setValidationMessage("No registered or observed user matched.");
+            setValidationMessage(
+              "No registered or observed user matched. Access Denied."
+            );
           }
         } catch (error: any) {
           console.error("Error during face validation:", error);
@@ -214,7 +283,7 @@ const FacialValidationScreen: React.FC = () => {
     };
 
     validateFace();
-  }, [faceDescriptor, faceApiModelsLoaded]);
+  }, [faceDescriptor, faceApiModelsLoaded, selectedZone]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4 font-inter">
@@ -261,6 +330,37 @@ const FacialValidationScreen: React.FC = () => {
           <div className="text-center text-red-500 font-semibold">
             No camera devices found. Please ensure a camera is connected and
             permissions are granted.
+          </div>
+        )}
+
+        {/* Zone Selector */}
+        {!isLoadingZones && (
+          <div className="w-full">
+            <label
+              htmlFor="zone-select"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Select Access Zone:
+            </label>
+            <select
+              id="zone-select"
+              value={selectedZone}
+              onChange={(e) => setSelectedZone(e.target.value)}
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm"
+            >
+              {zones.map((zone, idx) => (
+                <option key={zone.id || idx} value={zone.id}>
+                  {zone.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Loading indicator for zones */}
+        {isLoadingZones && (
+          <div className="text-center text-blue-500 font-semibold">
+            Loading access zones...
           </div>
         )}
 
@@ -317,24 +417,28 @@ const FacialValidationScreen: React.FC = () => {
           <div
             className="mt-4 p-3 rounded-md text-center text-lg font-medium"
             style={{
-              backgroundColor: validationMessage.includes("Match Found!")
-                ? "#dcfce7"
+              backgroundColor: validationMessage.includes("Access Granted")
+                ? "#dcfce7" // Verde claro para "Access Granted"
+                : validationMessage.includes("Access Denied")
+                ? "#fee2e2" // Rojo claro para "Access Denied"
                 : validationMessage.includes("Observed User Detected!")
                 ? "#fffbe6"
                 : validationMessage.includes("Error:") ||
                   validationMessage.includes("No face detected") ||
                   validationMessage.includes("Validation failed.")
                 ? "#fee2e2"
-                : "#dbeafe",
-              color: validationMessage.includes("Match Found!")
-                ? "#166534"
+                : "#dbeafe", // Color por defecto (azul claro) para otros mensajes
+              color: validationMessage.includes("Access Granted")
+                ? "#166534" // Verde oscuro para "Access Granted"
+                : validationMessage.includes("Access Denied")
+                ? "#b91c1c" // Rojo oscuro para "Access Denied"
                 : validationMessage.includes("Observed User Detected!")
                 ? "#a16207"
                 : validationMessage.includes("Error:") ||
                   validationMessage.includes("No face detected") ||
                   validationMessage.includes("Validation failed.")
                 ? "#b91c1c"
-                : "#2563eb",
+                : "#2563eb", // Color por defecto (azul oscuro) para otros mensajes
             }}
           >
             {validationMessage}

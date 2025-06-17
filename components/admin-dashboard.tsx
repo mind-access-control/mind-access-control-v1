@@ -1,5 +1,4 @@
-"use client";
-
+"use client"; // Esta línea va al inicio si es un Client Component
 import React, {
   useState,
   useEffect,
@@ -7,8 +6,9 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { createClient } from "@supabase/supabase-js"; // Importa el cliente de Supabase JS
-
+import { createClient, SupabaseClient } from "@supabase/supabase-js"; // Importa el cliente de Supabase JS
+import { useRouter } from "next/navigation";
+import { Session } from "@supabase/supabase-js"; // Importa la clase Session
 // --- Configuración del Cliente Supabase para el Frontend ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -184,10 +184,17 @@ const initialUsers: User[] = [];
 const accessLogs: Log[] = []; // Inicializado como array vacío, con tipo explícito Log[] // Inicializado como array vacío
 const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL\nJohn Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,Zone A",https://example.com/photos/john.jpg\nJane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg\n`;
 
-export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
+export default function AdminDashboard({
+  supabase,
+  session,
+}: {
+  supabase: SupabaseClient;
+  session: Session;
+}) {
   const [activeTab, setActiveTab] = useState("dashboard");
   const { signOut } = useAuth(); // Asume que useAuth y signOut están correctamente implementados
   const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -643,13 +650,11 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   // --- OTRAS FUNCIONES ---
   const handleLogout = async () => {
-    setIsLoggingOut(true);
     try {
-      await signOut(); // Llama a la función de signOut de tu hook de autenticación
-      // Redirigir o limpiar estado de usuario si es necesario
+      await supabase.auth.signOut();
+      router.push("/");
     } catch (error) {
-      console.error("Error during logout:", error);
-      setIsLoggingOut(false);
+      console.error("Error signing out:", error);
     }
   };
 
@@ -1294,8 +1299,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     } finally {
       // Restablece el estado de guardado, sin importar si fue exitoso o fallido.
       setIsSavingUser(false);
-      // Oculta el mensaje de estado después de 5 segundos.
-      setTimeout(() => setShowStatusMessage(null), 5000);
     }
   };
 
@@ -2611,17 +2614,28 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         : "bg-blue-50 border-blue-200"
                     }
                   >
-                    <AlertCircle className="h-4 w-4 text-blue-600" />{" "}
-                    {/* Icono basado en el tipo de mensaje */}
-                    <AlertDescription
-                      className={
-                        showStatusMessage.startsWith("Error")
-                          ? "text-red-700"
-                          : "text-blue-700"
-                      }
-                    >
-                      {showStatusMessage}
-                    </AlertDescription>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 text-blue-600" />
+                        <AlertDescription
+                          className={
+                            showStatusMessage.startsWith("Error")
+                              ? "text-red-700"
+                              : "text-blue-700"
+                          }
+                        >
+                          {showStatusMessage}
+                        </AlertDescription>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowStatusMessage(null)}
+                        className="h-6 w-6 p-0 hover:bg-red-100"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </Alert>
                 )}
               </CardContent>
