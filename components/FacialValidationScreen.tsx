@@ -1,42 +1,44 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import Webcam from "react-webcam"; // Importación estándar desde npm
-import * as faceapi from "face-api.js"; // Importación estándar desde npm
-import { createClient } from "@supabase/supabase-js"; // Importación estándar desde npm
-import { v4 as uuidv4 } from "uuid"; // Para generar IDs (aunque no se use directamente en esta UI, es útil tenerlo)
+import Webcam from "react-webcam";
+import * as faceapi from "face-api.js";
+import { createClient } from "@supabase/supabase-js";
+import { v4 as uuidv4 } from "uuid";
 
-// Configuración de Supabase (las variables globales se inyectan en el entorno Canvas)
-// Estas son variables de entorno que tu proyecto React/Next.js debería tener configuradas.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "YOUR_SUPABASE_URL"; // Asegúrate de reemplazar YOUR_SUPABASE_URL
+// Configuración de Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "YOUR_SUPABASE_URL";
 const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY"; // Asegúrate de reemplazar YOUR_SUPABASE_ANON_KEY
-
-// Inicialización del cliente Supabase (usando la clave anon para una pantalla pública)
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const FacialValidationScreen: React.FC = () => {
-  const webcamRef = useRef<Webcam>(null); // Referencia al componente Webcam
-  const [imageSrc, setImageSrc] = useState<string | null>(null); // Guarda la URL de la imagen capturada
+  const webcamRef = useRef<Webcam>(null);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [faceApiModelsLoaded, setFaceApiModelsLoaded] =
-    useState<boolean>(false); // Estado para saber si los modelos de Face-API.js han cargado
+    useState<boolean>(false);
   const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(
     null
-  ); // Almacena el embedding facial detectado
+  );
   const [validationMessage, setValidationMessage] = useState<string | null>(
     null
-  ); // Mensajes mostrados al usuario (éxito, progreso, etc.)
-  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true); // Controla el estado de carga de los modelos
-  const [isProcessingFace, setIsProcessingFace] = useState<boolean>(false); // Controla si se está procesando una cara
+  );
+  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
+  const [isProcessingFace, setIsProcessingFace] = useState<boolean>(false);
   const [faceDetectionError, setFaceDetectionError] = useState<string | null>(
     null
-  ); // Mensajes de error específicos de detección facial
+  );
 
-  // Efecto para cargar los modelos de Face-API.js cuando el componente se monta
+  // NUEVOS ESTADOS para la selección de cámara
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]); // Lista de dispositivos de video disponibles
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(
+    undefined
+  ); // ID de la cámara seleccionada
+
+  // --- Carga de modelos de Face-API.js ---
   useEffect(() => {
     const loadModels = async () => {
       setIsLoadingModels(true);
       try {
-        // La URL donde se encuentran los modelos de Face-API.js en tu carpeta 'public'
-        const MODEL_URL = "/models";
+        const MODEL_URL = "/models"; // Asegúrate de que los modelos estén disponibles en esta ruta
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
@@ -52,11 +54,57 @@ const FacialValidationScreen: React.FC = () => {
       }
     };
     loadModels();
-  }, []); // El array vacío asegura que se ejecute solo una vez al montar
+  }, []);
 
-  // Función useCallback para capturar la foto de la webcam
+  // --- Efecto para enumerar dispositivos de video ---
+  useEffect(() => {
+    const enumerateDevices = async () => {
+      try {
+        const mediaDevices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = mediaDevices.filter(
+          (device) => device.kind === "videoinput"
+        );
+        setDevices(videoDevices);
+        // Si no hay ninguna cámara seleccionada, selecciona la primera por defecto
+        if (videoDevices.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+      } catch (error) {
+        console.error("Error enumerating media devices:", error);
+        setFaceDetectionError(
+          "Failed to access camera devices. Please ensure camera permissions are granted."
+        );
+      }
+    };
+
+    // Asegúrate de solicitar permisos de cámara al menos una vez para que los nombres de los dispositivos sean visibles
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        // Detener la pista de video para liberar la cámara después de obtener permisos
+        stream.getTracks().forEach((track) => track.stop());
+        enumerateDevices(); // Ahora enumerar dispositivos para obtener nombres reales
+      })
+      .catch((error) => {
+        console.error("Initial camera access denied:", error);
+        setFaceDetectionError(
+          "Camera access denied. Please grant permissions to use this feature."
+        );
+      });
+  }, [selectedDeviceId]); // Re-ejecutar si selectedDeviceId cambia para re-seleccionar la cámara
+
+  // --- Manejador de cambio de cámara ---
+  const handleDeviceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedDeviceId(event.target.value);
+    setImageSrc(null); // Limpiar imagen capturada al cambiar de cámara
+    setFaceDescriptor(null); // Limpiar descriptor facial
+    setValidationMessage(null); // Limpiar mensaje de validación
+    setFaceDetectionError(null); // Limpiar errores
+    setIsProcessingFace(false); // Resetear estado de procesamiento
+  };
+
+  // --- Función para capturar foto ---
   const capture = useCallback(async () => {
-    // Evita capturar si la webcam no está lista, los modelos no han cargado o ya se está procesando una cara
     if (!webcamRef.current || !faceApiModelsLoaded || isProcessingFace) {
       if (!faceApiModelsLoaded) {
         setValidationMessage(
@@ -67,29 +115,27 @@ const FacialValidationScreen: React.FC = () => {
     }
 
     setValidationMessage("Capturing and processing image...");
-    setFaceDescriptor(null); // Limpia el descriptor anterior
-    setFaceDetectionError(null); // Limpia errores anteriores
-    setIsProcessingFace(true); // Indica que el procesamiento ha comenzado
+    setFaceDescriptor(null);
+    setFaceDetectionError(null);
+    setIsProcessingFace(true);
 
     try {
-      const imageSrc = webcamRef.current.getScreenshot(); // Toma una captura de pantalla
+      const imageSrc = webcamRef.current.getScreenshot();
       if (imageSrc) {
-        setImageSrc(imageSrc); // Muestra la imagen capturada en la UI
-        const img = await faceapi.fetchImage(imageSrc); // Carga la imagen para Face-API.js
+        setImageSrc(imageSrc);
+        const img = await faceapi.fetchImage(imageSrc);
 
-        // Detecta una única cara y genera su embedding facial
         const detections = await faceapi
           .detectSingleFace(img, new faceapi.SsdMobilenetv1Options())
           .withFaceLandmarks()
           .withFaceDescriptor();
 
         if (detections) {
-          setFaceDescriptor(detections.descriptor); // Almacena el embedding
+          setFaceDescriptor(detections.descriptor);
           setValidationMessage("Face detected! Proceeding to validation...");
           console.log("Captured Face Embedding:", detections.descriptor);
-          // La lógica de validación se disparará en el useEffect cuando faceDescriptor cambie
         } else {
-          setFaceDescriptor(null); // No se detectó cara, resetea el descriptor
+          setFaceDescriptor(null);
           setFaceDetectionError(
             "No face detected in the captured image. Please ensure your face is clearly visible."
           );
@@ -104,11 +150,11 @@ const FacialValidationScreen: React.FC = () => {
       setFaceDetectionError(`Error: ${error.message}`);
       setValidationMessage("An error occurred during capture or processing.");
     } finally {
-      setIsProcessingFace(false); // Finaliza el estado de procesamiento
+      setIsProcessingFace(false);
     }
-  }, [webcamRef, faceApiModelsLoaded, isProcessingFace]); // Dependencias del useCallback
+  }, [webcamRef, faceApiModelsLoaded, isProcessingFace]);
 
-  // Efecto para activar la lógica de validación cuando se tiene un embedding facial
+  // --- Lógica de validación (se activará cuando faceDescriptor cambie) ---
   useEffect(() => {
     const validateFace = async () => {
       if (faceDescriptor && faceApiModelsLoaded) {
@@ -116,13 +162,11 @@ const FacialValidationScreen: React.FC = () => {
         setFaceDetectionError(null);
 
         try {
-          // Aquí se realizará la llamada a la NUEVA Edge Function 'validate-user-face'
-          // ¡Importante! Reemplaza 'YOUR_PROJECT_REF' con la URL real de tu Edge Function
           const validateEdgeFunctionUrl =
             "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/validate-user-face";
 
           const payload = {
-            faceEmbedding: Array.from(faceDescriptor), // Envía el embedding como un array de números
+            faceEmbedding: Array.from(faceDescriptor),
           };
 
           const response = await fetch(validateEdgeFunctionUrl, {
@@ -133,7 +177,6 @@ const FacialValidationScreen: React.FC = () => {
             body: JSON.stringify(payload),
           });
 
-          // Manejo de la respuesta de la Edge Function
           if (!response.ok) {
             const errorData = await response.json();
             throw new Error(
@@ -144,41 +187,22 @@ const FacialValidationScreen: React.FC = () => {
           }
 
           const result = await response.json();
+          // *** ESTO MANTIENE EL LOG COMPLETO EN LA CONSOLA ***
           console.log("Validation Result:", result);
 
-          // Actualiza el mensaje de validación en la UI según el resultado
           if (result.matchedUser) {
-            // Si hay una coincidencia con un usuario registrado
-            const {
-              id,
-              full_name,
-              role_name,
-              status_name,
-              access_zones,
-              distance,
-            } = result.matchedUser;
+            const { id, full_name } = result.matchedUser; // Solo extraemos lo necesario para la UI
+            // *** MENSAJE SIMPLIFICADO PARA LA UI ***
             setValidationMessage(
-              `Match Found! User: ${full_name} (ID: ${id.substring(
-                0,
-                8
-              )}...), Role: ${role_name}, Status: ${status_name}. ` +
-                `Access Zones: ${access_zones.join(
-                  ", "
-                )}. Similarity: ${distance.toFixed(4)}`
+              `Match Found! User: ${full_name} (ID: ${id.substring(0, 8)}...)`
             );
           } else if (result.observedUser) {
-            // Si hay una coincidencia con un usuario previamente observado (no registrado en 'users')
-            const { id, status_name, distance } = result.observedUser;
+            const { id } = result.observedUser; // Solo extraemos lo necesario para la UI
+            // *** MENSAJE SIMPLIFICADO PARA LA UI ***
             setValidationMessage(
-              `Observed User Detected! ID: ${id.substring(
-                0,
-                8
-              )}... Status: ${status_name}. Similarity: ${distance.toFixed(
-                4
-              )} ` + `This user is not registered in the main system.`
+              `Observed User Detected! ID: ${id.substring(0, 8)}...`
             );
           } else {
-            // Si no se encontró ninguna coincidencia
             setValidationMessage("No registered or observed user matched.");
           }
         } catch (error: any) {
@@ -190,7 +214,7 @@ const FacialValidationScreen: React.FC = () => {
     };
 
     validateFace();
-  }, [faceDescriptor, faceApiModelsLoaded]); // Este efecto se ejecuta cuando faceDescriptor o faceApiModelsLoaded cambian
+  }, [faceDescriptor, faceApiModelsLoaded]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4 font-inter">
@@ -206,29 +230,67 @@ const FacialValidationScreen: React.FC = () => {
           </div>
         )}
 
+        {/* Selector de Cámara */}
+        {!isLoadingModels &&
+          devices.length > 1 && ( // Mostrar selector solo si hay más de una cámara
+            <div className="w-full">
+              <label
+                htmlFor="camera-select"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Select Camera:
+              </label>
+              <select
+                id="camera-select"
+                value={selectedDeviceId}
+                onChange={handleDeviceChange}
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm"
+              >
+                {devices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label ||
+                      `Camera ${device.deviceId.substring(0, 8)}`}{" "}
+                    {/* Mostrar nombre o ID parcial */}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        {/* Advertencia si no hay cámaras detectadas */}
+        {!isLoadingModels && devices.length === 0 && (
+          <div className="text-center text-red-500 font-semibold">
+            No camera devices found. Please ensure a camera is connected and
+            permissions are granted.
+          </div>
+        )}
+
         {/* Área de la cámara */}
         <div className="relative w-full aspect-video bg-gray-200 rounded-md overflow-hidden">
-          {!isLoadingModels && (
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              width="100%"
-              height="100%"
-              videoConstraints={{
-                facingMode: "user", // 'user' para cámara frontal, 'environment' para trasera (si disponible)
-              }}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          )}
+          {!isLoadingModels &&
+            selectedDeviceId && ( // Renderizar Webcam solo si hay un dispositivo seleccionado
+              <Webcam
+                audio={false}
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                width="100%"
+                height="100%"
+                videoConstraints={{
+                  deviceId: selectedDeviceId, // Usar el ID del dispositivo seleccionado
+                  facingMode: { ideal: "user" }, // Preferir cámara frontal si es 'user', sino se usará la seleccionada
+                }}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
         </div>
 
         {/* Botón de captura */}
         <button
           onClick={capture}
-          disabled={!faceApiModelsLoaded || isProcessingFace}
+          disabled={
+            !faceApiModelsLoaded || isProcessingFace || !selectedDeviceId
+          } // Deshabilitar si no hay cámara seleccionada
           className={`w-full py-3 rounded-md font-semibold text-lg ${
-            faceApiModelsLoaded && !isProcessingFace
+            faceApiModelsLoaded && !isProcessingFace && selectedDeviceId
               ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md transition duration-300"
               : "bg-gray-400 text-gray-700 cursor-not-allowed"
           }`}
@@ -256,23 +318,23 @@ const FacialValidationScreen: React.FC = () => {
             className="mt-4 p-3 rounded-md text-center text-lg font-medium"
             style={{
               backgroundColor: validationMessage.includes("Match Found!")
-                ? "#dcfce7" // Tailwind bg-green-100
+                ? "#dcfce7"
                 : validationMessage.includes("Observed User Detected!")
-                ? "#fffbe6" // Tailwind bg-yellow-100
+                ? "#fffbe6"
                 : validationMessage.includes("Error:") ||
                   validationMessage.includes("No face detected") ||
                   validationMessage.includes("Validation failed.")
-                ? "#fee2e2" // Tailwind bg-red-100
-                : "#dbeafe", // Tailwind bg-blue-100
+                ? "#fee2e2"
+                : "#dbeafe",
               color: validationMessage.includes("Match Found!")
-                ? "#166534" // Tailwind text-green-700
+                ? "#166534"
                 : validationMessage.includes("Observed User Detected!")
-                ? "#a16207" // Tailwind text-yellow-700
+                ? "#a16207"
                 : validationMessage.includes("Error:") ||
                   validationMessage.includes("No face detected") ||
                   validationMessage.includes("Validation failed.")
-                ? "#b91c1c" // Tailwind text-red-700
-                : "#2563eb", // Tailwind text-blue-700
+                ? "#b91c1c"
+                : "#2563eb",
             }}
           >
             {validationMessage}
