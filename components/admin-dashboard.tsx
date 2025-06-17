@@ -1,16 +1,20 @@
 "use client";
 
-import React from "react";
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import { createClient } from "@supabase/supabase-js"; // Importa el cliente de Supabase JS
+
 // --- Configuración del Cliente Supabase para el Frontend ---
-// Estas variables de entorno deben estar definidas en tu archivo .env.local
-// y ser accesibles públicamente (por eso el prefijo NEXT_PUBLIC_ en Next.js).
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// Crea la instancia del cliente Supabase.
-// Usamos '!' para indicar a TypeScript que confiamos en que estas variables no serán null/undefined en runtime.
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+
+// --- Shadcn UI Components ---
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +36,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// --- Lucide React Icons ---
 import {
   Users,
   Shield,
@@ -59,26 +81,12 @@ import {
   ArrowRight,
   UserCircle2,
 } from "lucide-react";
+
+// --- Custom Hooks & Components ---
 import { useAuth } from "@/hooks/use-auth";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CameraCapture } from "@/components/camera-capture";
-// Add these imports at the top of the file with the other imports
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// --- AI-ENHANCED DASHBOARD COMPONENTS ---
+import { CameraCapture } from "@/components/camera-capture"; // Importar el componente CameraCapture
+
+// --- Recharts (for AI-Enhanced Dashboard) ---
 import {
   LineChart,
   Line,
@@ -93,245 +101,13 @@ import {
   Cell,
 } from "recharts";
 
-// Mock data for demonstration
-const summaryData = {
-  totalUsers: 247,
-  activeZones: 12,
-  accessesToday: 89,
-  successRate: 94.2,
-};
+// --- Face-API.js ---
+import * as faceapi from "face-api.js";
 
-const recentAccesses = [
-  {
-    id: 1,
-    timestamp: "2025-01-10 14:32",
-    user: "John Smith",
-    status: "Success",
-  },
-  {
-    id: 2,
-    timestamp: "2025-01-10 14:28",
-    user: "Sarah Johnson",
-    status: "Success",
-  },
-  {
-    id: 3,
-    timestamp: "2025-01-10 14:15",
-    user: "Mike Wilson",
-    status: "Failure",
-  },
-  {
-    id: 4,
-    timestamp: "2025-01-10 14:02",
-    user: "Emily Davis",
-    status: "Success",
-  },
-  {
-    id: 5,
-    timestamp: "2025-01-10 13:45",
-    user: "Robert Brown",
-    status: "Success",
-  },
-];
-
-// Updated user data with new fields
-const initialUsers: User[] = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john@example.com",
-    role: "Admin",
-    accessZones: ["Main Entrance", "Server Room"],
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane@example.com",
-    role: "User",
-    accessZones: ["Main Entrance", "Office Area"],
-  },
-];
-
-const accessLogs = [
-  {
-    id: 1,
-    timestamp: "2025-01-10 14:32",
-    user: "John Smith",
-    email: "john.smith@company.com",
-    role: "Admin",
-    zone: "Main Entrance",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 2,
-    timestamp: "2025-01-10 14:28",
-    user: "Sarah Johnson",
-    email: "sarah.johnson@company.com",
-    role: "User",
-    zone: "Zone B",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 3,
-    timestamp: "2025-01-10 14:15",
-    user: "Mike Wilson",
-    email: "mike.wilson@company.com",
-    role: "User",
-    zone: "Server Room",
-    status: "Failed",
-    method: "Facial",
-  },
-  {
-    id: 4,
-    timestamp: "2025-01-10 14:02",
-    user: "Emily Davis",
-    email: "emily.davis@company.com",
-    role: "Admin",
-    zone: "Warehouse",
-    status: "Successful",
-    method: "Manual",
-  },
-  {
-    id: 5,
-    timestamp: "2025-01-10 13:45",
-    user: "Robert Brown",
-    email: "robert.brown@company.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 6,
-    timestamp: "2025-01-10 13:30",
-    user: "John Smith",
-    email: "john.smith@company.com",
-    role: "Admin",
-    zone: "Server Room",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 7,
-    timestamp: "2025-01-10 12:15",
-    user: "Sarah Johnson",
-    email: "sarah.johnson@company.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 8,
-    timestamp: "2025-01-10 11:45",
-    user: "Emily Davis",
-    email: "emily.davis@company.com",
-    role: "Admin",
-    zone: "Zone A",
-    status: "Failed",
-    method: "Facial",
-  },
-  {
-    id: 9,
-    timestamp: "2025-01-10 10:30",
-    user: "Mike Wilson",
-    email: "mike.wilson@company.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Successful",
-    method: "Manual",
-  },
-  {
-    id: 10,
-    timestamp: "2025-01-10 09:15",
-    user: "Robert Brown",
-    email: "robert.brown@company.com",
-    role: "User",
-    zone: "Cafeteria",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 11,
-    timestamp: "2025-01-10 08:45",
-    user: "John Smith",
-    email: "john.smith@company.com",
-    role: "Admin",
-    zone: "Executive Suite",
-    status: "Failed",
-    method: "Facial",
-  },
-  {
-    id: 12,
-    timestamp: "2025-01-10 08:30",
-    user: "Sarah Johnson",
-    email: "sarah.johnson@company.com",
-    role: "User",
-    zone: "Zone B",
-    status: "Successful",
-    method: "Manual",
-  },
-  {
-    id: 13,
-    timestamp: "2025-01-10 08:15",
-    user: "Mike Wilson",
-    email: "mike.wilson@company.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Successful",
-    method: "Facial",
-  },
-  {
-    id: 14,
-    timestamp: "2025-01-10 08:00",
-    user: "Emily Davis",
-    email: "emily.davis@company.com",
-    role: "Admin",
-    zone: "Warehouse",
-    status: "Failed",
-    method: "Facial",
-  },
-  {
-    id: 15,
-    timestamp: "2025-01-10 07:45",
-    user: "Robert Brown",
-    email: "robert.brown@company.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Successful",
-    method: "Facial",
-  },
-];
-
-// CSV template content
-const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL
-John Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,Zone A",https://example.com/photos/john.jpg
-Jane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg
-`;
-
-type SortField = "name" | "email" | "role";
-type SortDirection = "asc" | "desc";
-
-// Access logs sorting types
-type LogSortField =
-  | "timestamp"
-  | "user"
-  | "email"
-  | "role"
-  | "zone"
-  | "method"
-  | "status";
-
-// Summary sorting types
-type SummarySortField =
-  | "user"
-  | "email"
-  | "firstAccess"
-  | "lastAccess"
-  | "totalAccesses"
-  | "successRate";
+// --- Tipos de Datos (Asegúrate de que estos tipos concuerden con tu backend/Supabase) ---
+type Role = { id: string; name: string };
+type UserStatus = { id: string; name: string };
+type Zone = { id: string; name: string };
 
 type User = {
   id: number;
@@ -339,6 +115,9 @@ type User = {
   email: string;
   role: string;
   accessZones: string[];
+  // Añadir un campo para el embedding facial
+  faceEmbedding?: number[]; // Representado como array de números para JSON
+  profilePictureUrl?: string; // Para la URL de la imagen de perfil
 };
 
 type Log = {
@@ -352,59 +131,117 @@ type Log = {
   method: string;
 };
 
+type SummaryEntry = {
+  user: string;
+  email: string;
+  firstAccess: string;
+  lastAccess: string;
+  totalAccesses: number;
+  successful: number;
+  failed: number;
+  successRate: number;
+  zoneAccesses: Record<string, number>; // ¡Esto es clave! Le dice que es un objeto con claves de tipo 'string' y valores de tipo 'number'.
+};
+
+// --- Tipos para ordenar y filtrar ---
+type SortField = "name" | "email" | "role";
+type SortDirection = "asc" | "desc";
+type LogSortField =
+  | "timestamp"
+  | "user"
+  | "email"
+  | "role"
+  | "zone"
+  | "method"
+  | "status";
+type SummarySortField =
+  | "user"
+  | "email"
+  | "firstAccess"
+  | "lastAccess"
+  | "totalAccesses"
+  | "successRate";
+type ObservedUserSortField =
+  | "id"
+  | "firstSeen"
+  | "lastSeen"
+  | "tempAccesses"
+  | "accessedZones"
+  | "status"
+  | "aiAction";
+
+// Tipo para las columnas de la tabla (faltaba en la versión anterior)
+type Column = {
+  key: string;
+  label: string;
+  sortable: boolean;
+};
+
+// --- Mock Data (Inicializados como arrays/objetos vacíos para evitar errores) ---
+const summaryData = {};
+const recentAccesses = [];
+const initialUsers: User[] = [];
+const accessLogs: Log[] = []; // Inicializado como array vacío, con tipo explícito Log[] // Inicializado como array vacío
+const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL\nJohn Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,Zone A",https://example.com/photos/john.jpg\nJane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg\n`;
+
 export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const { signOut } = useAuth();
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const { signOut } = useAuth(); // Asume que useAuth y signOut están correctamente implementados
+  const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
-  // User management state
-  const [users, setUsers] = useState<User[]>([]);
+  // --- User Management States ---
+  const [users, setUsers] = useState<User[]>(initialUsers); // Usar initialUsers
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editingUser, setEditingUser] = useState<any>(null); // Considerar tipado más específico
   const [editingAccessZones, setEditingAccessZones] = useState<string[]>([]);
   const [editingAccessZonesOpen, setEditingAccessZonesOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<any>(null);
+  const [userToDelete, setUserToDelete] = useState<any>(null); // Considerar tipado más específico
 
-  // Bulk upload state
-  const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
-  const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "processing" | "success" | "error"
-  >("idle");
-  const [uploadMessage, setUploadMessage] = useState("");
-
-  // Sorting state
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-
-  // New form state
+  // --- New User Form States ---
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>("");
   const [selectedUserStatus, setSelectedUserStatus] =
-    useState<string>("inactive"); // Por defecto 'Inactive'
-
+    useState<string>("Inactive"); // Default to 'Inactive'
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
   const [accessZonesOpen, setAccessZonesOpen] = useState(false);
 
-  // Add these state variables after the existing state declarations
+  // --- Photo Upload & Face-API.js States ---
+  const [imagePreview, setImagePreview] = useState<string | null>(null); // URL para mostrar la imagen seleccionada/capturada
+  const [currentImage, setCurrentImage] = useState<File | Blob | null>(null); // La imagen activa (File o Blob) para procesar
+  const [faceEmbedding, setFaceEmbedding] = useState<Float32Array | null>(null); // El vector 128D resultante de face-api.js
+  const [faceDetectionError, setFaceDetectionError] = useState<string | null>(
+    null
+  ); // Errores específicos de detección facial
+  const [isProcessingImage, setIsProcessingImage] = useState(false); // Indica si face-api está trabajando
+  const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
+  const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(
+    null
+  ); // Errores de carga de los modelos de Face-API
+
+  // --- Camera Capture Component State (isCameraOpen es para el prop 'open') ---
+  const [isCameraOpen, setCameraOpen] = useState(false);
+
+  // --- Global UI Status / Feedback ---
+  const [showStatusMessage, setShowStatusMessage] = useState<string | null>(
+    null
+  ); // Mensajes de éxito/error al guardar/procesar
+  const [isSavingUser, setIsSavingUser] = useState(false); // Para el estado del botón Guardar Usuario
+  const [isDragging, setIsDragging] = useState(false); // Para la sección de drag & drop de fotos
+
+  // --- Dashboard Filtering/Sorting States (mantener tus existentes) ---
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
+  // Nuevo estado para el ordenamiento de la tabla de usuarios
+  const [sortField, setSortField] = useState<SortField>("name"); // Campo de ordenamiento por defecto
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc"); // Dirección de ordenamiento por defecto
+
   const [csvIsDragging, setCsvIsDragging] = useState(false);
-
-  // Add a new state variable for the camera modal
-  const [cameraOpen, setCameraOpen] = useState(false);
-
-  // Access Logs filtering state
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [selectedUser, setSelectedUser] = useState("all");
@@ -412,23 +249,17 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedMethod, setSelectedMethod] = useState("all");
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-
-  // Access Logs sorting and pagination state
   const [logSortField, setLogSortField] = useState<LogSortField>("timestamp");
   const [logSortDirection, setLogSortDirection] =
     useState<SortDirection>("desc");
   const [logCurrentPage, setLogCurrentPage] = useState(1);
   const [logItemsPerPage, setLogItemsPerPage] = useState(10);
-
-  // Summary sorting and filtering state
   const [summarySortField, setSummarySortField] =
     useState<SummarySortField>("user");
   const [summarySortDirection, setSummarySortDirection] =
     useState<SortDirection>("asc");
   const [summarySearchTerm, setSummarySearchTerm] = useState("");
   const [summaryStatusFilter, setSummaryStatusFilter] = useState("all");
-
-  // Add these new state variables after the other state declarations
   const [activeSettingsTab, setActiveSettingsTab] = useState("zones");
   const [zones, setZones] = useState([
     { id: 1, name: "Main Entrance" },
@@ -450,7 +281,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [editingZoneName, setEditingZoneName] = useState("");
   const [zoneToDelete, setZoneToDelete] = useState<any>(null);
   const [zoneDeleteModalOpen, setZoneDeleteModalOpen] = useState(false);
-
   const [newCamera, setNewCamera] = useState({
     name: "",
     zone: "",
@@ -461,190 +291,35 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [cameraToDelete, setCameraToDelete] = useState<any>(null);
   const [cameraDeleteModalOpen, setCameraDeleteModalOpen] = useState(false);
 
-  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
+  // Estados para la carga masiva CSV (faltantes)
+  const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "processing" | "success" | "error"
+  >("idle");
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
+
+  // Search term para los Access Logs (faltante)
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // States for data fetched from Edge Functions
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [errorRoles, setErrorRoles] = useState<string | null>(null);
-
-  const [zonesData, setZonesData] = useState<{ id: string; name: string }[]>(
-    []
-  );
+  const [zonesData, setZonesData] = useState<Zone[]>([]); // Renombrado a zonesData para evitar conflicto con 'zones' mock
   const [loadingZones, setLoadingZones] = useState(true);
   const [errorZones, setErrorZones] = useState<string | null>(null);
-
-  const [userStatuses, setUserStatuses] = useState<
-    { id: string; name: string }[]
-  >([]);
+  const [userStatuses, setUserStatuses] = useState<UserStatus[]>([]);
   const [loadingUserStatuses, setLoadingUserStatuses] = useState(true);
   const [errorUserStatuses, setErrorUserStatuses] = useState<string | null>(
     null
   );
 
-  // --- AI-ENHANCED DASHBOARD STATE & DATA ---
-
-  useEffect(() => {
-    // Función asíncrona para obtener los roles
-    const fetchRoles = async () => {
-      setLoadingRoles(true); // Inicia el estado de carga
-      setErrorRoles(null); // Reinicia cualquier error previo
-
-      // URL de tu Edge Function 'get-user-roles'
-      // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-user-roles -> INVOKE URL
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-roles";
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            // Opcional: Si tu Edge Function REQUIERE autenticación de frontend (no es el caso de --no-verify-jwt)
-            // 'Authorization': `Bearer ${await supabase.auth.getSession()?.then(s => s.data.session?.access_token)}`,
-          },
-        });
-
-        if (!response.ok) {
-          // Si la respuesta no es exitosa (ej. 404, 500)
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log("Roles obtenidos de Edge Function:", result.roles); // Para depuración en la consola del navegador
-
-        // Actualiza el estado 'roles' con los datos obtenidos
-        setRoles(result.roles || []);
-
-        // Opcional: Si el `selectedRole` inicial está vacío, selecciona el primero de la lista
-        if (result.roles && result.roles.length > 0 && !selectedRole) {
-          setSelectedRole(result.roles[0].name);
-        }
-      } catch (error: any) {
-        // Captura cualquier error durante la petición o procesamiento
-        console.error("Error al obtener roles de Edge Function:", error);
-        setErrorRoles(error.message || "Fallo al cargar los roles.");
-      } finally {
-        setLoadingRoles(false); // Finaliza el estado de carga
-      }
-    };
-
-    fetchRoles(); // Llama a la función para cargar los roles
-  }, []); // Array de dependencias vacío: esto asegura que useEffect se ejecute solo una vez al montar el componente
-
-  useEffect(() => {
-    // Función asíncrona para obtener las zonas
-    const fetchZones = async () => {
-      setLoadingZones(true); // Inicia el estado de carga para las zonas
-      setErrorZones(null); // Reinicia cualquier error previo para las zonas
-
-      // URL de tu Edge Function 'get-access-zones'
-      // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-access-zones -> INVOKE URL
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones";
-
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          // Si la respuesta no es exitosa (ej. 404, 500)
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log("Zonas obtenidas de Edge Function:", result.zones); // Para depuración en la consola del navegador
-
-        // Actualiza el estado 'zonesData' con los datos obtenidos
-        setZonesData(result.zones || []);
-      } catch (error: any) {
-        // Captura cualquier error durante la petición o procesamiento
-        console.error("Error al obtener zonas de Edge Function:", error);
-        setErrorZones(error.message || "Fallo al cargar las zonas.");
-      } finally {
-        setLoadingZones(false); // Finaliza el estado de carga para las zonas
-      }
-    };
-
-    fetchZones(); // Llama a la función para cargar las zonas
-  }, []); // Array de dependencias vacío: esto asegura que useEffect se ejecute solo una vez al montar el componente
-  // useEffect to get the user statuses
-  useEffect(() => {
-    // Función asíncrona para obtener los estados de usuario
-    const fetchUserStatuses = async () => {
-      setLoadingUserStatuses(true); // Inicia el estado de carga
-      setErrorUserStatuses(null); // Reinicia cualquier error previo
-
-      // URL de tu Edge Function 'get-user-statuses'
-      // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-user-statuses -> INVOKE URL
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-statuses";
-
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          // Si la respuesta no es exitosa (ej. 404, 500)
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log(
-          "Estados de usuario obtenidos de Edge Function:",
-          result.statuses
-        ); // Para depuración en la consola del navegador
-
-        // Actualiza el estado 'userStatuses' con los datos obtenidos
-        setUserStatuses(result.statuses || []);
-
-        // Opcional: Establecer "Inactive" como el estado seleccionado por defecto si se encuentra
-        if (result.statuses && result.statuses.length > 0) {
-          const inactiveStatus = result.statuses.find(
-            (status: { name: string }) => status.name === "Inactive"
-          );
-          if (inactiveStatus) {
-            // Asumiendo que 'selectedUserStatus' ya existe o lo crearás.
-            // Necesitas un estado `selectedUserStatus` similar a `selectedRole`.
-            // setSelectedUserStatus(inactiveStatus.name);
-          } else {
-            // Si 'Inactive' no existe, puedes seleccionar el primero o no seleccionar nada.
-            // setSelectedUserStatus(result.statuses[0].name);
-          }
-        }
-      } catch (error: any) {
-        // Captura cualquier error durante la petición o procesamiento
-        console.error(
-          "Error al obtener estados de usuario de Edge Function:",
-          error
-        );
-        setErrorUserStatuses(
-          error.message || "Fallo al cargar los estados de usuario."
-        );
-      } finally {
-        setLoadingUserStatuses(false); // Finaliza el estado de carga
-      }
-    };
-
-    fetchUserStatuses(); // Llama a la función para cargar los estados
-  }, []);
-
-  // --- Finishiing useEffect ---
-  // Place these inside the AdminDashboard component, before the return
+  // --- AI-ENHANCED DASHBOARD STATE & DATA (Inicializados como arrays/objetos vacíos) ---
   const [riskScore] = useState<{
     score: number;
     status: "low" | "moderate" | "high";
-  }>({
-    score: 23,
-    status: "low",
-  });
+  }>({ score: 23, status: "low" });
   const [kpiData] = useState({
     totalUsers: 247,
     activeZones: 12,
@@ -653,154 +328,15 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     anomalousAttempts: 3,
     successRate: 94.2,
   });
-  const [suspiciousUsers, setSuspiciousUsers] = useState([
-    {
-      id: 1,
-      name: "Mike Wilson",
-      photoUrl: "/avatars/mike.jpg",
-      timestamp: "2025-01-10 14:15",
-      reason: "Multiple failed attempts in restricted zone",
-      suggestion: "Review user permissions",
-    },
-    {
-      id: 2,
-      name: "Emily Davis",
-      photoUrl: "/avatars/emily.jpg",
-      timestamp: "2025-01-10 11:45",
-      reason: "Off-hours access",
-      suggestion: "Investigate activity",
-    },
-    {
-      id: 3,
-      name: "Robert Brown",
-      photoUrl: "/avatars/robert.jpg",
-      timestamp: "2025-01-10 09:15",
-      reason: "Possible impersonation attempt",
-      suggestion: "Consider temporary lockout",
-    },
-  ]);
-  const [aiRecommendations, setAIRecommendations] = useState([
-    {
-      id: 1,
-      text: "Review access configuration for Server Room (high failure rate)",
-    },
-    { id: 2, text: "Consider updating inactive user profiles" },
-    { id: 3, text: "Increase monitoring for off-hours access" },
-  ]);
-  const [recentLogs, setRecentLogs] = useState<
-    {
-      id: number;
-      timestamp: string;
-      user: string;
-      zone: string;
-      status: "Success" | "Failure";
-      aiClassification?: string;
-    }[]
-  >([
-    {
-      id: 1,
-      timestamp: "2025-01-10 14:32",
-      user: "John Smith",
-      zone: "Main Entrance",
-      status: "Success",
-    },
-    {
-      id: 2,
-      timestamp: "2025-01-10 14:28",
-      user: "Sarah Johnson",
-      zone: "Zone B",
-      status: "Success",
-    },
-    {
-      id: 3,
-      timestamp: "2025-01-10 14:15",
-      user: "Mike Wilson",
-      zone: "Server Room",
-      status: "Failure",
-      aiClassification: "Unauthorized",
-    },
-    {
-      id: 4,
-      timestamp: "2025-01-10 14:02",
-      user: "Emily Davis",
-      zone: "Warehouse",
-      status: "Success",
-    },
-    {
-      id: 5,
-      timestamp: "2025-01-10 13:45",
-      user: "Robert Brown",
-      zone: "Main Entrance",
-      status: "Failure",
-      aiClassification: "Possible Impersonation",
-    },
-  ]);
-  const [trendData] = useState([
-    { date: "Mon", alerts: 1, aiPrediction: 2 },
-    { date: "Tue", alerts: 2, aiPrediction: 2 },
-    { date: "Wed", alerts: 3, aiPrediction: 3 },
-    { date: "Thu", alerts: 2, aiPrediction: 2 },
-    { date: "Fri", alerts: 4, aiPrediction: 5 },
-    { date: "Sat", alerts: 2, aiPrediction: 3 },
-    { date: "Sun", alerts: 1, aiPrediction: 1 },
-  ]);
-  const [failureCauseData] = useState([
-    { name: "Unauthorized", value: 4 },
-    { name: "Face Not Recognized", value: 3 },
-    { name: "Possible Impersonation", value: 2 },
-    { name: "Technical Issue", value: 1 },
-  ]);
-  const [aiDetailsUser, setAIDetailsUser] = useState(null);
-  const [aiDetailsLog, setAIDetailsLog] = useState(null);
-  const [aiRecDetails, setAIRecDetails] = useState(null);
-
-  // 1. Add 'observedUsers' state and simulated data after the other state declarations
-  const [observedUsers] = useState([
-    {
-      id: "TMP-001",
-      photoUrl: "",
-      firstSeen: "2025-01-10 08:15",
-      lastSeen: "2025-01-10 14:32",
-      tempAccesses: 5,
-      accessedZones: ["Main Entrance", "Zone A"],
-      status: "active_temporal",
-      aiAction: "Register User",
-    },
-    {
-      id: "TMP-002",
-      photoUrl: "",
-      firstSeen: "2025-01-10 09:00",
-      lastSeen: "2025-01-10 13:45",
-      tempAccesses: 3,
-      accessedZones: ["Zone B"],
-      status: "in_review_admin",
-      aiAction: "Extend Temporary Access",
-    },
-    {
-      id: "TMP-003",
-      photoUrl: "",
-      firstSeen: "2025-01-09 17:20",
-      lastSeen: "2025-01-10 10:30",
-      tempAccesses: 2,
-      accessedZones: ["Warehouse"],
-      status: "expired",
-      aiAction: "Block User",
-    },
-  ]);
-
-  // 1. Define types for observed user sort fields
-  const observedUserSortFields = [
-    "id",
-    "firstSeen",
-    "lastSeen",
-    "tempAccesses",
-    "accessedZones",
-    "status",
-    "aiAction",
-  ] as const;
-  type ObservedUserSortField = (typeof observedUserSortFields)[number];
-
-  // 2. Update observedSortField and logsSortField types
+  const [suspiciousUsers, setSuspiciousUsers] = useState<any[]>([]); // Inicializado
+  const [aiRecommendations, setAIRecommendations] = useState<any[]>([]); // Inicializado
+  const [recentLogs, setRecentLogs] = useState<any[]>([]); // Inicializado
+  const [trendData] = useState<any[]>([]); // Inicializado
+  const [failureCauseData] = useState<any[]>([]); // Inicializado
+  const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
+  const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
+  const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
+  const [observedUsers] = useState<any[]>([]); // Inicializado
   const [observedSortField, setObservedSortField] =
     useState<ObservedUserSortField>("id");
   const [observedSortDirection, setObservedSortDirection] = useState<
@@ -809,235 +345,347 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [logsSortField, setLogsSortField] = useState<LogSortField>("timestamp");
   const [logsSortDirection, setLogsSortDirection] =
     useState<SortDirection>("desc");
-
-  // 3. Add index signature to observed user type for sorting
-  // (If observedUsers is typed, add: [key: string]: any; to its type)
-  // If not, cast aValue and bValue to any in the sort function
-  const sortedObservedUsers = [...observedUsers].sort((a, b) => {
-    let aValue = (a as any)[observedSortField];
-    let bValue = (b as any)[observedSortField];
-    if (Array.isArray(aValue)) aValue = aValue.join(", ");
-    if (Array.isArray(bValue)) bValue = bValue.join(", ");
-    if (typeof aValue === "string" && typeof bValue === "string") {
-      if (observedSortDirection === "asc") return aValue.localeCompare(bValue);
-      else return bValue.localeCompare(aValue);
-    }
-    if (typeof aValue === "number" && typeof bValue === "number") {
-      if (observedSortDirection === "asc") return aValue - bValue;
-      else return bValue - aValue;
-    }
-    return 0;
-  });
-
-  // 4. Fix observedUserDetails state type
   const [observedUserDetails, setObservedUserDetails] = useState<
     null | (typeof observedUsers)[0]
   >(null);
+  const [dashboardTab, setDashboardTab] = useState("overview");
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  // 3. Sorting logic for recent logs
-  const sortedRecentLogs = [...recentLogs].sort((a, b) => {
-    let aValue = (a as any)[logsSortField];
-    let bValue = (b as any)[logsSortField];
-    if (logsSortField === "timestamp") {
-      aValue = new Date(aValue).getTime();
-      bValue = new Date(bValue).getTime();
-    }
-    if (typeof aValue === "string" && typeof bValue === "string") {
-      if (logsSortDirection === "asc") return aValue.localeCompare(bValue);
-      else return bValue.localeCompare(aValue);
-    }
-    if (typeof aValue === "number" && typeof bValue === "number") {
-      if (logsSortDirection === "asc") return aValue - bValue;
-      else return bValue - aValue;
-    }
-    return 0;
-  });
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      processImageFile(file);
-    }
-  };
-
-  const processImageFile = (file: File) => {
-    setSelectedImage(file);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImagePreview(e.target?.result as string);
+  // --- USE EFFECTS PARA CARGA DE DATOS INICIALES ---
+  // useEffect para cargar los modelos de Face-API.js
+  useEffect(() => {
+    const loadModels = async () => {
+      const MODEL_URL = "/models"; // La URL base donde se encuentran los modelos.
+      try {
+        setFaceApiModelsLoaded(false);
+        setFaceApiModelsError(null);
+        await faceapi.nets.ssdMobilenetv1.load(MODEL_URL); // Usamos SSD Mobilenet V1
+        await faceapi.nets.faceLandmark68Net.load(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.load(MODEL_URL);
+        setFaceApiModelsLoaded(true);
+        console.log("Face-API.js models loaded successfully!");
+      } catch (error: any) {
+        console.error("Error loading Face-API.js models:", error);
+        setFaceApiModelsError(
+          `Failed to load face detection models: ${error.message}`
+        );
+      }
     };
-    reader.readAsDataURL(file);
-  };
+    loadModels();
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  // Nuevo useEffect para procesar la imagen con Face-API.js (se ejecuta cuando currentImage o faceApiModelsLoaded cambian)
+  useEffect(() => {
+    const processImageForFaceRecognition = async () => {
+      if (!faceApiModelsLoaded || !currentImage) {
+        setFaceEmbedding(null);
+        setFaceDetectionError(null);
+        return;
+      }
+
+      setIsProcessingImage(true);
+      setFaceDetectionError(null);
+      setFaceEmbedding(null);
+
+      try {
+        // Crea un elemento HTMLImageElement temporal para face-api
+        const img = document.createElement("img");
+        img.src =
+          currentImage instanceof File
+            ? URL.createObjectURL(currentImage)
+            : URL.createObjectURL(currentImage);
+
+        img.onload = async () => {
+          // Detecta todas las caras y sus puntos de referencia
+          const detectionsWithLandmarks = await faceapi
+            .detectAllFaces(img, new faceapi.SsdMobilenetv1Options())
+            .withFaceLandmarks()
+            .withFaceDescriptors(); // ¡Añadir .withFaceDescriptors() aquí!
+
+          if (detectionsWithLandmarks.length === 0) {
+            setFaceDetectionError(
+              "No face detected in the image. Please use a clear photo."
+            );
+            setFaceEmbedding(null);
+            console.warn("No face detected.");
+          } else if (detectionsWithLandmarks.length > 1) {
+            setFaceDetectionError(
+              "Multiple faces detected. Please use a photo with only one person."
+            );
+            setFaceEmbedding(null);
+            console.warn("Multiple faces detected.");
+          } else {
+            // Si se detecta exactamente una cara, extrae el descriptor (embedding)
+            const faceDescriptor = detectionsWithLandmarks[0].descriptor; // Ahora el descriptor ya está adjunto
+            setFaceEmbedding(new Float32Array(faceDescriptor)); // Almacena el embedding
+            setFaceDetectionError(null);
+            console.log("Face detected and embedding generated successfully!");
+            console.log("Generated Embedding:", faceDescriptor); // Para depuración comentar esta línea
+          }
+          URL.revokeObjectURL(img.src); // Libera la URL del objeto creado
+          setIsProcessingImage(false);
+        };
+
+        img.onerror = (e) => {
+          console.error("Error loading image for Face-API.js:", e);
+          setFaceDetectionError(
+            "Could not load image for processing. Please try another file."
+          );
+          setIsProcessingImage(false);
+        };
+      } catch (error: any) {
+        console.error(
+          "Error during face detection or embedding generation:",
+          error
+        );
+        setFaceDetectionError(
+          `Face detection failed: ${error.message}. Ensure models are loaded and image is clear.`
+        );
+        setFaceEmbedding(null);
+        setIsProcessingImage(false);
+      }
+    };
+
+    processImageForFaceRecognition();
+  }, [currentImage, faceApiModelsLoaded]);
+
+  // useEffect para cargar roles
+  useEffect(() => {
+    const fetchRoles = async () => {
+      setLoadingRoles(true);
+      setErrorRoles(null);
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-roles";
+      try {
+        const response = await fetch(edgeFunctionUrl, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+        const result = await response.json();
+        setRoles(result.roles || []);
+        if (result.roles && result.roles.length > 0 && !selectedRole) {
+          setSelectedRole(result.roles[0].name);
+        }
+      } catch (error: any) {
+        console.error("Error al obtener roles de Edge Function:", error);
+        setErrorRoles(error.message || "Fallo al cargar los roles.");
+      } finally {
+        setLoadingRoles(false);
+      }
+    };
+    fetchRoles();
+  }, []);
+
+  // useEffect para cargar zonas
+  useEffect(() => {
+    const fetchZones = async () => {
+      setLoadingZones(true);
+      setErrorZones(null);
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones";
+      try {
+        const response = await fetch(edgeFunctionUrl, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+        const result = await response.json();
+        setZonesData(result.zones || []);
+      } catch (error: any) {
+        console.error("Error al obtener zonas de Edge Function:", error);
+        setErrorZones(error.message || "Fallo al cargar las zonas.");
+      } finally {
+        setLoadingZones(false);
+      }
+    };
+    fetchZones();
+  }, []);
+
+  // useEffect para cargar estados de usuario
+  useEffect(() => {
+    const fetchUserStatuses = async () => {
+      setLoadingUserStatuses(true);
+      setErrorUserStatuses(null);
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-statuses";
+      try {
+        const response = await fetch(edgeFunctionUrl, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+        const result = await response.json();
+        setUserStatuses(result.statuses || []);
+        if (result.statuses && result.statuses.length > 0) {
+          const inactiveStatus = result.statuses.find(
+            (status: { name: string }) => status.name === "Inactive"
+          );
+          if (inactiveStatus) {
+            setSelectedUserStatus(inactiveStatus.name);
+          } else if (!selectedUserStatus) {
+            setSelectedUserStatus(result.statuses[0].name); // Fallback al primero si no existe Inactive y no hay selección previa
+          }
+        }
+      } catch (error: any) {
+        console.error(
+          "Error al obtener estados de usuario de Edge Function:",
+          error
+        );
+        setErrorUserStatuses(
+          error.message || "Fallo al cargar los estados de usuario."
+        );
+      } finally {
+        setLoadingUserStatuses(false);
+      }
+    };
+    fetchUserStatuses();
+  }, []);
+
+  // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA ---
+
+  // Maneja el evento cuando un elemento arrastrable está sobre la zona de drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
-  };
+  }, []);
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+  // Maneja el evento cuando un elemento arrastrable deja la zona de drop
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  // Maneja el evento cuando un elemento es soltado en la zona de drop
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
-
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith("image/")) {
-        processImageFile(file);
+        setCurrentImage(file); // Guarda el objeto File (o Blob) de la imagen para su procesamiento futuro
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string); // Establece la URL para la previsualización en la UI
+          setFaceEmbedding(null); // Reinicia el embedding
+          setFaceDetectionError(null); // Reinicia errores de detección facial
+        };
+        reader.readAsDataURL(file);
+      } else {
+        console.error("Dropped file is not an image.");
+        setFaceDetectionError("Please drop an image file (e.g., JPG, PNG).");
       }
     }
-  };
+  }, []);
 
-  // Add these CSV drag handlers after the existing image drag handlers
-  const handleCsvDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setCsvIsDragging(true);
-  };
-
-  const handleCsvDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setCsvIsDragging(false);
-  };
-
-  const handleCsvDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setCsvIsDragging(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (file.name.endsWith(".csv")) {
-        setSelectedCsvFile(file);
+  // Maneja la carga de imagen desde el input de archivo
+  const handleImageUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file && file.type.startsWith("image/")) {
+        setCurrentImage(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string);
+          setFaceEmbedding(null);
+          setFaceDetectionError(null);
+        };
+        reader.readAsDataURL(file);
+      } else if (file) {
+        console.error("Selected file is not an image.");
+        setFaceDetectionError("Please select an image file (e.g., JPG, PNG).");
       }
-    }
-  };
+      e.target.value = "";
+    },
+    []
+  );
 
-  const clearImage = () => {
-    setSelectedImage(null);
+  // Función corregida: Limpia la imagen seleccionada/capturada y sus estados relacionados
+  const clearImage = useCallback(() => {
     setImagePreview(null);
-    // Reset the file input
+    setCurrentImage(null);
+    setFaceEmbedding(null);
+    setFaceDetectionError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  };
+  }, []);
 
-  const clearCsvFile = () => {
-    setSelectedCsvFile(null);
-    if (csvFileInputRef.current) {
-      csvFileInputRef.current.value = "";
-    }
-  };
+  // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
+  const handleCameraCapture = useCallback((imageData: string) => {
+    setImagePreview(imageData); // Muestra la previsualización en el formulario principal
+    // Convierte la cadena base64 a un objeto Blob
+    fetch(imageData)
+      .then((res) => res.blob())
+      .then((blob) => {
+        setCurrentImage(blob); // Establece el Blob como la imagen actual para procesamiento
+        setFaceEmbedding(null); // Reinicia el embedding
+        setFaceDetectionError(null); // Reinicia errores de detección
+        setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
+      })
+      .catch((error) => {
+        console.error("Error converting captured image to blob:", error);
+        setFaceDetectionError("Failed to process captured image from camera.");
+      });
+  }, []);
 
+  // --- OTRAS FUNCIONES ---
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
-      setIsLoggingOut(true);
-      const { error } = await signOut();
-      if (error) {
-        console.error("Error logging out:", error);
-        return;
-      }
-      onLogout();
-    } catch (err) {
-      console.error("Unexpected error during logout:", err);
-    } finally {
+      await signOut(); // Llama a la función de signOut de tu hook de autenticación
+      // Redirigir o limpiar estado de usuario si es necesario
+    } catch (error) {
+      console.error("Error during logout:", error);
       setIsLoggingOut(false);
     }
   };
 
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) {
-      setEmailError("Email is required");
-      return false;
-    } else if (!emailRegex.test(email)) {
-      setEmailError("Please enter a valid email address");
-      return false;
-    } else {
-      setEmailError(null);
-      return true;
-    }
+    // Expresión regular simple para validar el formato de email
+    const re =
+      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+    return re.test(String(email).toLowerCase());
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEmail = e.target.value;
     setEmail(newEmail);
-    if (newEmail) {
-      validateEmail(newEmail);
+    if (newEmail && !validateEmail(newEmail)) {
+      setEmailError("Invalid email format");
     } else {
       setEmailError(null);
     }
   };
 
-  const toggleAccessZone = (zone: string) => {
+  const toggleAccessZone = (zoneName: string) => {
     setSelectedAccessZones((prev) =>
-      prev.includes(zone)
-        ? prev.filter((item) => item !== zone)
-        : [...prev, zone]
+      prev.includes(zoneName)
+        ? prev.filter((name) => name !== zoneName)
+        : [...prev, zoneName]
     );
   };
 
-  const toggleEditingAccessZone = (zone: string) => {
+  const toggleEditingAccessZone = (zoneName: string) => {
     setEditingAccessZones((prev) =>
-      prev.includes(zone)
-        ? prev.filter((item) => item !== zone)
-        : [...prev, zone]
+      prev.includes(zoneName)
+        ? prev.filter((name) => name !== zoneName)
+        : [...prev, zoneName]
     );
   };
 
-  // Update the handleSaveUser function to properly check validation and add debugging
-
-  const handleSaveUser = () => {
-    console.log("Save User clicked");
-    console.log("Current form state:", {
-      fullName,
-      email,
-      emailError,
-      selectedRole,
-      selectedAccessZones,
-      selectedImage,
-    });
-
-    const isEmailValid = validateEmail(email);
-
-    // Check each required field and log which ones are missing
-    const missingFields = [];
-    if (!fullName) missingFields.push("Full Name");
-    if (!isEmailValid) missingFields.push("Valid Email");
-    if (!selectedRole) missingFields.push("User Role");
-    if (selectedAccessZones.length === 0) missingFields.push("Access Zones");
-    if (!selectedImage) missingFields.push("Photo");
-
-    if (missingFields.length > 0) {
-      console.log("Missing required fields:", missingFields);
-      return;
-    }
-
-    const newUser = {
-      id: users.length + 1,
-      name: fullName,
-      email,
-      role: selectedRole,
-      accessZones: selectedAccessZones,
-    };
-
-    console.log("Adding new user:", newUser);
-    setUsers([...users, newUser]);
-
-    // Reset form
-    setFullName("");
-    setEmail("");
-    setEmailError(null);
-    setSelectedRole("");
-    setSelectedAccessZones([]);
-    setSelectedImage(null);
-    setImagePreview(null);
-
-    console.log("Form reset complete");
-  };
-
-  // Sorting functionality
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -1047,7 +695,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
   };
 
-  // Access logs sorting functionality
   const handleLogSort = (field: LogSortField) => {
     if (logSortField === field) {
       setLogSortDirection(logSortDirection === "asc" ? "desc" : "asc");
@@ -1057,7 +704,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
   };
 
-  // Summary sorting functionality
   const handleSummarySort = (field: SummarySortField) => {
     if (summarySortField === field) {
       setSummarySortDirection(summarySortDirection === "asc" ? "desc" : "asc");
@@ -1067,58 +713,10 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
   };
 
-  const sortedUsers = [...users].sort((a, b) => {
-    const aValue = a[sortField] as string;
-    const bValue = b[sortField] as string;
-
-    if (sortDirection === "asc") {
-      return aValue.localeCompare(bValue);
-    } else {
-      return bValue.localeCompare(aValue);
-    }
-  });
-
-  // Add this after the sortedUsers logic
-  const filteredUsers = sortedUsers.filter(
-    (user) =>
-      user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(userSearchTerm.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
-
-  // Reset to first page when search term changes
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [userSearchTerm]);
-
-  // Reset to first page when items per page changes
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [itemsPerPage]);
-
-  // Reset log page when search term or filters change
-  React.useEffect(() => {
-    setLogCurrentPage(1);
-  }, [
-    searchTerm,
-    selectedUser,
-    selectedZone,
-    selectedStatus,
-    selectedMethod,
-    dateFrom,
-    dateTo,
-  ]);
-
-  // Edit functionality
-  const startEditing = (user: any) => {
+  const startEditing = (user: User) => {
     setEditingUserId(user.id);
-    setEditingUser({ ...user });
-    setEditingAccessZones([...user.accessZones]);
+    setEditingUser({ ...user }); // Copia del usuario para editar
+    setEditingAccessZones([...user.accessZones]); // Copia de zonas
   };
 
   const cancelEditing = () => {
@@ -1128,27 +726,34 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const saveEditing = () => {
-    const updatedUser = { ...editingUser, accessZones: editingAccessZones };
-    setUsers(
-      users.map((user) => (user.id === editingUserId ? updatedUser : user))
+    // Lógica para guardar el usuario editado en Supabase
+    console.log("Saving edited user:", editingUser, editingAccessZones);
+    // Actualizar el estado 'users' localmente
+    setUsers((prevUsers) =>
+      prevUsers.map((user) =>
+        user.id === editingUserId
+          ? { ...editingUser, accessZones: editingAccessZones }
+          : user
+      )
     );
-    setEditingUserId(null);
-    setEditingUser(null);
-    setEditingAccessZones([]);
+    cancelEditing();
   };
 
   const updateEditingUser = (field: string, value: any) => {
-    setEditingUser({ ...editingUser, [field]: value });
+    setEditingUser((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  // Delete functionality
-  const openDeleteModal = (user: any) => {
+  const openDeleteModal = (user: User) => {
     setUserToDelete(user);
     setDeleteModalOpen(true);
   };
 
   const confirmDelete = () => {
-    setUsers(users.filter((user) => user.id !== userToDelete.id));
+    // Lógica para eliminar el usuario de Supabase
+    console.log("Deleting user:", userToDelete);
+    setUsers((prevUsers) =>
+      prevUsers.filter((user) => user.id !== userToDelete.id)
+    );
     setDeleteModalOpen(false);
     setUserToDelete(null);
   };
@@ -1158,276 +763,107 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setUserToDelete(null);
   };
 
-  // Bulk upload functionality
   const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.name.endsWith(".csv")) {
+    if (file) {
       setSelectedCsvFile(file);
+      setUploadStatus("idle");
+      setUploadMessage(null);
     }
   };
 
   const downloadCsvTemplate = () => {
-    const blob = new Blob([csvTemplateContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "user_upload_template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const blob = new Blob([csvTemplateContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      // Feature detection
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "user_onboarding_template.csv");
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
-  const processBulkUpload = () => {
+  const processBulkUpload = async () => {
     if (!selectedCsvFile) {
+      setUploadMessage("Please select a CSV file first.");
       setUploadStatus("error");
-      setUploadMessage("Please select a CSV file first");
       return;
     }
 
     setUploadStatus("processing");
-    setUploadMessage("Processing users...");
+    setUploadMessage("Processing CSV file...");
 
-    // Simulate processing delay
-    setTimeout(() => {
+    try {
+      // Implement your CSV parsing and Supabase insertion logic here
+      // This is a placeholder. You'll need a library like 'papaparse'
+      // and potentially a Supabase Edge Function for bulk insertion.
+      console.log("Processing bulk upload for file:", selectedCsvFile.name);
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async work
+
       setUploadStatus("success");
-      setUploadMessage("Successfully processed 5 users");
+      setUploadMessage(
+        `Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`
+      );
+      setSelectedCsvFile(null); // Clear selected file after processing
+    } catch (error: any) {
+      console.error("Error processing bulk upload:", error);
+      setUploadStatus("error");
+      setUploadMessage(`Failed to process CSV: ${error.message}`);
+    }
+  };
 
-      // Add some mock users to demonstrate success
-      const newUsers = [
-        {
-          id: users.length + 1,
-          name: "Alex Johnson",
-          email: "alex.johnson@example.com",
-          role: "User",
-          accessZones: ["Main Entrance", "Cafeteria"],
-        },
-        {
-          id: users.length + 2,
-          name: "Taylor Smith",
-          email: "taylor.smith@example.com",
-          role: "Admin",
-          accessZones: ["Main Entrance", "Server Room", "Zone A"],
-        },
-      ];
+  const handleCsvDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCsvIsDragging(true);
+  };
 
-      setUsers([...users, ...newUsers]);
+  const handleCsvDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCsvIsDragging(false);
+  };
 
-      // Reset after 3 seconds
-      setTimeout(() => {
-        setBulkUploadModalOpen(false);
-        setSelectedCsvFile(null);
+  const handleCsvDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCsvIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.type === "text/csv") {
+        setSelectedCsvFile(file);
         setUploadStatus("idle");
-        setUploadMessage("");
-      }, 3000);
-    }, 2000);
+        setUploadMessage(null);
+      } else {
+        setUploadMessage("Please drop a CSV file.");
+        setUploadStatus("error");
+      }
+    }
   };
 
-  // Filter logs based on all criteria
-  const filteredLogs = useMemo(() => {
-    return accessLogs.filter((log) => {
-      // Apply all filters
-      if (selectedUser && selectedUser !== "all" && log.user !== selectedUser)
-        return false;
-      if (selectedZone && selectedZone !== "all" && log.zone !== selectedZone)
-        return false;
-      if (
-        selectedStatus &&
-        selectedStatus !== "all" &&
-        log.status !== selectedStatus
-      )
-        return false;
-      if (
-        selectedMethod &&
-        selectedMethod !== "all" &&
-        log.method !== selectedMethod
-      )
-        return false;
-
-      // Search term filter
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        return (
-          log.user.toLowerCase().includes(searchLower) ||
-          log.email.toLowerCase().includes(searchLower) ||
-          log.zone.toLowerCase().includes(searchLower) ||
-          log.status.toLowerCase().includes(searchLower) ||
-          log.method.toLowerCase().includes(searchLower)
-        );
-      }
-
-      // Date filtering (simplified - in real app you'd parse dates properly)
-      if (dateFrom || dateTo) {
-        const logDate = log.timestamp.split(" ")[0]; // Get date part
-        if (dateFrom && logDate < dateFrom) return false;
-        if (dateTo && logDate > dateTo) return false;
-      }
-
-      return true;
-    });
-  }, [
-    searchTerm,
-    selectedUser,
-    selectedZone,
-    selectedStatus,
-    selectedMethod,
-    dateFrom,
-    dateTo,
-  ]);
-
-  // Sort filtered logs
-  const sortedLogs = useMemo(() => {
-    return [...filteredLogs].sort((a, b) => {
-      const aValue = a[logSortField] as string;
-      const bValue = b[logSortField] as string;
-
-      if (logSortField === "timestamp") {
-        return logSortDirection === "asc"
-          ? new Date(aValue).getTime() - new Date(bValue).getTime()
-          : new Date(bValue).getTime() - new Date(aValue).getTime();
-      }
-
-      return logSortDirection === "asc"
-        ? aValue.localeCompare(bValue)
-        : bValue.localeCompare(aValue);
-    });
-  }, [filteredLogs, logSortField, logSortDirection]);
-
-  // Paginate sorted logs
-  const logTotalPages = Math.ceil(sortedLogs.length / logItemsPerPage);
-  const logStartIndex = (logCurrentPage - 1) * logItemsPerPage;
-  const logEndIndex = logStartIndex + logItemsPerPage;
-  const paginatedLogs = sortedLogs.slice(logStartIndex, logEndIndex);
-
-  // Prepare user summary data
-  const userSummaryData = useMemo(() => {
-    const summaryData = Array.from(
-      new Set(accessLogs.map((log) => log.user))
-    ).map((userName) => {
-      const userLogs = accessLogs.filter((log) => log.user === userName);
-      const userEmail = userLogs[0]?.email || "";
-      const firstAccess = userLogs.reduce((earliest, log) =>
-        log.timestamp < earliest.timestamp ? log : earliest
-      );
-      const lastAccess = userLogs.reduce((latest, log) =>
-        log.timestamp > latest.timestamp ? log : latest
-      );
-
-      // Count accesses per zone
-      const zoneAccesses = userLogs.reduce((acc, log) => {
-        acc[log.zone] = (acc[log.zone] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-      // Count successful and failed accesses
-      const successful = userLogs.filter(
-        (log) => log.status === "Successful"
-      ).length;
-      const failed = userLogs.filter((log) => log.status === "Failed").length;
-      const totalAccesses = userLogs.length;
-      const successRate =
-        totalAccesses > 0 ? (successful / totalAccesses) * 100 : 0;
-
-      return {
-        user: userName,
-        email: userEmail,
-        firstAccess: firstAccess.timestamp,
-        lastAccess: lastAccess.timestamp,
-        zoneAccesses,
-        successful,
-        failed,
-        totalAccesses,
-        successRate: Math.round(successRate * 10) / 10, // Round to 1 decimal place
-      };
-    });
-
-    return summaryData;
-  }, []);
-
-  // Filter and sort summary data
-  const filteredSummaryData = useMemo(() => {
-    return userSummaryData
-      .filter((summary) => {
-        // Apply search filter
-        if (summarySearchTerm) {
-          const searchLower = summarySearchTerm.toLowerCase();
-          return (
-            summary.user.toLowerCase().includes(searchLower) ||
-            summary.email.toLowerCase().includes(searchLower)
-          );
-        }
-
-        // Apply status filter
-        if (summaryStatusFilter === "successful" && summary.successful === 0)
-          return false;
-        if (summaryStatusFilter === "failed" && summary.failed === 0)
-          return false;
-
-        return true;
-      })
-      .sort((a, b) => {
-        let aValue: any = a[summarySortField];
-        let bValue: any = b[summarySortField];
-
-        // Special case for timestamp sorting
-        if (
-          summarySortField === "firstAccess" ||
-          summarySortField === "lastAccess"
-        ) {
-          // Convert to comparable format
-          aValue = new Date(aValue).getTime();
-          bValue = new Date(bValue).getTime();
-        }
-
-        if (summarySortDirection === "asc") {
-          return aValue > bValue ? 1 : -1;
-        } else {
-          return aValue < bValue ? 1 : -1;
-        }
-      });
-  }, [
-    userSummaryData,
-    summarySortField,
-    summarySortDirection,
-    summarySearchTerm,
-    summaryStatusFilter,
-  ]);
-
-  // Add a new function to handle captured photos from the camera
-  const handleCameraCapture = (imageData: string) => {
-    setImagePreview(imageData);
-
-    // Convert the base64 string to a File object
-    fetch(imageData)
-      .then((res) => res.blob())
-      .then((blob) => {
-        const file = new File([blob], "camera-capture.jpg", {
-          type: "image/jpeg",
-        });
-        setSelectedImage(file);
-      });
+  const clearCsvFile = () => {
+    setSelectedCsvFile(null);
+    setUploadStatus("idle");
+    setUploadMessage(null);
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = "";
+    }
   };
 
-  const tabs = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "users", label: "User Management" },
-    { id: "logs", label: "Access Logs" },
-    { id: "settings", label: "Settings" },
-  ];
-
-  // Add these functions after the other function declarations
-
-  // Zone Management Functions
   const handleAddZone = () => {
-    if (!newZoneName.trim()) return;
-
-    const newZone = {
-      id: zones.length > 0 ? Math.max(...zones.map((z) => z.id)) + 1 : 1,
-      name: newZoneName.trim(),
-    };
-
-    setZones([...zones, newZone]);
-    setNewZoneName("");
+    if (newZoneName.trim()) {
+      setZones((prev) => [
+        ...prev,
+        { id: prev.length + 1, name: newZoneName.trim() },
+      ]);
+      setNewZoneName("");
+    }
   };
 
   const startEditingZone = (zone: any) => {
@@ -1441,30 +877,14 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const saveEditingZone = () => {
-    if (!editingZoneName.trim()) return;
-
-    setZones(
-      zones.map((zone) =>
+    setZones((prev) =>
+      prev.map((zone) =>
         zone.id === editingZoneId
           ? { ...zone, name: editingZoneName.trim() }
           : zone
       )
     );
-
-    // Also update zone references in cameras
-    const oldZoneName = zones.find((z) => z.id === editingZoneId)?.name;
-    if (oldZoneName) {
-      setCameras(
-        cameras.map((camera) =>
-          camera.zone === oldZoneName
-            ? { ...camera, zone: editingZoneName.trim() }
-            : camera
-        )
-      );
-    }
-
-    setEditingZoneId(null);
-    setEditingZoneName("");
+    cancelEditingZone();
   };
 
   const openZoneDeleteModal = (zone: any) => {
@@ -1473,15 +893,12 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const confirmZoneDelete = () => {
-    setZones(zones.filter((zone) => zone.id !== zoneToDelete.id));
-
-    // Remove zone from cameras or set to empty
-    setCameras(
-      cameras.map((camera) =>
-        camera.zone === zoneToDelete.name ? { ...camera, zone: "" } : camera
+    setZones((prev) => prev.filter((zone) => zone.id !== zoneToDelete.id));
+    setCameras((prev) =>
+      prev.map((cam) =>
+        cam.zone === zoneToDelete.name ? { ...cam, zone: "" } : cam
       )
-    );
-
+    ); // Unassign cameras
     setZoneDeleteModalOpen(false);
     setZoneToDelete(null);
   };
@@ -1491,19 +908,11 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setZoneToDelete(null);
   };
 
-  // Camera Management Functions
   const handleAddCamera = () => {
-    if (!newCamera.name.trim() || !newCamera.zone) return;
-
-    const newCameraObj = {
-      id: cameras.length > 0 ? Math.max(...cameras.map((c) => c.id)) + 1 : 1,
-      name: newCamera.name.trim(),
-      zone: newCamera.zone,
-      location: newCamera.location.trim(),
-    };
-
-    setCameras([...cameras, newCameraObj]);
-    setNewCamera({ name: "", zone: "", location: "" });
+    if (newCamera.name.trim() && newCamera.zone) {
+      setCameras((prev) => [...prev, { id: prev.length + 1, ...newCamera }]);
+      setNewCamera({ name: "", zone: "", location: "" });
+    }
   };
 
   const startEditingCamera = (camera: any) => {
@@ -1517,23 +926,12 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const saveEditingCamera = () => {
-    if (!editingCamera.name.trim() || !editingCamera.zone) return;
-
-    setCameras(
-      cameras.map((camera) =>
-        camera.id === editingCameraId
-          ? {
-              ...camera,
-              name: editingCamera.name.trim(),
-              zone: editingCamera.zone,
-              location: editingCamera.location.trim(),
-            }
-          : camera
+    setCameras((prev) =>
+      prev.map((camera) =>
+        camera.id === editingCameraId ? { ...editingCamera } : camera
       )
     );
-
-    setEditingCameraId(null);
-    setEditingCamera(null);
+    cancelEditingCamera();
   };
 
   const openCameraDeleteModal = (camera: any) => {
@@ -1542,7 +940,9 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const confirmCameraDelete = () => {
-    setCameras(cameras.filter((camera) => camera.id !== cameraToDelete.id));
+    setCameras((prev) =>
+      prev.filter((camera) => camera.id !== cameraToDelete.id)
+    );
     setCameraDeleteModalOpen(false);
     setCameraToDelete(null);
   };
@@ -1552,13 +952,354 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setCameraToDelete(null);
   };
 
-  // --- AI-ENHANCED DASHBOARD COMPONENTS ---
-  // RiskScoreCard
-  const riskColors: Record<"low" | "moderate" | "high", string> = {
-    low: "bg-green-100 text-green-700",
-    moderate: "bg-yellow-100 text-yellow-700",
-    high: "bg-red-100 text-red-700",
+  function handleImageError(userId: number | string, photoUrl: string) {
+    setImageErrors((prev) => ({ ...prev, [photoUrl]: true }));
+    console.warn(`Failed to load image for user ${userId} at URL: ${photoUrl}`);
+  }
+
+  // --- UseMemos para Datos Calculados ---
+  const sortedObservedUsers = useMemo(() => {
+    // Ejemplo de implementación de sort, deberás llenar con tu lógica real
+    return [...observedUsers].sort((a, b) => {
+      if (observedSortField === "id") {
+        return observedSortDirection === "asc" ? a.id - b.id : b.id - a.id;
+      }
+      // Añadir más lógica para otros campos si es necesario
+      return 0;
+    });
+  }, [observedUsers, observedSortField, observedSortDirection]);
+
+  const filteredLogs = useMemo(() => {
+    // Simulación de filtrado, adaptar a tus datos y filtros
+    return (accessLogs as any[]).filter((log) => {
+      const matchSearch = searchTerm
+        ? JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
+      const matchUser =
+        selectedUser === "all" ? true : log.user === selectedUser;
+      const matchZone =
+        selectedZone === "all" ? true : log.zone === selectedZone;
+      const matchStatus =
+        selectedStatus === "all" ? true : log.status === selectedStatus;
+      const matchMethod =
+        selectedMethod === "all" ? true : log.method === selectedMethod;
+
+      const logDate = new Date(log.timestamp);
+      const fromDateObj = dateFrom ? new Date(dateFrom) : null;
+      const toDateObj = dateTo ? new Date(dateTo) : null;
+
+      const matchDate =
+        (!fromDateObj || logDate >= fromDateObj) &&
+        (!toDateObj || logDate <= toDateObj);
+
+      return (
+        matchSearch &&
+        matchUser &&
+        matchZone &&
+        matchStatus &&
+        matchMethod &&
+        matchDate
+      );
+    });
+  }, [
+    searchTerm,
+    selectedUser,
+    selectedZone,
+    selectedStatus,
+    selectedMethod,
+    dateFrom,
+    dateTo,
+    accessLogs,
+  ]);
+
+  const sortedLogs = useMemo(() => {
+    return [...filteredLogs].sort((a, b) => {
+      // Implementación básica de ordenamiento para logs
+      if (logSortField === "timestamp") {
+        return logSortDirection === "asc"
+          ? new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          : new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      }
+      // Añadir más lógica de ordenamiento
+      return 0;
+    });
+  }, [filteredLogs, logSortField, logSortDirection]);
+
+  const userSummaryData = useMemo((): SummaryEntry[] => {
+    // <-- ¡Añade `: SummaryEntry[]` aquí!
+    // Esta lógica podría ser más compleja, es una simulación
+    return Array.from(
+      new Set((accessLogs as any[]).map((log) => log.user))
+    ).map((userName) => {
+      const userLogs = (accessLogs as any[]).filter(
+        (log) => log.user === userName
+      );
+      const successful = userLogs.filter(
+        (log) => log.status === "Successful"
+      ).length;
+      const failed = userLogs.filter((log) => log.status === "Failed").length;
+      const totalAccesses = userLogs.length;
+      const successRate =
+        totalAccesses > 0 ? (successful / totalAccesses) * 100 : 0;
+      const firstAccess =
+        userLogs.length > 0
+          ? new Date(
+              Math.min(
+                ...userLogs.map((log) => new Date(log.timestamp).getTime())
+              )
+            ).toLocaleString()
+          : "N/A";
+      const lastAccess =
+        userLogs.length > 0
+          ? new Date(
+              Math.max(
+                ...userLogs.map((log) => new Date(log.timestamp).getTime())
+              )
+            ).toLocaleString()
+          : "N/A";
+      const zoneAccesses: Record<string, number> = userLogs.reduce(
+        (acc: Record<string, number>, log) => {
+          acc[log.zone] = (acc[log.zone] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+
+      return {
+        user: userName,
+        email: userLogs[0]?.email || "N/A",
+        firstAccess,
+        lastAccess,
+        totalAccesses,
+        successful,
+        failed,
+        successRate: parseFloat(successRate.toFixed(2)),
+        zoneAccesses,
+      };
+    });
+  }, [accessLogs]);
+
+  const filteredSummaryData = useMemo(() => {
+    return userSummaryData
+      .filter((summary: SummaryEntry) => {
+        // <-- ¡Añade `: SummaryEntry` aquí!
+        const matchSearch = summarySearchTerm
+          ? JSON.stringify(summary)
+              .toLowerCase()
+              .includes(summarySearchTerm.toLowerCase())
+          : true;
+        const matchStatus =
+          summaryStatusFilter === "all"
+            ? true
+            : summaryStatusFilter === "successful"
+            ? summary.successful > 0
+            : summaryStatusFilter === "failed"
+            ? summary.failed > 0
+            : true;
+        return matchSearch && matchStatus;
+      })
+      .sort((a: SummaryEntry, b: SummaryEntry) => {
+        // <-- ¡Añade `: SummaryEntry` aquí!
+        // Implementación básica de ordenamiento para el resumen
+        if (summarySortField === "user") {
+          return summarySortDirection === "asc"
+            ? a.user.localeCompare(b.user)
+            : b.user.localeCompare(a.user);
+        }
+        // Añadir más lógica de ordenamiento
+        return 0;
+      });
+  }, [
+    userSummaryData,
+    summarySortField,
+    summarySortDirection,
+    summarySearchTerm,
+    summaryStatusFilter,
+  ]);
+
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      if (sortField === "name") {
+        return sortDirection === "asc"
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      }
+      if (sortField === "email") {
+        return sortDirection === "asc"
+          ? a.email.localeCompare(b.email)
+          : b.email.localeCompare(a.email);
+      }
+      if (sortField === "role") {
+        return sortDirection === "asc"
+          ? a.role.localeCompare(b.role)
+          : b.role.localeCompare(a.role);
+      }
+      return 0;
+    });
+  }, [users, sortField, sortDirection]);
+
+  const filteredUsers = useMemo(() => {
+    return sortedUsers.filter(
+      (user) =>
+        user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
+    );
+  }, [sortedUsers, userSearchTerm]);
+
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
+  const logTotalPages = Math.ceil(sortedLogs.length / logItemsPerPage);
+  const logStartIndex = (logCurrentPage - 1) * logItemsPerPage;
+  const logEndIndex = logStartIndex + logItemsPerPage;
+  const paginatedLogs = sortedLogs.slice(logStartIndex, logEndIndex);
+
+  // Mocks para sortedRecentLogs (usado en Dashboard)
+  const sortedRecentLogs = useMemo(() => {
+    return (accessLogs as any[])
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      .slice(0, 5);
+  }, [accessLogs]);
+
+  // --- Reset Pagination on Filter Change ---
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [userSearchTerm, itemsPerPage]);
+  useEffect(() => {
+    setLogCurrentPage(1);
+  }, [
+    searchTerm,
+    selectedUser,
+    selectedZone,
+    selectedStatus,
+    selectedMethod,
+    dateFrom,
+    dateTo,
+  ]);
+
+  // --- Función handleSaveUser (Actualizada para Face-API.js y Supabase) ---
+  const handleSaveUser = async () => {
+    // Para depuración: Muestra el estado actual del formulario en la consola.
+    console.log("Save User clicked");
+    console.log("Current form state:", {
+      fullName,
+      email,
+      emailError,
+      selectedRole,
+      selectedUserStatus,
+      selectedAccessZones,
+      currentImage,
+      faceEmbedding,
+      faceDetectionError,
+    });
+
+    // Realiza validaciones en el lado del cliente antes de enviar la petición.
+    const isEmailValid = validateEmail(email);
+
+    const missingFields = [];
+    if (!fullName) missingFields.push("Full Name");
+    if (!isEmailValid) missingFields.push("Valid Email");
+    if (!selectedRole) missingFields.push("User Role");
+    if (!selectedUserStatus) missingFields.push("User Status");
+    if (selectedAccessZones.length === 0) missingFields.push("Access Zones");
+    if (!currentImage) missingFields.push("Photo");
+    if (!faceApiModelsLoaded)
+      missingFields.push("Facial recognition models not loaded");
+    if (!faceEmbedding)
+      missingFields.push(
+        "Facial Embedding (No face detected or multiple faces)"
+      );
+    if (faceDetectionError)
+      missingFields.push(`Face Detection Issue: ${faceDetectionError}`);
+
+    // Si hay campos faltantes o errores de validación, muestra un mensaje y detén la ejecución.
+    if (missingFields.length > 0) {
+      setShowStatusMessage(
+        `Error: Please fill all required fields and ensure a single face is detected. Missing: ${missingFields.join(
+          ", "
+        )}`
+      );
+      return;
+    }
+
+    // Establece el estado de guardado para deshabilitar el botón y mostrar un indicador.
+    setIsSavingUser(true);
+    setShowStatusMessage("Saving user...");
+
+    try {
+      // Prepara los datos (payload) que se enviarán a la Edge Function.
+      const payload = {
+        fullName: fullName,
+        email: email,
+        roleName: selectedRole,
+        statusName: selectedUserStatus,
+        accessZoneNames: selectedAccessZones,
+        faceEmbedding: Array.from(faceEmbedding!), // Convierte Float32Array a un Array<number> estándar para JSON.
+        profilePictureUrl: null, //imagePreview, // Envía la URL de la imagen (Base64) si existe.
+      };
+
+      // --- ¡MUY IMPORTANTE! ---
+      // REEMPLAZA 'YOUR_PROJECT_REF' con la URL de INVOKE REAL de tu Edge Function.
+      // Esta URL la obtuviste después de desplegar la función en el paso anterior.
+      // Ejemplo: https://abcdef123456.supabase.co/functions/v1/register-new-user
+      const edgeFunctionUrl =
+        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/register-new-user";
+
+      // Realiza la petición POST a la Edge Function.
+      const response = await fetch(edgeFunctionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // No se necesita el encabezado Authorization si la función se desplegó con --no-verify-jwt
+          // (ya que la función usa la Service Role Key para la autenticación en BD).
+        },
+        body: JSON.stringify(payload), // Envía los datos del formulario como JSON.
+      });
+
+      // Verifica si la petición fue exitosa (código de estado 2xx).
+      if (!response.ok) {
+        const errorData = await response.json(); // Intenta parsear el error del cuerpo de la respuesta.
+        // Lanza un error con el mensaje de error de la función o un mensaje HTTP genérico.
+        throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+      }
+
+      // Si la petición fue exitosa, parsea la respuesta JSON.
+      const result = await response.json();
+      // Muestra un mensaje de éxito con el ID del usuario si se devuelve.
+      setShowStatusMessage(
+        `User saved successfully! ID: ${result.userId || "N/A"}`
+      );
+      console.log("User registration successful:", result);
+
+      // Reinicia el formulario a sus valores iniciales después de un guardado exitoso.
+      setFullName("");
+      setEmail("");
+      setEmailError(null);
+      setSelectedRole("");
+      setSelectedUserStatus("Inactive"); // Restablece a 'Inactive' por defecto.
+      setSelectedAccessZones([]);
+      clearImage(); // Limpia la imagen y los estados relacionados (embedding, error de detección).
+      setFaceEmbedding(null);
+      setFaceDetectionError(null);
+    } catch (error: any) {
+      // Captura cualquier error que ocurra durante la petición o procesamiento.
+      console.error("Error during user registration:", error);
+      // Muestra un mensaje de error en la interfaz.
+      setShowStatusMessage(`Failed to save user: ${error.message}`);
+    } finally {
+      // Restablece el estado de guardado, sin importar si fue exitoso o fallido.
+      setIsSavingUser(false);
+      // Oculta el mensaje de estado después de 5 segundos.
+      setTimeout(() => setShowStatusMessage(null), 5000);
+    }
   };
+
+  // --- COMPONENTES AUXILIARES DE UI (Implementaciones básicas) ---
   function RiskScoreCard({
     score,
     status,
@@ -1566,75 +1307,41 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     score: number;
     status: "low" | "moderate" | "high";
   }) {
-    const color = riskColors[status];
-    const statusText = {
-      low: "Low Risk",
-      moderate: "Moderate Risk",
-      high: "Security Alert",
-    }[status];
+    const statusColor =
+      status === "low"
+        ? "text-green-500"
+        : status === "moderate"
+        ? "text-yellow-500"
+        : "text-red-500";
+    const bgColor =
+      status === "low"
+        ? "bg-green-50"
+        : status === "moderate"
+        ? "bg-yellow-50"
+        : "bg-red-50";
+    const borderColor =
+      status === "low"
+        ? "border-green-200"
+        : status === "moderate"
+        ? "border-yellow-200"
+        : "border-red-200";
+
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-xl shadow-lg p-6 w-full md:w-72 ${color}`}
+        className={`rounded-xl shadow-lg p-6 flex flex-col items-center border ${borderColor} ${bgColor}`}
       >
-        <div className="relative flex items-center justify-center mb-2">
-          <svg className="w-20 h-20">
-            <circle
-              cx="40"
-              cy="40"
-              r="36"
-              stroke="#e5e7eb"
-              strokeWidth="8"
-              fill="none"
-            />
-            <circle
-              cx="40"
-              cy="40"
-              r="36"
-              stroke={
-                status === "low"
-                  ? "#22c55e"
-                  : status === "moderate"
-                  ? "#eab308"
-                  : "#ef4444"
-              }
-              strokeWidth="8"
-              fill="none"
-              strokeDasharray={2 * Math.PI * 36}
-              strokeDashoffset={2 * Math.PI * 36 * (1 - score / 100)}
-              strokeLinecap="round"
-              transform="rotate(-90 40 40)"
-            />
-            <text
-              x="50%"
-              y="54%"
-              textAnchor="middle"
-              className="fill-current text-2xl font-bold"
-              fill="#111827"
-              dy=".3em"
-            >
-              {score}
-            </text>
-          </svg>
-        </div>
-        <div className="text-lg font-semibold">{statusText}</div>
-        <div className="text-xs text-gray-500 mb-1">AI-Driven Analysis</div>
-        <div className="flex items-center gap-1 text-xs">
-          {status === "low" && <Check className="w-4 h-4 text-green-500" />}
-          {status === "moderate" && <Zap className="w-4 h-4 text-yellow-500" />}
-          {status === "high" && <Shield className="w-4 h-4 text-red-500" />}
-          <span>
-            {status === "low"
-              ? "All systems normal"
-              : status === "moderate"
-              ? "Monitor for unusual activity"
-              : "Immediate review required"}
-          </span>
-        </div>
+        <Lightbulb className={`w-10 h-10 mb-2 ${statusColor}`} />
+        <div className="text-sm text-gray-600 mb-1">Overall Risk Score</div>
+        <div className={`text-4xl font-bold ${statusColor}`}>{score}</div>
+        <Badge
+          className={`mt-2 ${bgColor} border ${borderColor} text-gray-800`}
+        >
+          {status.charAt(0).toUpperCase() + status.slice(1)} Risk
+        </Badge>
       </div>
     );
   }
 
-  // KpiCard
   function KpiCard({
     icon,
     label,
@@ -1650,173 +1357,124 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   }) {
     return (
       <div
-        className={`flex items-center rounded-xl shadow-lg p-6 bg-white w-full ${
-          alert
-            ? "border-2 border-red-500 bg-red-50 animate-pulse"
-            : highlight
-            ? "border-2 border-yellow-400 bg-yellow-50"
-            : ""
+        className={`bg-white rounded-xl shadow-lg p-6 flex flex-col items-center ${
+          highlight ? "border-2 border-teal-500" : ""
         }`}
       >
-        <div className="w-12 h-12 flex items-center justify-center text-teal-600">
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
+            alert
+              ? "bg-red-100 text-red-600 animate-pulse"
+              : "bg-blue-100 text-blue-600"
+          }`}
+        >
           {icon}
         </div>
-        <div className="ml-4">
-          <div className="text-sm font-medium text-gray-600">{label}</div>
-          <div className="text-2xl font-bold text-gray-900">{value}</div>
-        </div>
+        <div className="text-sm text-gray-600 mb-1">{label}</div>
+        <div className="text-3xl font-bold text-gray-800">{value}</div>
       </div>
     );
   }
-
-  // SecurityAlertCard
   function SecurityAlertCard({ count }: { count: number }) {
     return (
       <KpiCard
-        icon={<AlertTriangle className="w-8 h-8 text-red-500" />}
-        label="Active Security Alerts (AI)"
+        icon={<AlertTriangle className="w-8 h-8" />}
+        label="Active Alerts"
         value={count}
         alert={count > 0}
+        highlight={count > 0}
       />
     );
   }
 
-  // SuspiciousUserList
   function SuspiciousUserList({
     users,
     onDetails,
   }: {
-    users: {
-      id: number;
-      name: string;
-      photoUrl?: string;
-      timestamp: string;
-      reason: string;
-      suggestion: string;
-    }[];
+    users: any[];
     onDetails: (user: any) => void;
   }) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-4">
-        <div className="flex items-center mb-2">
-          <AlertTriangle className="w-5 h-5 text-red-500 mr-2" />
-          <span className="font-semibold text-lg">
-            Highlighted Suspicious Users
-          </span>
+      <Card className="bg-white rounded-xl shadow-lg p-4">
+        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-500" /> Suspicious Activities
+          Detected
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-gray-500 border-b">
-                <th className="py-2 px-2 text-left">User</th>
-                <th className="py-2 px-2 text-left">Timestamp</th>
-                <th className="py-2 px-2 text-left">AI-Detected Reason</th>
-                <th className="py-2 px-2 text-left">AI Suggestion</th>
-                <th className="py-2 px-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-b hover:bg-red-50 transition">
-                  <td className="py-2 px-2 flex items-center gap-2">
-                    {u.photoUrl ? (
-                      <div className="relative w-8 h-8">
-                        <img
-                          src={u.photoUrl}
-                          alt={u.name}
-                          className="w-8 h-8 rounded-full object-cover"
-                          onError={(e) => {
-                            // Hide the broken image
-                            (e.target as HTMLImageElement).style.display =
-                              "none";
-                            // Show the fallback icon
-                            const fallback =
-                              e.currentTarget.parentElement?.querySelector(
-                                ".fallback-icon"
-                              );
-                            if (fallback) {
-                              (fallback as HTMLElement).style.display = "block";
-                            }
-                          }}
-                        />
-                        <div className="fallback-icon hidden absolute inset-0">
-                          <UserCircle2 className="w-8 h-8 text-gray-400" />
-                        </div>
-                      </div>
-                    ) : (
-                      <UserCircle2 className="w-8 h-8 text-gray-400" />
-                    )}
-                    <span className="font-medium">{u.name}</span>
-                  </td>
-                  <td className="py-2 px-2">{u.timestamp}</td>
-                  <td className="py-2 px-2 text-red-700">{u.reason}</td>
-                  <td className="py-2 px-2 text-teal-700">{u.suggestion}</td>
-                  <td className="py-2 px-2">
-                    <button
-                      className="text-blue-600 hover:underline flex items-center gap-1"
-                      onClick={() => onDetails(u)}
-                    >
-                      <Eye className="w-4 h-4" /> Details
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center text-gray-400 py-4">
-                    No suspicious users detected.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {users.length > 0 ? (
+          <ul className="space-y-3">
+            {users.map((user) => (
+              <li
+                key={user.id}
+                className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200"
+              >
+                <div className="flex items-center">
+                  <UserCircle2 className="w-6 h-6 text-red-500 mr-2" />
+                  <div>
+                    <div className="font-medium text-red-800">{user.name}</div>
+                    <div className="text-sm text-red-600">{user.reason}</div>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onDetails(user)}
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-500 text-center py-4">
+            No suspicious activities at this time.
+          </p>
+        )}
+      </Card>
     );
   }
 
-  // AIRecommendationList
   function AIRecommendationList({
     recommendations,
     onAction,
   }: {
-    recommendations: { id: number; text: string }[];
+    recommendations: any[];
     onAction: (rec: any) => void;
   }) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-4">
-        <div className="flex items-center mb-2">
-          <Lightbulb className="w-5 h-5 text-yellow-500 mr-2" />
-          <span className="font-semibold text-lg">
-            AI-Generated Security Recommendations
-          </span>
+      <Card className="bg-white rounded-xl shadow-lg p-4">
+        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <Lightbulb className="w-5 h-5 text-blue-500" /> AI-Suggested Actions
         </div>
-        <ul className="space-y-2">
-          {recommendations.map((rec) => (
-            <li
-              key={rec.id}
-              className="flex items-center justify-between bg-yellow-50 rounded p-2"
-            >
-              <span className="text-gray-700">{rec.text}</span>
-              <button
-                className="text-blue-600 hover:underline flex items-center gap-1"
-                onClick={() => onAction(rec)}
+        {recommendations.length > 0 ? (
+          <ul className="space-y-3">
+            {recommendations.map((rec) => (
+              <li
+                key={rec.id}
+                className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
               >
-                <ArrowRight className="w-4 h-4" /> View Details
-              </button>
-            </li>
-          ))}
-          {recommendations.length === 0 && (
-            <li className="text-center text-gray-400 py-4">
-              No recommendations at this time.
-            </li>
-          )}
-        </ul>
-      </div>
+                <div>
+                  <div className="font-medium text-blue-800">{rec.action}</div>
+                  <div className="text-sm text-blue-600">{rec.details}</div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onAction(rec)}
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-500 text-center py-4">
+            No AI recommendations currently.
+          </p>
+        )}
+      </Card>
     );
   }
 
-  // AccessLogTable
   function AccessLogTable({
     logs,
     onAIDetails,
@@ -1825,159 +1483,234 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setLogsSortField,
     setLogsSortDirection,
   }: {
-    logs: {
-      id: number;
-      timestamp: string;
-      user: string;
-      zone: string;
-      status: "Success" | "Failure";
-      aiClassification?: string;
-    }[];
+    logs: any[];
     onAIDetails: (log: any) => void;
     logsSortField: LogSortField;
     logsSortDirection: SortDirection;
     setLogsSortField: React.Dispatch<React.SetStateAction<LogSortField>>;
     setLogsSortDirection: React.Dispatch<React.SetStateAction<SortDirection>>;
   }) {
+    // Column definition for this table specifically
+    const logColumns: Column[] = [
+      { key: "timestamp", label: "Timestamp", sortable: true },
+      { key: "user", label: "User Name", sortable: true },
+      { key: "email", label: "User Email", sortable: true },
+      { key: "role", label: "User Role", sortable: true },
+      { key: "zone", label: "Zone", sortable: true },
+      { key: "method", label: "Method", sortable: true },
+      { key: "status", label: "Status", sortable: true },
+      { key: "aiDetails", label: "AI Details", sortable: false },
+    ];
+
     return (
-      <div className="bg-white rounded-xl shadow-lg p-4">
-        <div className="font-semibold text-lg mb-2">
-          Recent Activity & Failure Detection (AI)
+      <Card className="bg-white rounded-xl shadow-lg p-4">
+        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <FileSpreadsheet className="w-5 h-5 text-purple-500" /> Recent Access
+          Logs
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-gray-500 border-b">
-                <th className="py-2 px-2 text-left">Timestamp</th>
-                <th className="py-2 px-2 text-left">User Name</th>
-                <th className="py-2 px-2 text-left">Access Zone</th>
-                <th className="py-2 px-2 text-left">Status</th>
-                <th className="py-2 px-2 text-left">AI Classification</th>
-                <th className="py-2 px-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((log) => (
-                <tr
-                  key={log.id}
-                  className="border-b hover:bg-gray-50 transition"
-                >
-                  <td className="py-2 px-2">{log.timestamp}</td>
-                  <td className="py-2 px-2">{log.user}</td>
-                  <td className="py-2 px-2">{log.zone}</td>
-                  <td className="py-2 px-2">
-                    <Badge
-                      variant={
-                        log.status === "Success" ? "default" : "destructive"
-                      }
-                      className={
-                        log.status === "Success"
-                          ? "bg-green-100 text-green-800"
-                          : ""
-                      }
-                    >
-                      {log.status}
-                    </Badge>
-                  </td>
-                  <td className="py-2 px-2">
-                    {log.status === "Failure" ? (
-                      <span className="text-red-700">
-                        {log.aiClassification}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="py-2 px-2">
-                    {log.status === "Failure" && (
-                      <button
-                        className="text-blue-600 hover:underline flex items-center gap-1"
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {logColumns.map((col) => (
+                  <TableHead
+                    key={col.key}
+                    className={`cursor-pointer hover:bg-gray-50 select-none`}
+                    onClick={() =>
+                      col.sortable && setLogsSortField(col.key as LogSortField)
+                    }
+                  >
+                    <div className="flex items-center">
+                      {col.label}
+                      {col.sortable &&
+                        logsSortField === col.key &&
+                        (logsSortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4 ml-1" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 ml-1" />
+                        ))}
+                    </div>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.length > 0 ? (
+                logs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="font-mono text-xs">
+                      {log.timestamp}
+                    </TableCell>
+                    <TableCell className="font-medium">{log.user}</TableCell>
+                    <TableCell className="text-gray-600">{log.email}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={log.role === "Admin" ? "default" : "secondary"}
+                      >
+                        {log.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className="bg-blue-50 text-blue-700"
+                      >
+                        {log.zone}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          log.method === "Facial"
+                            ? "bg-green-50 text-green-700"
+                            : "bg-orange-50 text-orange-700"
+                        }
+                      >
+                        {log.method}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          log.status === "Successful"
+                            ? "default"
+                            : "destructive"
+                        }
+                        className={
+                          log.status === "Successful"
+                            ? "bg-green-100 text-green-800"
+                            : ""
+                        }
+                      >
+                        {log.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => onAIDetails(log)}
                       >
-                        <Eye className="w-4 h-4" /> AI Details
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {logs.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center text-gray-400 py-4">
-                    No recent access attempts.
-                  </td>
-                </tr>
+                        Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={logColumns.length}
+                    className="text-center py-8 text-gray-500"
+                  >
+                    No recent access logs.
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
+      </Card>
     );
   }
 
-  // SecurityTrendsChart
-  function SecurityTrendsChart({
-    data,
-  }: {
-    data: { date: string; alerts: number; aiPrediction: number }[];
-  }) {
+  function SecurityTrendsChart({ data }: { data: any[] }) {
+    // Dummy data if actual data is not provided
+    const chartData =
+      data.length > 0
+        ? data
+        : [
+            { name: "Mon", success: 4000, failed: 2400 },
+            { name: "Tue", success: 3000, failed: 1398 },
+            { name: "Wed", success: 2000, failed: 9800 },
+            { name: "Thu", success: 2780, failed: 3908 },
+            { name: "Fri", success: 1890, failed: 4800 },
+            { name: "Sat", success: 2390, failed: 3800 },
+            { name: "Sun", success: 3490, failed: 4300 },
+          ];
+
     return (
-      <div className="bg-white rounded-xl shadow-lg p-4">
-        <div className="font-semibold text-lg mb-2">
-          Security Incident Trend
+      <Card className="bg-white rounded-xl shadow-lg p-4">
+        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-green-500" /> Security Trends
+          (Weekly)
         </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
-            <YAxis allowDecimals={false} />
-            <RechartsTooltip />
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData}>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="#e0e0e0"
+            />
+            <XAxis
+              dataKey="name"
+              tickLine={false}
+              axisLine={{ stroke: "#e0e0e0" }}
+            />
+            <YAxis tickLine={false} axisLine={{ stroke: "#e0e0e0" }} />
+            <RechartsTooltip cursor={{ strokeDasharray: "3 3" }} />
             <Legend />
             <Line
               type="monotone"
-              dataKey="alerts"
-              stroke="#ef4444"
-              name="Active Alerts"
+              dataKey="success"
+              stroke="#22c55e"
+              strokeWidth={2}
+              dot={{ r: 4 }}
+              activeDot={{ r: 8 }}
             />
             <Line
               type="monotone"
-              dataKey="aiPrediction"
-              stroke="#6366f1"
-              strokeDasharray="5 5"
-              name="AI Prediction"
+              dataKey="failed"
+              stroke="#ef4444"
+              strokeWidth={2}
+              dot={{ r: 4 }}
+              activeDot={{ r: 8 }}
             />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+        <p className="text-xs text-gray-500 text-center mt-2">
+          Daily successful vs. failed access attempts.
+        </p>
+      </Card>
     );
   }
 
-  // FailureCauseChart
   const PIE_COLORS = ["#ef4444", "#f59e42", "#6366f1", "#a3e635"];
-  function FailureCauseChart({
-    data,
-  }: {
-    data: { name: string; value: number }[];
-  }) {
+  function FailureCauseChart({ data }: { data: any[] }) {
+    // Dummy data if actual data is not provided
+    const chartData =
+      data.length > 0
+        ? data
+        : [
+            { name: "Incorrect Face", value: 400 },
+            { name: "Access Denied", value: 300 },
+            { name: "Invalid Zone", value: 300 },
+            { name: "System Error", value: 200 },
+          ];
+
     return (
-      <div className="bg-white rounded-xl shadow-lg p-4">
-        <div className="font-semibold text-lg mb-2">
-          Failure Rate by AI-Classified Cause
+      <Card className="bg-white rounded-xl shadow-lg p-4">
+        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-orange-500" /> Top Failure Causes
         </div>
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={300}>
           <PieChart>
             <Pie
-              data={data}
-              dataKey="value"
-              nameKey="name"
+              data={chartData}
               cx="50%"
               cy="50%"
-              outerRadius={70}
-              label
+              labelLine={false}
+              outerRadius={80}
+              fill="#8884d8"
+              dataKey="value"
+              label={({ name, percent }) =>
+                `${name} ${(percent * 100).toFixed(0)}%`
+              }
             >
-              {data.map((entry, idx) => (
+              {chartData.map((entry, index) => (
                 <Cell
-                  key={`cell-${idx}`}
-                  fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                  key={`cell-${index}`}
+                  fill={PIE_COLORS[index % PIE_COLORS.length]}
                 />
               ))}
             </Pie>
@@ -1985,11 +1718,13 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <Legend />
           </PieChart>
         </ResponsiveContainer>
-      </div>
+        <p className="text-xs text-gray-500 text-center mt-2">
+          Distribution of common reasons for failed access.
+        </p>
+      </Card>
     );
   }
 
-  // AIDetailsModal
   function AIDetailsModal({
     open,
     onClose,
@@ -1999,38 +1734,32 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     onClose: () => void;
     details: any;
   }) {
-    if (!details) return null;
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>AI Failure Analysis</DialogTitle>
+            <DialogTitle>AI Details</DialogTitle>
             <DialogDescription>
-              <div className="mb-2">
-                <strong>User:</strong> {details.user}
-                <br />
-                <strong>Timestamp:</strong> {details.timestamp}
-                <br />
-                <strong>Zone:</strong> {details.zone}
-              </div>
+              {details?.type === "user" && `Insights for user: ${details.name}`}
+              {details?.type === "log" &&
+                `Details for log entry at: ${details.timestamp}`}
+              {details?.type === "recommendation" &&
+                `Recommendation: ${details.action}`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <div>
-              <strong>AI Classification:</strong> {details.aiClassification}
-            </div>
-            <div>
-              <strong>Recognition Confidence:</strong> {details.confidence}%
-            </div>
-            <div>
-              <strong>Matched Known Face:</strong> {details.matchedFace}
-            </div>
-            <div>
-              <strong>Unusual Timeframe:</strong> {details.unusualTime}
-            </div>
-            <div>
-              <strong>AI Suggestion:</strong> {details.suggestion}
-            </div>
+          <div className="space-y-2 text-sm text-gray-700">
+            {details &&
+              Object.entries(details).map(([key, value]) => (
+                <div key={key}>
+                  <strong>
+                    {key
+                      .replace(/([A-Z])/g, " $1")
+                      .replace(/^./, (str) => str.toUpperCase())}
+                    :
+                  </strong>{" "}
+                  {JSON.stringify(value)}
+                </div>
+              ))}
           </div>
           <DialogFooter>
             <Button onClick={onClose}>Close</Button>
@@ -2039,19 +1768,14 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </Dialog>
     );
   }
-  // --- END AI-ENHANCED DASHBOARD COMPONENTS ---
 
-  // 2. Add state for secondary dashboard tab
-  const [dashboardTab, setDashboardTab] = useState("overview");
+  const tabs = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "users", label: "User Management" },
+    { id: "logs", label: "Access Logs" },
+    { id: "settings", label: "Settings" },
+  ];
 
-  // Define the column type
-  type Column = {
-    key: string;
-    label: string;
-    sortable?: boolean;
-  };
-
-  // Define the columns with proper typing
   const columns: Column[] = [
     { key: "photoUrl", label: "Face", sortable: false },
     { key: "id", label: "Temporary ID", sortable: true },
@@ -2064,20 +1788,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     { key: "actions", label: "Admin Actions", sortable: false },
   ];
 
-  // Add this function at the component level, before the return statement
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-
-  function handleImageError(userId: number, photoUrl: string): void;
-  function handleImageError(userId: string, photoUrl: string): void;
-  function handleImageError(userId: number | string, photoUrl: string) {
-    setImageErrors((prev) => ({
-      ...prev,
-      [photoUrl]: true,
-    }));
-    console.error(
-      `Error loading image for user ID: ${userId}, URL: ${photoUrl}`
-    ); // Añadí un console.error para mejor depuración
-  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800">
       {/* Header */}
@@ -2242,7 +1952,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   <div
                     className={`rounded-xl shadow-lg p-6 flex flex-col items-center bg-white ${
                       observedUsers.filter(
-                        (u) => u.status === "in_review_admin"
+                        (u: any) => u.status === "in_review_admin"
                       ).length > 2
                         ? "border-2 border-red-500 bg-red-50 animate-pulse"
                         : ""
@@ -2254,7 +1964,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     <div className="text-3xl font-bold text-red-600">
                       {
                         observedUsers.filter(
-                          (u) => u.status === "in_review_admin"
+                          (u: any) => u.status === "in_review_admin"
                         ).length
                       }
                     </div>
@@ -2346,7 +2056,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedObservedUsers.map((u) => (
+                        {sortedObservedUsers.map((u: any) => (
                           <tr
                             key={u.id}
                             className="border-b hover:bg-blue-50 transition"
@@ -2643,7 +2353,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                         className="w-full justify-between bg-slate-50 border-0 h-12 text-left font-normal"
                         disabled={loadingZones || !!errorZones}
                       >
-                        {/* >>>>> REEMPLAZA ESTE CONTENIDO DEL BOTÓN <<<<< */}
                         <span>
                           {loadingZones
                             ? "Loading zones..."
@@ -2652,42 +2361,39 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             : selectedAccessZones.length > 0
                             ? `${selectedAccessZones.length} zone${
                                 selectedAccessZones.length > 1 ? "s" : ""
-                              } selected` // <<< ESTO ES LO CORRECTO
+                              } selected`
                             : "Select access zones"}
                         </span>
                         <span className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        {/* >>>>> HASTA AQUÍ <<<<< */}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-full p-0" align="start">
                       <div className="p-2 space-y-2 max-h-[300px] overflow-auto">
-                        {/* Si hay error, muestra un mensaje de error */}
                         {errorZones ? (
                           <div className="text-red-500 p-2">
                             Error: {errorZones}
                           </div>
-                        ) : loadingZones ? ( // Agregué loading aquí también por si el popover se abre antes de terminar la carga
+                        ) : loadingZones ? (
                           <div className="text-gray-500 p-2">
                             Loading zones...
                           </div>
                         ) : zonesData.length > 0 ? (
-                          // Mapea sobre el array 'zonesData' para crear los Checkboxes dinámicamente
                           zonesData.map((zone) => (
                             <div
-                              key={zone.id} // Usa zone.id como key
+                              key={zone.id}
                               className="flex items-center space-x-2"
                             >
                               <Checkbox
-                                id={`zone-${zone.id}`} // Usa zone.id en el ID
+                                id={`zone-${zone.id}`}
                                 checked={selectedAccessZones.includes(
                                   zone.name
-                                )} // Compara por el nombre de la zona
+                                )}
                                 onCheckedChange={() =>
                                   toggleAccessZone(zone.name)
-                                } // Pasa el nombre para el toggle
+                                }
                               />
                               <label
-                                htmlFor={`zone-${zone.id}`} // Usa zone.id en el htmlFor
+                                htmlFor={`zone-${zone.id}`}
                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
                                 {zone.name}
@@ -2695,7 +2401,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             </div>
                           ))
                         ) : (
-                          // Si no hay zonas y no está cargando ni hay error
                           !loadingZones &&
                           !errorZones && (
                             <div className="p-2 text-gray-500">
@@ -2703,31 +2408,26 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                             </div>
                           )
                         )}
-                      </div>{" "}
-                      {/* Cierre del div p-2 space-y-2 */}
+                      </div>
                     </PopoverContent>
                   </Popover>
                   {selectedAccessZones.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {selectedAccessZones.map(
-                        (
-                          zoneName // Cambiado a zoneName para claridad
-                        ) => (
-                          <Badge
-                            key={zoneName} // Usa zoneName como key
-                            variant="secondary"
-                            className="bg-slate-100"
+                      {selectedAccessZones.map((zoneName) => (
+                        <Badge
+                          key={zoneName}
+                          variant="secondary"
+                          className="bg-slate-100"
+                        >
+                          {zoneName}
+                          <button
+                            className="ml-1 hover:text-red-500"
+                            onClick={() => toggleAccessZone(zoneName)}
                           >
-                            {zoneName}
-                            <button
-                              className="ml-1 hover:text-red-500"
-                              onClick={() => toggleAccessZone(zoneName)}
-                            >
-                              ×
-                            </button>
-                          </Badge>
-                        )
-                      )}
+                            ×
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -2785,7 +2485,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                               type="button"
                               variant="outline"
                               className="bg-slate-50"
-                              onClick={() => setCameraOpen(true)}
+                              onClick={() => setCameraOpen(true)} // Abrir el modal de CameraCapture
                             >
                               <Camera className="w-4 h-4 mr-2" />
                               Take Photo
@@ -2840,6 +2540,46 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     </div>
                   )}
 
+                  {/* Feedback de Face-API.js y Guardado */}
+                  {isProcessingImage && (
+                    <Alert className="bg-blue-50 border-blue-200">
+                      <AlertCircle className="h-4 w-4 text-blue-600" />
+                      <AlertTitle className="text-blue-800">
+                        Processing Image...
+                      </AlertTitle>
+                      <AlertDescription className="text-blue-700">
+                        Analyzing photo for face detection and embedding
+                        generation.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {faceDetectionError && (
+                    <Alert className="bg-red-50 border-red-200">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertTitle className="text-red-800">
+                        Facial Recognition Error
+                      </AlertTitle>
+                      <AlertDescription className="text-red-700">
+                        {faceDetectionError}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {faceEmbedding &&
+                    !faceDetectionError &&
+                    !isProcessingImage && (
+                      <Alert className="bg-green-50 border-green-200">
+                        <Check className="h-4 w-4 text-green-600" />
+                        <AlertTitle className="text-green-800">
+                          Face Detected!
+                        </AlertTitle>
+                        <AlertDescription className="text-green-700">
+                          Facial embedding successfully generated.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <p className="text-sm text-blue-800">
                       <strong>Instructions:</strong> Upon saving this user, the
@@ -2853,9 +2593,37 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 <Button
                   className="bg-teal-600 hover:bg-teal-700"
                   onClick={handleSaveUser}
+                  disabled={
+                    isSavingUser ||
+                    isProcessingImage ||
+                    !faceApiModelsLoaded ||
+                    !!faceDetectionError
+                  }
                 >
-                  Save User
+                  {isSavingUser ? "Saving..." : "Save User"}
                 </Button>
+
+                {showStatusMessage && (
+                  <Alert
+                    className={
+                      showStatusMessage.startsWith("Error")
+                        ? "bg-red-50 border-red-200"
+                        : "bg-blue-50 border-blue-200"
+                    }
+                  >
+                    <AlertCircle className="h-4 w-4 text-blue-600" />{" "}
+                    {/* Icono basado en el tipo de mensaje */}
+                    <AlertDescription
+                      className={
+                        showStatusMessage.startsWith("Error")
+                          ? "text-red-700"
+                          : "text-blue-700"
+                      }
+                    >
+                      {showStatusMessage}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
 
@@ -3003,36 +2771,37 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                     align="start"
                                   >
                                     <div className="p-2 space-y-1 max-h-[200px] overflow-auto">
-                                      {/* Si hay error, muestra un mensaje de error */}
                                       {errorZones ? (
                                         <div className="text-red-500 p-2">
                                           Error: {errorZones}
                                         </div>
-                                      ) : loadingZones ? ( // Agregado mensaje de carga aquí también
+                                      ) : loadingZones ? (
                                         <div className="text-gray-500 p-2">
                                           Loading zones...
                                         </div>
                                       ) : zonesData.length > 0 ? (
-                                        // Mapea sobre el array 'zonesData' para crear los Checkboxes dinámicamente
                                         zonesData.map((zone) => (
                                           <div
-                                            key={zone.id} // Usa zone.id como key
+                                            key={zone.id}
                                             className="flex items-center space-x-2"
                                           >
                                             <Checkbox
-                                              // Asegúrate de que user.id esté disponible en este contexto para el ID del checkbox
-                                              id={`edit-zone-<span class="math-inline">\{zone\.id\}\-</span>{editingUser?.id || ''}`} // Usar editingUser.id
+                                              id={`edit-zone-${zone.id}-${
+                                                editingUser?.id || ""
+                                              }`}
                                               checked={editingAccessZones.includes(
                                                 zone.name
-                                              )} // Compara por el nombre de la zona
+                                              )}
                                               onCheckedChange={() =>
                                                 toggleEditingAccessZone(
                                                   zone.name
                                                 )
-                                              } // Pasa el nombre para el toggle
+                                              }
                                             />
                                             <label
-                                              htmlFor={`edit-zone-<span class="math-inline">\{zone\.id\}\-</span>{editingUser?.id || ''}`} // Usar editingUser.id en el htmlFor
+                                              htmlFor={`edit-zone-${zone.id}-${
+                                                editingUser?.id || ""
+                                              }`}
                                               className="text-sm font-medium leading-none cursor-pointer"
                                             >
                                               {zone.name}
@@ -3040,7 +2809,6 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                                           </div>
                                         ))
                                       ) : (
-                                        // Si no hay zonas y no está cargando ni hay error
                                         !loadingZones &&
                                         !errorZones && (
                                           <div className="p-2 text-gray-500">
@@ -3322,7 +3090,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                       <SelectContent>
                         <SelectItem value="all">All Users</SelectItem>
                         {Array.from(
-                          new Set(accessLogs.map((log) => log.user))
+                          new Set((accessLogs as any[]).map((log) => log.user))
                         ).map((user) => (
                           <SelectItem key={user} value={user}>
                             {user}
@@ -3345,7 +3113,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                       <SelectContent>
                         <SelectItem value="all">All Zones</SelectItem>
                         {Array.from(
-                          new Set(accessLogs.map((log) => log.zone))
+                          new Set((accessLogs as any[]).map((log) => log.zone))
                         ).map((zone) => (
                           <SelectItem key={zone} value={zone}>
                             {zone}
@@ -4127,13 +3895,15 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         )}
       </div>
 
-      {/* Camera Capture Modal */}
+      {/* --- INTEGRACIÓN DEL COMPONENTE CameraCapture --- */}
+      {/* Este componente gestiona toda la lógica de la cámara y su modal */}
       <CameraCapture
-        open={cameraOpen}
-        onClose={() => setCameraOpen(false)}
-        onCapture={handleCameraCapture}
+        open={isCameraOpen} // Le dice a CameraCapture si debe estar abierto o cerrado
+        onClose={() => setCameraOpen(false)} // Callback para que CameraCapture cierre su propio modal
+        onCapture={handleCameraCapture} // Callback para recibir la imagen capturada como base64
       />
 
+      {/* --- OTROS MODALES --- */}
       {/* Delete Confirmation Modal */}
       <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
@@ -4310,8 +4080,11 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   <div className="text-center">
                     <p className="text-2xl font-bold text-teal-600">
                       {
-                        Array.from(new Set(accessLogs.map((log) => log.user)))
-                          .length
+                        Array.from(
+                          new Set(
+                            (accessLogs as any[]).map((log: any) => log.user)
+                          )
+                        ).length
                       }
                     </p>
                     <p className="text-sm text-gray-600">Active Users</p>
@@ -4323,8 +4096,9 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   <div className="text-center">
                     <p className="text-2xl font-bold text-green-600">
                       {
-                        accessLogs.filter((log) => log.status === "Successful")
-                          .length
+                        (accessLogs as any[]).filter(
+                          (log: any) => log.status === "Successful"
+                        ).length
                       }
                     </p>
                     <p className="text-sm text-gray-600">Successful</p>
@@ -4336,8 +4110,9 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   <div className="text-center">
                     <p className="text-2xl font-bold text-red-600">
                       {
-                        accessLogs.filter((log) => log.status === "Failed")
-                          .length
+                        (accessLogs as any[]).filter(
+                          (log: any) => log.status === "Failed"
+                        ).length
                       }
                     </p>
                     <p className="text-sm text-gray-600">Failed</p>
@@ -4349,8 +4124,11 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   <div className="text-center">
                     <p className="text-2xl font-bold text-blue-600">
                       {
-                        Array.from(new Set(accessLogs.map((log) => log.zone)))
-                          .length
+                        Array.from(
+                          new Set(
+                            (accessLogs as any[]).map((log: any) => log.zone)
+                          )
+                        ).length
                       }
                     </p>
                     <p className="text-sm text-gray-600">Zones Accessed</p>
@@ -4515,7 +4293,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                   </TableHeader>
                   <TableBody>
                     {filteredSummaryData.length > 0 ? (
-                      filteredSummaryData.map((summary) => (
+                      filteredSummaryData.map((summary: any) => (
                         <TableRow key={summary.user}>
                           <TableCell className="font-medium">
                             {summary.user}
@@ -4567,17 +4345,20 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
-                              {Object.entries(summary.zoneAccesses).map(
-                                ([zone, count]) => (
-                                  <Badge
-                                    key={zone}
-                                    variant="outline"
-                                    className="bg-blue-50 text-blue-700 text-xs"
-                                  >
-                                    {zone}: {count}
-                                  </Badge>
-                                )
-                              )}
+                              {(
+                                Object.entries(summary.zoneAccesses) as [
+                                  string,
+                                  number
+                                ][]
+                              ).map(([zone, count]) => (
+                                <Badge
+                                  key={zone}
+                                  variant="outline"
+                                  className="bg-blue-50 text-blue-700 text-xs"
+                                >
+                                  {zone}: {count}
+                                </Badge>
+                              ))}
                             </div>
                           </TableCell>
                         </TableRow>
