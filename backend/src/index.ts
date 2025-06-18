@@ -1,34 +1,111 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
+import express from "express";
+import cors from "cors";
+import { config } from 'dotenv';
+import accessRouter from "./routes/access";
+import usersRouter from './routes/users';
+import zonesRouter from './routes/zones';
+import healthRoutes from './routes/health';
+import userFacesRoutes from './routes/userFaces';
+import authRoutes from './routes/auth';
+import uploadRouter from './routes/upload';
+import pool from './db';
 
 // Load environment variables
-dotenv.config();
+config();
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// CORS configuration
+const corsOptions = {
+  origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+app.use(cors(corsOptions));
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase credentials');
-}
+// Increase payload size limits for handling large base64 images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Routes
+app.use("/api/users", usersRouter);
+app.use("/api/access", accessRouter);
+app.use("/api/zones", zonesRouter);
+app.use("/api/user-faces", userFacesRoutes);
+app.use("/api/auth", authRoutes);
+app.use('/', healthRoutes);
+app.use('/api/upload', uploadRouter);
 
-// Basic health check route
-app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+// Health check
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
+// Error handling middleware
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({
+    status: 'error',
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+let server: any;
+
 // Start server
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-}); 
+async function startServer() {
+  try {
+    // Test database connection
+    const client = await pool.connect();
+    console.log('Database connection successful');
+    client.release(); 
+
+    server = app.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Graceful shutdown function
+async function gracefulShutdown(signal: string) {
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+  
+  if (server) {
+    server.close(() => {
+      console.log('HTTP server closed');
+    });
+  }
+  
+  try {
+    await pool.end();
+    console.log('Database connection closed');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+}
+
+// Handle process termination
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection');
+});
+
+startServer(); 

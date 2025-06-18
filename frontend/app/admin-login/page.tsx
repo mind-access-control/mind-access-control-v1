@@ -11,7 +11,7 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { ConnectionTest } from "@/components/connection-test"
 import { Eye, EyeOff } from "lucide-react"
-import AdminDashboard from "@/components/admin-dashboard"
+import { useRouter } from "next/navigation"
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("")
@@ -21,7 +21,7 @@ export default function AdminLogin() {
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,16 +30,16 @@ export default function AdminLogin() {
     setSuccess(null)
 
     try {
-      const { data, error } = await signIn(email, password)
+      const { user, error } = await signIn(email, password)
 
       if (error) {
         setError(error.message)
-      } else if (data.user) {
-        setSuccess(`Welcome back, ${data.user.email}! Login successful.`)
-        console.log("Login successful:", data.user)
+      } else if (user) {
+        setSuccess(`Welcome back, ${user.email}! Login successful.`)
+        console.log("Login successful:", user)
         // Redirect to dashboard
         setTimeout(() => {
-          setIsLoggedIn(true)
+          router.push("/admin/dashboard")
         }, 1500)
       }
     } catch (err) {
@@ -47,18 +47,6 @@ export default function AdminLogin() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleLogout = () => {
-    setIsLoggedIn(false)
-    setEmail("")
-    setPassword("")
-    setError(null)
-    setSuccess(null)
-  }
-
-  if (isLoggedIn) {
-    return <AdminDashboard onLogout={handleLogout} />
   }
 
   return (
@@ -166,4 +154,4 @@ export default function AdminLogin() {
       </footer>
     </div>
   )
-}
+} 

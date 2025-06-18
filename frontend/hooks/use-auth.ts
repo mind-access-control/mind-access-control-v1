@@ -1,42 +1,57 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
-import type { User } from "@supabase/supabase-js"
+import { auth } from "@/lib/auth"
+
+interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  job_title: string;
+}
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    return () => subscription.unsubscribe()
+    checkUser()
   }, [])
 
+  async function checkUser() {
+    try {
+      const { user, error } = await auth.getSession()
+      if (error) throw error
+      setUser(user)
+    } catch (error) {
+      console.error('Error checking user session:', error)
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    return { data, error }
+    try {
+      const result = await auth.signIn({ email, password })
+      if (result.error) throw result.error
+      setUser(result.user)
+      return result
+    } catch (error) {
+      console.error('Error signing in:', error)
+      throw error
+    }
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    return { error }
+    try {
+      const { error } = await auth.signOut()
+      if (error) throw error
+      setUser(null)
+    } catch (error) {
+      console.error('Error signing out:', error)
+      throw error
+    }
   }
 
   return {

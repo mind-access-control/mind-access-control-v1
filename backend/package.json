@@ -3,22 +3,35 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only --exit-child src/index.ts",
+    "dev:clean": "ts-node-dev --respawn --transpile-only --exit-child --clear src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "migrate": "flyway -configFiles=supabase/flyway.conf migrate",
+    "migrate:info": "flyway -configFiles=supabase/flyway.conf info",
+    "migrate:validate": "flyway -configFiles=supabase/flyway.conf validate",
+    "migrate:clean": "flyway -configFiles=supabase/flyway.conf clean",
+    "test:api": "node scripts/test-api-connection.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.16.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",
     "@types/express": "^4.17.17",
+    "@types/multer": "^1.4.11",
     "@types/node": "^22",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5"
   }
-} 
+}

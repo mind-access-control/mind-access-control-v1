@@ -15,7 +15,7 @@
     "install:all": "pnpm install && pnpm run install:frontend && pnpm run install:backend",
     "install:frontend": "cd frontend && pnpm install",
     "install:backend": "cd backend && pnpm install",
-    "dev": "pnpm run --parallel dev",
+    "dev": "concurrently --kill-others --names \"frontend,backend\" \"pnpm run dev:frontend\" \"pnpm run dev:backend\"",
     "dev:frontend": "cd frontend && pnpm dev",
     "dev:backend": "cd backend && pnpm dev",
     "build": "pnpm run build:frontend && pnpm run build:backend",
@@ -23,7 +23,9 @@
     "build:backend": "cd backend && pnpm build",
     "start": "pnpm run --parallel start",
     "start:frontend": "cd frontend && pnpm start",
-    "start:backend": "cd backend && pnpm start"
+    "start:backend": "cd backend && pnpm start",
+    "stop": "pkill -f 'ts-node-dev' && pkill -f 'next' && pkill -f 'node.*src/index.ts'",
+    "clean": "pnpm run stop && rm -rf frontend/.next backend/dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

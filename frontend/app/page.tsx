@@ -1,7 +1,20 @@
 "use client"
 
-import AdminLogin from "./admin/page"
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 
-export default function Page() {
-  return <AdminLogin />
+export default function Home() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.push("/admin-login")
+  }, [router])
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="text-center">
+        <h2 className="text-2xl font-semibold mb-4">Redirecting to login...</h2>
+      </div>
+    </div>
+  )
 }
