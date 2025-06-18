@@ -180,8 +180,131 @@ type Column = {
 // --- Mock Data (Inicializados como arrays/objetos vacíos para evitar errores) ---
 const summaryData = {};
 const recentAccesses = [];
-const initialUsers: User[] = [];
-const accessLogs: Log[] = []; // Inicializado como array vacío, con tipo explícito Log[] // Inicializado como array vacío
+const initialUsers: User[] = [
+  {
+    id: 1,
+    name: "John Doe",
+    email: "john.doe@example.com",
+    role: "Admin",
+    accessZones: ["Main Entrance", "Server Room", "Office Area"],
+    profilePictureUrl: "https://i.pravatar.cc/150?img=1",
+  },
+  {
+    id: 2,
+    name: "Jane Smith",
+    email: "jane.smith@example.com",
+    role: "User",
+    accessZones: ["Main Entrance", "Office Area"],
+    profilePictureUrl: "https://i.pravatar.cc/150?img=2",
+  },
+  {
+    id: 3,
+    name: "Robert Johnson",
+    email: "robert.johnson@example.com",
+    role: "User",
+    accessZones: ["Main Entrance", "Parking Lot"],
+    profilePictureUrl: "https://i.pravatar.cc/150?img=3",
+  },
+  {
+    id: 4,
+    name: "Maria Garcia",
+    email: "maria.garcia@example.com",
+    role: "Admin",
+    accessZones: ["Main Entrance", "Server Room", "Office Area", "Parking Lot"],
+    profilePictureUrl: "https://i.pravatar.cc/150?img=4",
+  },
+  {
+    id: 5,
+    name: "David Wilson",
+    email: "david.wilson@example.com",
+    role: "User",
+    accessZones: ["Main Entrance"],
+    profilePictureUrl: "https://i.pravatar.cc/150?img=5",
+  },
+];
+const accessLogs: Log[] = [
+  {
+    id: 1,
+    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutos atrás
+    user: "John Doe",
+    email: "john.doe@example.com",
+    role: "Admin",
+    zone: "Server Room",
+    status: "Granted",
+    method: "Face Recognition",
+  },
+  {
+    id: 2,
+    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 minutos atrás
+    user: "Jane Smith",
+    email: "jane.smith@example.com",
+    role: "User",
+    zone: "Main Entrance",
+    status: "Granted",
+    method: "Card",
+  },
+  {
+    id: 3,
+    timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hora atrás
+    user: "Robert Johnson",
+    email: "robert.johnson@example.com",
+    role: "User",
+    zone: "Parking Lot",
+    status: "Denied",
+    method: "Face Recognition",
+  },
+  {
+    id: 4,
+    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(), // 1.5 horas atrás
+    user: "Maria Garcia",
+    email: "maria.garcia@example.com",
+    role: "Admin",
+    zone: "Server Room",
+    status: "Granted",
+    method: "Card",
+  },
+  {
+    id: 5,
+    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), // 2 horas atrás
+    user: "David Wilson",
+    email: "david.wilson@example.com",
+    role: "User",
+    zone: "Main Entrance",
+    status: "Granted",
+    method: "Face Recognition",
+  },
+  {
+    id: 6,
+    timestamp: new Date(Date.now() - 1000 * 60 * 150).toISOString(), // 2.5 horas atrás
+    user: "John Doe",
+    email: "john.doe@example.com",
+    role: "Admin",
+    zone: "Office Area",
+    status: "Granted",
+    method: "Card",
+  },
+  {
+    id: 7,
+    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(), // 3 horas atrás
+    user: "Jane Smith",
+    email: "jane.smith@example.com",
+    role: "User",
+    zone: "Office Area",
+    status: "Denied",
+    method: "Face Recognition",
+  },
+  {
+    id: 8,
+    timestamp: new Date(Date.now() - 1000 * 60 * 210).toISOString(), // 3.5 horas atrás
+    user: "Maria Garcia",
+    email: "maria.garcia@example.com",
+    role: "Admin",
+    zone: "Parking Lot",
+    status: "Granted",
+    method: "Face Recognition",
+  },
+]; // Inicializado como array vacío, con tipo explícito Log[] // Inicializado como array vacío
+
 const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL\nJohn Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,Zone A",https://example.com/photos/john.jpg\nJane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg\n`;
 
 export default function AdminDashboard({
@@ -335,15 +458,114 @@ export default function AdminDashboard({
     anomalousAttempts: 3,
     successRate: 94.2,
   });
-  const [suspiciousUsers, setSuspiciousUsers] = useState<any[]>([]); // Inicializado
-  const [aiRecommendations, setAIRecommendations] = useState<any[]>([]); // Inicializado
+  const [suspiciousUsers, setSuspiciousUsers] = useState<any[]>([
+    {
+      id: "sus1",
+      name: "Unknown Person A",
+      riskScore: 85,
+      status: "high",
+      lastSeen: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      location: "Server Room",
+      attempts: 3,
+      faceImage: "https://i.pravatar.cc/150?img=11",
+    },
+    {
+      id: "sus2",
+      name: "Unknown Person B",
+      riskScore: 65,
+      status: "moderate",
+      lastSeen: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+      location: "Main Entrance",
+      attempts: 2,
+      faceImage: "https://i.pravatar.cc/150?img=12",
+    },
+    {
+      id: "sus3",
+      name: "Unknown Person C",
+      riskScore: 45,
+      status: "low",
+      lastSeen: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+      location: "Parking Lot",
+      attempts: 1,
+      faceImage: "https://i.pravatar.cc/150?img=13",
+    },
+  ]);
+  const [aiRecommendations, setAIRecommendations] = useState<any[]>([
+    {
+      id: "rec1",
+      type: "Access Control",
+      description:
+        "Block access for user with multiple failed attempts at Server Room",
+      priority: "High",
+      status: "Pending",
+      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      action: "Block Access",
+      confidence: 0.95,
+    },
+    {
+      id: "rec2",
+      type: "User Management",
+      description:
+        "Review and update access zones for user with unusual access patterns",
+      priority: "Medium",
+      status: "Pending",
+      timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+      action: "Review Access",
+      confidence: 0.82,
+    },
+    {
+      id: "rec3",
+      type: "Security Alert",
+      description:
+        "Investigate multiple access attempts during non-business hours",
+      priority: "High",
+      status: "Pending",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+      action: "Investigate",
+      confidence: 0.88,
+    },
+  ]);
   const [recentLogs, setRecentLogs] = useState<any[]>([]); // Inicializado
   const [trendData] = useState<any[]>([]); // Inicializado
   const [failureCauseData] = useState<any[]>([]); // Inicializado
   const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
   const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
-  const [observedUsers] = useState<any[]>([]); // Inicializado
+  const [observedUsers] = useState<any[]>([
+    {
+      id: "obs1",
+      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 horas atrás
+      lastSeen: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutos atrás
+      tempAccesses: 3,
+      accessedZones: ["Main Entrance", "Parking Lot"],
+      status: "Pending Review",
+      aiAction: "Monitor",
+      confidence: 0.85,
+      faceImage: "https://i.pravatar.cc/150?img=8",
+    },
+    {
+      id: "obs2",
+      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 horas atrás
+      lastSeen: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 minutos atrás
+      tempAccesses: 5,
+      accessedZones: ["Main Entrance", "Office Area"],
+      status: "High Risk",
+      aiAction: "Block Access",
+      confidence: 0.92,
+      faceImage: "https://i.pravatar.cc/150?img=9",
+    },
+    {
+      id: "obs3",
+      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(), // 1 hora atrás
+      lastSeen: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 minutos atrás
+      tempAccesses: 2,
+      accessedZones: ["Main Entrance"],
+      status: "Low Risk",
+      aiAction: "Allow Access",
+      confidence: 0.78,
+      faceImage: "https://i.pravatar.cc/150?img=10",
+    },
+  ]);
   const [observedSortField, setObservedSortField] =
     useState<ObservedUserSortField>("id");
   const [observedSortDirection, setObservedSortDirection] = useState<
@@ -1789,6 +2011,55 @@ export default function AdminDashboard({
     { key: "status", label: "Status", sortable: true },
     { key: "aiAction", label: "AI Suggested Action", sortable: true },
     { key: "actions", label: "Admin Actions", sortable: false },
+  ];
+
+  // Mock data for users
+  const mockUsers: User[] = [
+    {
+      id: 1,
+      name: "John Doe",
+      email: "john.doe@example.com",
+      role: "Admin",
+      accessZones: ["Main Entrance", "Server Room", "Office Area"],
+      profilePictureUrl: "https://i.pravatar.cc/150?img=1",
+    },
+    {
+      id: 2,
+      name: "Jane Smith",
+      email: "jane.smith@example.com",
+      role: "User",
+      accessZones: ["Main Entrance", "Office Area"],
+      profilePictureUrl: "https://i.pravatar.cc/150?img=2",
+    },
+    {
+      id: 3,
+      name: "Robert Johnson",
+      email: "robert.johnson@example.com",
+      role: "User",
+      accessZones: ["Main Entrance", "Parking Lot"],
+      profilePictureUrl: "https://i.pravatar.cc/150?img=3",
+    },
+    {
+      id: 4,
+      name: "Maria Garcia",
+      email: "maria.garcia@example.com",
+      role: "Admin",
+      accessZones: [
+        "Main Entrance",
+        "Server Room",
+        "Office Area",
+        "Parking Lot",
+      ],
+      profilePictureUrl: "https://i.pravatar.cc/150?img=4",
+    },
+    {
+      id: 5,
+      name: "David Wilson",
+      email: "david.wilson@example.com",
+      role: "User",
+      accessZones: ["Main Entrance"],
+      profilePictureUrl: "https://i.pravatar.cc/150?img=5",
+    },
   ];
 
   return (
