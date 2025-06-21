@@ -1,320 +1,89 @@
-"use client"; // Esta línea va al inicio si es un Client Component
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-  useCallback,
-} from "react";
-import { createClient, SupabaseClient } from "@supabase/supabase-js"; // Importa el cliente de Supabase JS
-import { useRouter } from "next/navigation";
-import { Session } from "@supabase/supabase-js"; // Importa la clase Session
+'use client'; // Esta línea va al inicio si es un Client Component
+import { createClient, Session, SupabaseClient } from '@supabase/supabase-js'; // Importa el cliente de Supabase JS
+import { useRouter } from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+// --- Types Import ---
+import type { LogSortField, ObservedUserSortField, Role, SortDirection, SortField, SummaryEntry, SummarySortField, User, UserStatus, Zone } from '@/types';
+
+// --- Mock Data Import ---
+import {
+  accessLogs,
+  columns,
+  csvTemplateContent,
+  defaultNewCamera,
+  initialUsers,
+  logColumns,
+  aiRecommendations as mockAiRecommendations,
+  cameras as mockCameras,
+  kpiData as mockKpiData,
+  observedUsers as mockObservedUsers,
+  riskScore as mockRiskScore,
+  suspiciousUsers as mockSuspiciousUsers,
+  zones as mockZones,
+  PIE_COLORS,
+  tabs,
+} from '@/mock-data';
+
 // --- Configuración del Cliente Supabase para el Frontend ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
 // --- Shadcn UI Components ---
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // --- Lucide React Icons ---
 import {
-  Users,
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Camera,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Edit,
+  Eye,
+  FileSpreadsheet,
+  Lightbulb,
+  LogOut,
+  RotateCcw,
+  Save,
+  Search,
   Shield,
-  Zap,
+  SlidersHorizontal,
+  Trash2,
   TrendingUp,
   Upload,
-  Search,
-  Edit,
-  Trash2,
-  LogOut,
-  Check,
-  X,
-  ChevronUp,
-  ChevronDown,
-  Save,
-  RotateCcw,
-  FileSpreadsheet,
-  Download,
-  AlertCircle,
-  Camera,
-  SlidersHorizontal,
-  AlertTriangle,
-  Lightbulb,
-  Eye,
-  ArrowRight,
   UserCircle2,
-} from "lucide-react";
+  Users,
+  X,
+  Zap,
+} from 'lucide-react';
 
 // --- Custom Hooks & Components ---
-import { useAuth } from "@/hooks/use-auth";
-import { CameraCapture } from "@/components/camera-capture"; // Importar el componente CameraCapture
+import { CameraCapture } from '@/components/camera-capture'; // Importar el componente CameraCapture
+import { useAuth } from '@/hooks/use-auth';
 
 // --- Recharts (for AI-Enhanced Dashboard) ---
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
-// --- Face-API.js ---
-import * as faceapi from "face-api.js";
+import UsersTab from './users/UsersTab';
 
-// --- Tipos de Datos (Asegúrate de que estos tipos concuerden con tu backend/Supabase) ---
-type Role = { id: string; name: string };
-type UserStatus = { id: string; name: string };
-type Zone = { id: string; name: string };
-
-type User = {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  accessZones: string[];
-  // Añadir un campo para el embedding facial
-  faceEmbedding?: number[]; // Representado como array de números para JSON
-  profilePictureUrl?: string; // Para la URL de la imagen de perfil
-};
-
-type Log = {
-  id: number;
-  timestamp: string;
-  user: string;
-  email: string;
-  role: string;
-  zone: string;
-  status: string;
-  method: string;
-};
-
-type SummaryEntry = {
-  user: string;
-  email: string;
-  firstAccess: string;
-  lastAccess: string;
-  totalAccesses: number;
-  successful: number;
-  failed: number;
-  successRate: number;
-  zoneAccesses: Record<string, number>; // ¡Esto es clave! Le dice que es un objeto con claves de tipo 'string' y valores de tipo 'number'.
-};
-
-// --- Tipos para ordenar y filtrar ---
-type SortField = "name" | "email" | "role";
-type SortDirection = "asc" | "desc";
-type LogSortField =
-  | "timestamp"
-  | "user"
-  | "email"
-  | "role"
-  | "zone"
-  | "method"
-  | "status";
-type SummarySortField =
-  | "user"
-  | "email"
-  | "firstAccess"
-  | "lastAccess"
-  | "totalAccesses"
-  | "successRate";
-type ObservedUserSortField =
-  | "id"
-  | "firstSeen"
-  | "lastSeen"
-  | "tempAccesses"
-  | "accessedZones"
-  | "status"
-  | "aiAction";
-
-// Tipo para las columnas de la tabla (faltaba en la versión anterior)
-type Column = {
-  key: string;
-  label: string;
-  sortable: boolean;
-};
-
-// --- Mock Data (Inicializados como arrays/objetos vacíos para evitar errores) ---
-const summaryData = {};
-const recentAccesses = [];
-const initialUsers: User[] = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john.doe@example.com",
-    role: "Admin",
-    accessZones: ["Main Entrance", "Server Room", "Office Area"],
-    profilePictureUrl: "https://i.pravatar.cc/150?img=1",
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane.smith@example.com",
-    role: "User",
-    accessZones: ["Main Entrance", "Office Area"],
-    profilePictureUrl: "https://i.pravatar.cc/150?img=2",
-  },
-  {
-    id: 3,
-    name: "Robert Johnson",
-    email: "robert.johnson@example.com",
-    role: "User",
-    accessZones: ["Main Entrance", "Parking Lot"],
-    profilePictureUrl: "https://i.pravatar.cc/150?img=3",
-  },
-  {
-    id: 4,
-    name: "Maria Garcia",
-    email: "maria.garcia@example.com",
-    role: "Admin",
-    accessZones: ["Main Entrance", "Server Room", "Office Area", "Parking Lot"],
-    profilePictureUrl: "https://i.pravatar.cc/150?img=4",
-  },
-  {
-    id: 5,
-    name: "David Wilson",
-    email: "david.wilson@example.com",
-    role: "User",
-    accessZones: ["Main Entrance"],
-    profilePictureUrl: "https://i.pravatar.cc/150?img=5",
-  },
-];
-const accessLogs: Log[] = [
-  {
-    id: 1,
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutos atrás
-    user: "John Doe",
-    email: "john.doe@example.com",
-    role: "Admin",
-    zone: "Server Room",
-    status: "Granted",
-    method: "Face Recognition",
-  },
-  {
-    id: 2,
-    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 minutos atrás
-    user: "Jane Smith",
-    email: "jane.smith@example.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Granted",
-    method: "Card",
-  },
-  {
-    id: 3,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hora atrás
-    user: "Robert Johnson",
-    email: "robert.johnson@example.com",
-    role: "User",
-    zone: "Parking Lot",
-    status: "Denied",
-    method: "Face Recognition",
-  },
-  {
-    id: 4,
-    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(), // 1.5 horas atrás
-    user: "Maria Garcia",
-    email: "maria.garcia@example.com",
-    role: "Admin",
-    zone: "Server Room",
-    status: "Granted",
-    method: "Card",
-  },
-  {
-    id: 5,
-    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), // 2 horas atrás
-    user: "David Wilson",
-    email: "david.wilson@example.com",
-    role: "User",
-    zone: "Main Entrance",
-    status: "Granted",
-    method: "Face Recognition",
-  },
-  {
-    id: 6,
-    timestamp: new Date(Date.now() - 1000 * 60 * 150).toISOString(), // 2.5 horas atrás
-    user: "John Doe",
-    email: "john.doe@example.com",
-    role: "Admin",
-    zone: "Office Area",
-    status: "Granted",
-    method: "Card",
-  },
-  {
-    id: 7,
-    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(), // 3 horas atrás
-    user: "Jane Smith",
-    email: "jane.smith@example.com",
-    role: "User",
-    zone: "Office Area",
-    status: "Denied",
-    method: "Face Recognition",
-  },
-  {
-    id: 8,
-    timestamp: new Date(Date.now() - 1000 * 60 * 210).toISOString(), // 3.5 horas atrás
-    user: "Maria Garcia",
-    email: "maria.garcia@example.com",
-    role: "Admin",
-    zone: "Parking Lot",
-    status: "Granted",
-    method: "Face Recognition",
-  },
-]; // Inicializado como array vacío, con tipo explícito Log[] // Inicializado como array vacío
-
-const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL\nJohn Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,Zone A",https://example.com/photos/john.jpg\nJane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg\n`;
-
-export default function AdminDashboard({
-  supabase,
-  session,
-}: {
-  supabase: SupabaseClient;
-  session: Session;
-}) {
-  const [activeTab, setActiveTab] = useState("dashboard");
+export default function AdminDashboard({ supabase, session, onLogout }: { supabase?: SupabaseClient; session?: Session; onLogout?: () => void }) {
+  const [activeTab, setActiveTab] = useState('dashboard');
   const { signOut } = useAuth(); // Asume que useAuth y signOut están correctamente implementados
   const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
   const router = useRouter();
@@ -331,12 +100,11 @@ export default function AdminDashboard({
   const [userToDelete, setUserToDelete] = useState<any>(null); // Considerar tipado más específico
 
   // --- New User Form States ---
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>("");
-  const [selectedUserStatus, setSelectedUserStatus] =
-    useState<string>("Inactive"); // Default to 'Inactive'
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive'); // Default to 'Inactive'
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
   const [accessZonesOpen, setAccessZonesOpen] = useState(false);
 
@@ -344,78 +112,52 @@ export default function AdminDashboard({
   const [imagePreview, setImagePreview] = useState<string | null>(null); // URL para mostrar la imagen seleccionada/capturada
   const [currentImage, setCurrentImage] = useState<File | Blob | null>(null); // La imagen activa (File o Blob) para procesar
   const [faceEmbedding, setFaceEmbedding] = useState<Float32Array | null>(null); // El vector 128D resultante de face-api.js
-  const [faceDetectionError, setFaceDetectionError] = useState<string | null>(
-    null
-  ); // Errores específicos de detección facial
+  const [faceDetectionError, setFaceDetectionError] = useState<string | null>(null); // Errores específicos de detección facial
   const [isProcessingImage, setIsProcessingImage] = useState(false); // Indica si face-api está trabajando
   const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
-  const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(
-    null
-  ); // Errores de carga de los modelos de Face-API
+  const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(null); // Errores de carga de los modelos de Face-API
 
   // --- Camera Capture Component State (isCameraOpen es para el prop 'open') ---
   const [isCameraOpen, setCameraOpen] = useState(false);
 
   // --- Global UI Status / Feedback ---
-  const [showStatusMessage, setShowStatusMessage] = useState<string | null>(
-    null
-  ); // Mensajes de éxito/error al guardar/procesar
+  const [showStatusMessage, setShowStatusMessage] = useState<string | null>(null); // Mensajes de éxito/error al guardar/procesar
   const [isSavingUser, setIsSavingUser] = useState(false); // Para el estado del botón Guardar Usuario
   const [isDragging, setIsDragging] = useState(false); // Para la sección de drag & drop de fotos
 
   // --- Dashboard Filtering/Sorting States (mantener tus existentes) ---
-  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [userSearchTerm, setUserSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
   // Nuevo estado para el ordenamiento de la tabla de usuarios
-  const [sortField, setSortField] = useState<SortField>("name"); // Campo de ordenamiento por defecto
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc"); // Dirección de ordenamiento por defecto
+  const [sortField, setSortField] = useState<SortField>('name'); // Campo de ordenamiento por defecto
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // Dirección de ordenamiento por defecto
 
   const [csvIsDragging, setCsvIsDragging] = useState(false);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [selectedUser, setSelectedUser] = useState("all");
-  const [selectedZone, setSelectedZone] = useState("all");
-  const [selectedStatus, setSelectedStatus] = useState("all");
-  const [selectedMethod, setSelectedMethod] = useState("all");
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedUser, setSelectedUser] = useState('all');
+  const [selectedZone, setSelectedZone] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedMethod, setSelectedMethod] = useState('all');
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-  const [logSortField, setLogSortField] = useState<LogSortField>("timestamp");
-  const [logSortDirection, setLogSortDirection] =
-    useState<SortDirection>("desc");
+  const [logSortField, setLogSortField] = useState<LogSortField>('timestamp');
+  const [logSortDirection, setLogSortDirection] = useState<SortDirection>('desc');
   const [logCurrentPage, setLogCurrentPage] = useState(1);
   const [logItemsPerPage, setLogItemsPerPage] = useState(10);
-  const [summarySortField, setSummarySortField] =
-    useState<SummarySortField>("user");
-  const [summarySortDirection, setSummarySortDirection] =
-    useState<SortDirection>("asc");
-  const [summarySearchTerm, setSummarySearchTerm] = useState("");
-  const [summaryStatusFilter, setSummaryStatusFilter] = useState("all");
-  const [activeSettingsTab, setActiveSettingsTab] = useState("zones");
-  const [zones, setZones] = useState([
-    { id: 1, name: "Main Entrance" },
-    { id: 2, name: "Zone A" },
-    { id: 3, name: "Zone B" },
-    { id: 4, name: "Server Room" },
-    { id: 5, name: "Warehouse" },
-    { id: 6, name: "Executive Suite" },
-    { id: 7, name: "Cafeteria" },
-  ]);
-  const [cameras, setCameras] = useState([
-    { id: 1, name: "Camera 1", zone: "Main Entrance", location: "Front Door" },
-    { id: 2, name: "Camera 2", zone: "Zone A", location: "North Corner" },
-    { id: 3, name: "Camera 3", zone: "Server Room", location: "Server Rack 3" },
-    { id: 4, name: "Camera 4", zone: "Warehouse", location: "Loading Dock" },
-  ]);
-  const [newZoneName, setNewZoneName] = useState("");
+  const [summarySortField, setSummarySortField] = useState<SummarySortField>('user');
+  const [summarySortDirection, setSummarySortDirection] = useState<SortDirection>('asc');
+  const [summarySearchTerm, setSummarySearchTerm] = useState('');
+  const [summaryStatusFilter, setSummaryStatusFilter] = useState('all');
+  const [activeSettingsTab, setActiveSettingsTab] = useState('zones');
+  const [zones, setZones] = useState(mockZones);
+  const [cameras, setCameras] = useState(mockCameras);
+  const [newZoneName, setNewZoneName] = useState('');
   const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
-  const [editingZoneName, setEditingZoneName] = useState("");
+  const [editingZoneName, setEditingZoneName] = useState('');
   const [zoneToDelete, setZoneToDelete] = useState<any>(null);
   const [zoneDeleteModalOpen, setZoneDeleteModalOpen] = useState(false);
-  const [newCamera, setNewCamera] = useState({
-    name: "",
-    zone: "",
-    location: "",
-  });
+  const [newCamera, setNewCamera] = useState(defaultNewCamera);
   const [editingCameraId, setEditingCameraId] = useState<number | null>(null);
   const [editingCamera, setEditingCamera] = useState<any>(null);
   const [cameraToDelete, setCameraToDelete] = useState<any>(null);
@@ -423,14 +165,12 @@ export default function AdminDashboard({
 
   // Estados para la carga masiva CSV (faltantes)
   const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "processing" | "success" | "error"
-  >("idle");
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
 
   // Search term para los Access Logs (faltante)
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
 
   // States for data fetched from Edge Functions
   const [roles, setRoles] = useState<Role[]>([]);
@@ -441,416 +181,27 @@ export default function AdminDashboard({
   const [errorZones, setErrorZones] = useState<string | null>(null);
   const [userStatuses, setUserStatuses] = useState<UserStatus[]>([]);
   const [loadingUserStatuses, setLoadingUserStatuses] = useState(true);
-  const [errorUserStatuses, setErrorUserStatuses] = useState<string | null>(
-    null
-  );
+  const [errorUserStatuses, setErrorUserStatuses] = useState<string | null>(null);
 
   // --- AI-ENHANCED DASHBOARD STATE & DATA (Inicializados como arrays/objetos vacíos) ---
-  const [riskScore] = useState<{
-    score: number;
-    status: "low" | "moderate" | "high";
-  }>({ score: 23, status: "low" });
-  const [kpiData] = useState({
-    totalUsers: 247,
-    activeZones: 12,
-    accessesToday: 89,
-    activeAlerts: 2,
-    anomalousAttempts: 3,
-    successRate: 94.2,
-  });
-  const [suspiciousUsers, setSuspiciousUsers] = useState<any[]>([
-    {
-      id: "sus1",
-      name: "Unknown Person A",
-      riskScore: 85,
-      status: "high",
-      lastSeen: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-      location: "Server Room",
-      attempts: 3,
-      faceImage: "https://i.pravatar.cc/150?img=11",
-    },
-    {
-      id: "sus2",
-      name: "Unknown Person B",
-      riskScore: 65,
-      status: "moderate",
-      lastSeen: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-      location: "Main Entrance",
-      attempts: 2,
-      faceImage: "https://i.pravatar.cc/150?img=12",
-    },
-    {
-      id: "sus3",
-      name: "Unknown Person C",
-      riskScore: 45,
-      status: "low",
-      lastSeen: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-      location: "Parking Lot",
-      attempts: 1,
-      faceImage: "https://i.pravatar.cc/150?img=13",
-    },
-  ]);
-  const [aiRecommendations, setAIRecommendations] = useState<any[]>([
-    {
-      id: "rec1",
-      type: "Access Control",
-      description:
-        "Block access for user with multiple failed attempts at Server Room",
-      priority: "High",
-      status: "Pending",
-      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-      action: "Block Access",
-      confidence: 0.95,
-    },
-    {
-      id: "rec2",
-      type: "User Management",
-      description:
-        "Review and update access zones for user with unusual access patterns",
-      priority: "Medium",
-      status: "Pending",
-      timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-      action: "Review Access",
-      confidence: 0.82,
-    },
-    {
-      id: "rec3",
-      type: "Security Alert",
-      description:
-        "Investigate multiple access attempts during non-business hours",
-      priority: "High",
-      status: "Pending",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-      action: "Investigate",
-      confidence: 0.88,
-    },
-  ]);
+  const [riskScore] = useState(mockRiskScore);
+  const [kpiData] = useState(mockKpiData);
+  const [suspiciousUsers, setSuspiciousUsers] = useState(mockSuspiciousUsers);
+  const [aiRecommendations, setAIRecommendations] = useState(mockAiRecommendations);
   const [recentLogs, setRecentLogs] = useState<any[]>([]); // Inicializado
   const [trendData] = useState<any[]>([]); // Inicializado
   const [failureCauseData] = useState<any[]>([]); // Inicializado
   const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
   const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
-  const [observedUsers] = useState<any[]>([
-    {
-      id: "obs1",
-      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 horas atrás
-      lastSeen: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutos atrás
-      tempAccesses: 3,
-      accessedZones: ["Main Entrance", "Parking Lot"],
-      status: "Pending Review",
-      aiAction: "Monitor",
-      confidence: 0.85,
-      faceImage: "https://i.pravatar.cc/150?img=8",
-    },
-    {
-      id: "obs2",
-      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 horas atrás
-      lastSeen: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 minutos atrás
-      tempAccesses: 5,
-      accessedZones: ["Main Entrance", "Office Area"],
-      status: "High Risk",
-      aiAction: "Block Access",
-      confidence: 0.92,
-      faceImage: "https://i.pravatar.cc/150?img=9",
-    },
-    {
-      id: "obs3",
-      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(), // 1 hora atrás
-      lastSeen: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 minutos atrás
-      tempAccesses: 2,
-      accessedZones: ["Main Entrance"],
-      status: "Low Risk",
-      aiAction: "Allow Access",
-      confidence: 0.78,
-      faceImage: "https://i.pravatar.cc/150?img=10",
-    },
-  ]);
-  const [observedSortField, setObservedSortField] =
-    useState<ObservedUserSortField>("id");
-  const [observedSortDirection, setObservedSortDirection] = useState<
-    "asc" | "desc"
-  >("asc");
-  const [logsSortField, setLogsSortField] = useState<LogSortField>("timestamp");
-  const [logsSortDirection, setLogsSortDirection] =
-    useState<SortDirection>("desc");
-  const [observedUserDetails, setObservedUserDetails] = useState<
-    null | (typeof observedUsers)[0]
-  >(null);
-  const [dashboardTab, setDashboardTab] = useState("overview");
+  const [observedUsers] = useState(mockObservedUsers);
+  const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>('id');
+  const [observedSortDirection, setObservedSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [logsSortField, setLogsSortField] = useState<LogSortField>('timestamp');
+  const [logsSortDirection, setLogsSortDirection] = useState<SortDirection>('desc');
+  const [observedUserDetails, setObservedUserDetails] = useState<null | (typeof observedUsers)[0]>(null);
+  const [dashboardTab, setDashboardTab] = useState('overview');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-
-  // --- USE EFFECTS PARA CARGA DE DATOS INICIALES ---
-  // useEffect para cargar los modelos de Face-API.js
-  useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = "/models"; // La URL base donde se encuentran los modelos.
-      try {
-        setFaceApiModelsLoaded(false);
-        setFaceApiModelsError(null);
-        await faceapi.nets.ssdMobilenetv1.load(MODEL_URL); // Usamos SSD Mobilenet V1
-        await faceapi.nets.faceLandmark68Net.load(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.load(MODEL_URL);
-        setFaceApiModelsLoaded(true);
-        console.log("Face-API.js models loaded successfully!");
-      } catch (error: any) {
-        console.error("Error loading Face-API.js models:", error);
-        setFaceApiModelsError(
-          `Failed to load face detection models: ${error.message}`
-        );
-      }
-    };
-    loadModels();
-  }, []);
-
-  // Nuevo useEffect para procesar la imagen con Face-API.js (se ejecuta cuando currentImage o faceApiModelsLoaded cambian)
-  useEffect(() => {
-    const processImageForFaceRecognition = async () => {
-      if (!faceApiModelsLoaded || !currentImage) {
-        setFaceEmbedding(null);
-        setFaceDetectionError(null);
-        return;
-      }
-
-      setIsProcessingImage(true);
-      setFaceDetectionError(null);
-      setFaceEmbedding(null);
-
-      try {
-        // Crea un elemento HTMLImageElement temporal para face-api
-        const img = document.createElement("img");
-        img.src =
-          currentImage instanceof File
-            ? URL.createObjectURL(currentImage)
-            : URL.createObjectURL(currentImage);
-
-        img.onload = async () => {
-          // Detecta todas las caras y sus puntos de referencia
-          const detectionsWithLandmarks = await faceapi
-            .detectAllFaces(img, new faceapi.SsdMobilenetv1Options())
-            .withFaceLandmarks()
-            .withFaceDescriptors(); // ¡Añadir .withFaceDescriptors() aquí!
-
-          if (detectionsWithLandmarks.length === 0) {
-            setFaceDetectionError(
-              "No face detected in the image. Please use a clear photo."
-            );
-            setFaceEmbedding(null);
-            console.warn("No face detected.");
-          } else if (detectionsWithLandmarks.length > 1) {
-            setFaceDetectionError(
-              "Multiple faces detected. Please use a photo with only one person."
-            );
-            setFaceEmbedding(null);
-            console.warn("Multiple faces detected.");
-          } else {
-            // Si se detecta exactamente una cara, extrae el descriptor (embedding)
-            const faceDescriptor = detectionsWithLandmarks[0].descriptor; // Ahora el descriptor ya está adjunto
-            setFaceEmbedding(new Float32Array(faceDescriptor)); // Almacena el embedding
-            setFaceDetectionError(null);
-            console.log("Face detected and embedding generated successfully!");
-            console.log("Generated Embedding:", faceDescriptor); // Para depuración comentar esta línea
-          }
-          URL.revokeObjectURL(img.src); // Libera la URL del objeto creado
-          setIsProcessingImage(false);
-        };
-
-        img.onerror = (e) => {
-          console.error("Error loading image for Face-API.js:", e);
-          setFaceDetectionError(
-            "Could not load image for processing. Please try another file."
-          );
-          setIsProcessingImage(false);
-        };
-      } catch (error: any) {
-        console.error(
-          "Error during face detection or embedding generation:",
-          error
-        );
-        setFaceDetectionError(
-          `Face detection failed: ${error.message}. Ensure models are loaded and image is clear.`
-        );
-        setFaceEmbedding(null);
-        setIsProcessingImage(false);
-      }
-    };
-
-    processImageForFaceRecognition();
-  }, [currentImage, faceApiModelsLoaded]);
-
-  // useEffect para cargar roles
-  useEffect(() => {
-    const fetchRoles = async () => {
-      setLoadingRoles(true);
-      setErrorRoles(null);
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-roles";
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-        const result = await response.json();
-        setRoles(result.roles || []);
-        if (result.roles && result.roles.length > 0 && !selectedRole) {
-          setSelectedRole(result.roles[0].name);
-        }
-      } catch (error: any) {
-        console.error("Error al obtener roles de Edge Function:", error);
-        setErrorRoles(error.message || "Fallo al cargar los roles.");
-      } finally {
-        setLoadingRoles(false);
-      }
-    };
-    fetchRoles();
-  }, []);
-
-  // useEffect para cargar zonas
-  useEffect(() => {
-    const fetchZones = async () => {
-      setLoadingZones(true);
-      setErrorZones(null);
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones";
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-        const result = await response.json();
-        setZonesData(result.zones || []);
-      } catch (error: any) {
-        console.error("Error al obtener zonas de Edge Function:", error);
-        setErrorZones(error.message || "Fallo al cargar las zonas.");
-      } finally {
-        setLoadingZones(false);
-      }
-    };
-    fetchZones();
-  }, []);
-
-  // useEffect para cargar estados de usuario
-  useEffect(() => {
-    const fetchUserStatuses = async () => {
-      setLoadingUserStatuses(true);
-      setErrorUserStatuses(null);
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-statuses";
-      try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-        const result = await response.json();
-        setUserStatuses(result.statuses || []);
-        if (result.statuses && result.statuses.length > 0) {
-          const inactiveStatus = result.statuses.find(
-            (status: { name: string }) => status.name === "Inactive"
-          );
-          if (inactiveStatus) {
-            setSelectedUserStatus(inactiveStatus.name);
-          } else if (!selectedUserStatus) {
-            setSelectedUserStatus(result.statuses[0].name); // Fallback al primero si no existe Inactive y no hay selección previa
-          }
-        }
-      } catch (error: any) {
-        console.error(
-          "Error al obtener estados de usuario de Edge Function:",
-          error
-        );
-        setErrorUserStatuses(
-          error.message || "Fallo al cargar los estados de usuario."
-        );
-      } finally {
-        setLoadingUserStatuses(false);
-      }
-    };
-    fetchUserStatuses();
-  }, []);
-
-  // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA ---
-
-  // Maneja el evento cuando un elemento arrastrable está sobre la zona de drop
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  }, []);
-
-  // Maneja el evento cuando un elemento arrastrable deja la zona de drop
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  }, []);
-
-  // Maneja el evento cuando un elemento es soltado en la zona de drop
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (file.type.startsWith("image/")) {
-        setCurrentImage(file); // Guarda el objeto File (o Blob) de la imagen para su procesamiento futuro
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImagePreview(reader.result as string); // Establece la URL para la previsualización en la UI
-          setFaceEmbedding(null); // Reinicia el embedding
-          setFaceDetectionError(null); // Reinicia errores de detección facial
-        };
-        reader.readAsDataURL(file);
-      } else {
-        console.error("Dropped file is not an image.");
-        setFaceDetectionError("Please drop an image file (e.g., JPG, PNG).");
-      }
-    }
-  }, []);
-
-  // Maneja la carga de imagen desde el input de archivo
-  const handleImageUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file && file.type.startsWith("image/")) {
-        setCurrentImage(file);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImagePreview(reader.result as string);
-          setFaceEmbedding(null);
-          setFaceDetectionError(null);
-        };
-        reader.readAsDataURL(file);
-      } else if (file) {
-        console.error("Selected file is not an image.");
-        setFaceDetectionError("Please select an image file (e.g., JPG, PNG).");
-      }
-      e.target.value = "";
-    },
-    []
-  );
-
-  // Función corregida: Limpia la imagen seleccionada/capturada y sus estados relacionados
-  const clearImage = useCallback(() => {
-    setImagePreview(null);
-    setCurrentImage(null);
-    setFaceEmbedding(null);
-    setFaceDetectionError(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  }, []);
 
   // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
   const handleCameraCapture = useCallback((imageData: string) => {
@@ -865,122 +216,52 @@ export default function AdminDashboard({
         setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
       })
       .catch((error) => {
-        console.error("Error converting captured image to blob:", error);
-        setFaceDetectionError("Failed to process captured image from camera.");
+        console.error('Error converting captured image to blob:', error);
+        setFaceDetectionError('Failed to process captured image from camera.');
       });
   }, []);
 
   // --- OTRAS FUNCIONES ---
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      router.push("/");
+      await supabase?.auth.signOut();
+      router.push('/');
     } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  };
-
-  const validateEmail = (email: string) => {
-    // Expresión regular simple para validar el formato de email
-    const re =
-      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-    return re.test(String(email).toLowerCase());
-  };
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newEmail = e.target.value;
-    setEmail(newEmail);
-    if (newEmail && !validateEmail(newEmail)) {
-      setEmailError("Invalid email format");
-    } else {
-      setEmailError(null);
-    }
-  };
-
-  const toggleAccessZone = (zoneName: string) => {
-    setSelectedAccessZones((prev) =>
-      prev.includes(zoneName)
-        ? prev.filter((name) => name !== zoneName)
-        : [...prev, zoneName]
-    );
-  };
-
-  const toggleEditingAccessZone = (zoneName: string) => {
-    setEditingAccessZones((prev) =>
-      prev.includes(zoneName)
-        ? prev.filter((name) => name !== zoneName)
-        : [...prev, zoneName]
-    );
-  };
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
+      console.error('Error signing out:', error);
     }
   };
 
   const handleLogSort = (field: LogSortField) => {
     if (logSortField === field) {
-      setLogSortDirection(logSortDirection === "asc" ? "desc" : "asc");
+      setLogSortDirection(logSortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setLogSortField(field);
-      setLogSortDirection("asc");
+      setLogSortDirection('asc');
     }
   };
 
   const handleSummarySort = (field: SummarySortField) => {
     if (summarySortField === field) {
-      setSummarySortDirection(summarySortDirection === "asc" ? "desc" : "asc");
+      setSummarySortDirection(summarySortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSummarySortField(field);
-      setSummarySortDirection("asc");
+      setSummarySortDirection('asc');
     }
   };
 
-  const startEditing = (user: User) => {
-    setEditingUserId(user.id);
-    setEditingUser({ ...user }); // Copia del usuario para editar
-    setEditingAccessZones([...user.accessZones]); // Copia de zonas
-  };
-
-  const cancelEditing = () => {
-    setEditingUserId(null);
-    setEditingUser(null);
-    setEditingAccessZones([]);
-  };
-
-  const saveEditing = () => {
-    // Lógica para guardar el usuario editado en Supabase
-    console.log("Saving edited user:", editingUser, editingAccessZones);
-    // Actualizar el estado 'users' localmente
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user.id === editingUserId
-          ? { ...editingUser, accessZones: editingAccessZones }
-          : user
-      )
-    );
-    cancelEditing();
-  };
-
-  const updateEditingUser = (field: string, value: any) => {
-    setEditingUser((prev: any) => ({ ...prev, [field]: value }));
-  };
-
-  const openDeleteModal = (user: User) => {
-    setUserToDelete(user);
-    setDeleteModalOpen(true);
+  const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedCsvFile(file);
+      setUploadStatus('idle');
+      setUploadMessage(null);
+    }
   };
 
   const confirmDelete = () => {
     // Lógica para eliminar el usuario de Supabase
-    console.log("Deleting user:", userToDelete);
-    setUsers((prevUsers) =>
-      prevUsers.filter((user) => user.id !== userToDelete.id)
-    );
+    console.log('Deleting user:', userToDelete);
+    setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userToDelete.id));
     setDeleteModalOpen(false);
     setUserToDelete(null);
   };
@@ -990,26 +271,17 @@ export default function AdminDashboard({
     setUserToDelete(null);
   };
 
-  const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedCsvFile(file);
-      setUploadStatus("idle");
-      setUploadMessage(null);
-    }
-  };
-
   const downloadCsvTemplate = () => {
     const blob = new Blob([csvTemplateContent], {
-      type: "text/csv;charset=utf-8;",
+      type: 'text/csv;charset=utf-8;',
     });
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     if (link.download !== undefined) {
       // Feature detection
       const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", "user_onboarding_template.csv");
-      link.style.visibility = "hidden";
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'user_onboarding_template.csv');
+      link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1018,29 +290,27 @@ export default function AdminDashboard({
 
   const processBulkUpload = async () => {
     if (!selectedCsvFile) {
-      setUploadMessage("Please select a CSV file first.");
-      setUploadStatus("error");
+      setUploadMessage('Please select a CSV file first.');
+      setUploadStatus('error');
       return;
     }
 
-    setUploadStatus("processing");
-    setUploadMessage("Processing CSV file...");
+    setUploadStatus('processing');
+    setUploadMessage('Processing CSV file...');
 
     try {
       // Implement your CSV parsing and Supabase insertion logic here
       // This is a placeholder. You'll need a library like 'papaparse'
       // and potentially a Supabase Edge Function for bulk insertion.
-      console.log("Processing bulk upload for file:", selectedCsvFile.name);
+      console.log('Processing bulk upload for file:', selectedCsvFile.name);
       await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async work
 
-      setUploadStatus("success");
-      setUploadMessage(
-        `Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`
-      );
+      setUploadStatus('success');
+      setUploadMessage(`Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`);
       setSelectedCsvFile(null); // Clear selected file after processing
     } catch (error: any) {
-      console.error("Error processing bulk upload:", error);
-      setUploadStatus("error");
+      console.error('Error processing bulk upload:', error);
+      setUploadStatus('error');
       setUploadMessage(`Failed to process CSV: ${error.message}`);
     }
   };
@@ -1063,33 +333,30 @@ export default function AdminDashboard({
     setCsvIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type === "text/csv") {
+      if (file.type === 'text/csv') {
         setSelectedCsvFile(file);
-        setUploadStatus("idle");
+        setUploadStatus('idle');
         setUploadMessage(null);
       } else {
-        setUploadMessage("Please drop a CSV file.");
-        setUploadStatus("error");
+        setUploadMessage('Please drop a CSV file.');
+        setUploadStatus('error');
       }
     }
   };
 
   const clearCsvFile = () => {
     setSelectedCsvFile(null);
-    setUploadStatus("idle");
+    setUploadStatus('idle');
     setUploadMessage(null);
     if (csvFileInputRef.current) {
-      csvFileInputRef.current.value = "";
+      csvFileInputRef.current.value = '';
     }
   };
 
   const handleAddZone = () => {
     if (newZoneName.trim()) {
-      setZones((prev) => [
-        ...prev,
-        { id: prev.length + 1, name: newZoneName.trim() },
-      ]);
-      setNewZoneName("");
+      setZones((prev) => [...prev, { id: prev.length + 1, name: newZoneName.trim() }]);
+      setNewZoneName('');
     }
   };
 
@@ -1100,17 +367,11 @@ export default function AdminDashboard({
 
   const cancelEditingZone = () => {
     setEditingZoneId(null);
-    setEditingZoneName("");
+    setEditingZoneName('');
   };
 
   const saveEditingZone = () => {
-    setZones((prev) =>
-      prev.map((zone) =>
-        zone.id === editingZoneId
-          ? { ...zone, name: editingZoneName.trim() }
-          : zone
-      )
-    );
+    setZones((prev) => prev.map((zone) => (zone.id === editingZoneId ? { ...zone, name: editingZoneName.trim() } : zone)));
     cancelEditingZone();
   };
 
@@ -1121,11 +382,7 @@ export default function AdminDashboard({
 
   const confirmZoneDelete = () => {
     setZones((prev) => prev.filter((zone) => zone.id !== zoneToDelete.id));
-    setCameras((prev) =>
-      prev.map((cam) =>
-        cam.zone === zoneToDelete.name ? { ...cam, zone: "" } : cam
-      )
-    ); // Unassign cameras
+    setCameras((prev) => prev.map((cam) => (cam.zone === zoneToDelete.name ? { ...cam, zone: '' } : cam))); // Unassign cameras
     setZoneDeleteModalOpen(false);
     setZoneToDelete(null);
   };
@@ -1138,7 +395,7 @@ export default function AdminDashboard({
   const handleAddCamera = () => {
     if (newCamera.name.trim() && newCamera.zone) {
       setCameras((prev) => [...prev, { id: prev.length + 1, ...newCamera }]);
-      setNewCamera({ name: "", zone: "", location: "" });
+      setNewCamera({ name: '', zone: '', location: '' });
     }
   };
 
@@ -1153,11 +410,7 @@ export default function AdminDashboard({
   };
 
   const saveEditingCamera = () => {
-    setCameras((prev) =>
-      prev.map((camera) =>
-        camera.id === editingCameraId ? { ...editingCamera } : camera
-      )
-    );
+    setCameras((prev) => prev.map((camera) => (camera.id === editingCameraId ? { ...editingCamera } : camera)));
     cancelEditingCamera();
   };
 
@@ -1167,9 +420,7 @@ export default function AdminDashboard({
   };
 
   const confirmCameraDelete = () => {
-    setCameras((prev) =>
-      prev.filter((camera) => camera.id !== cameraToDelete.id)
-    );
+    setCameras((prev) => prev.filter((camera) => camera.id !== cameraToDelete.id));
     setCameraDeleteModalOpen(false);
     setCameraToDelete(null);
   };
@@ -1188,8 +439,8 @@ export default function AdminDashboard({
   const sortedObservedUsers = useMemo(() => {
     // Ejemplo de implementación de sort, deberás llenar con tu lógica real
     return [...observedUsers].sort((a, b) => {
-      if (observedSortField === "id") {
-        return observedSortDirection === "asc" ? a.id - b.id : b.id - a.id;
+      if (observedSortField === 'id') {
+        return observedSortDirection === 'asc' ? a.id - b.id : b.id - a.id;
       }
       // Añadir más lógica para otros campos si es necesario
       return 0;
@@ -1199,51 +450,27 @@ export default function AdminDashboard({
   const filteredLogs = useMemo(() => {
     // Simulación de filtrado, adaptar a tus datos y filtros
     return (accessLogs as any[]).filter((log) => {
-      const matchSearch = searchTerm
-        ? JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase())
-        : true;
-      const matchUser =
-        selectedUser === "all" ? true : log.user === selectedUser;
-      const matchZone =
-        selectedZone === "all" ? true : log.zone === selectedZone;
-      const matchStatus =
-        selectedStatus === "all" ? true : log.status === selectedStatus;
-      const matchMethod =
-        selectedMethod === "all" ? true : log.method === selectedMethod;
+      const matchSearch = searchTerm ? JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase()) : true;
+      const matchUser = selectedUser === 'all' ? true : log.user === selectedUser;
+      const matchZone = selectedZone === 'all' ? true : log.zone === selectedZone;
+      const matchStatus = selectedStatus === 'all' ? true : log.status === selectedStatus;
+      const matchMethod = selectedMethod === 'all' ? true : log.method === selectedMethod;
 
       const logDate = new Date(log.timestamp);
       const fromDateObj = dateFrom ? new Date(dateFrom) : null;
       const toDateObj = dateTo ? new Date(dateTo) : null;
 
-      const matchDate =
-        (!fromDateObj || logDate >= fromDateObj) &&
-        (!toDateObj || logDate <= toDateObj);
+      const matchDate = (!fromDateObj || logDate >= fromDateObj) && (!toDateObj || logDate <= toDateObj);
 
-      return (
-        matchSearch &&
-        matchUser &&
-        matchZone &&
-        matchStatus &&
-        matchMethod &&
-        matchDate
-      );
+      return matchSearch && matchUser && matchZone && matchStatus && matchMethod && matchDate;
     });
-  }, [
-    searchTerm,
-    selectedUser,
-    selectedZone,
-    selectedStatus,
-    selectedMethod,
-    dateFrom,
-    dateTo,
-    accessLogs,
-  ]);
+  }, [searchTerm, selectedUser, selectedZone, selectedStatus, selectedMethod, dateFrom, dateTo, accessLogs]);
 
   const sortedLogs = useMemo(() => {
     return [...filteredLogs].sort((a, b) => {
       // Implementación básica de ordenamiento para logs
-      if (logSortField === "timestamp") {
-        return logSortDirection === "asc"
+      if (logSortField === 'timestamp') {
+        return logSortDirection === 'asc'
           ? new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
           : new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       }
@@ -1255,46 +482,22 @@ export default function AdminDashboard({
   const userSummaryData = useMemo((): SummaryEntry[] => {
     // <-- ¡Añade `: SummaryEntry[]` aquí!
     // Esta lógica podría ser más compleja, es una simulación
-    return Array.from(
-      new Set((accessLogs as any[]).map((log) => log.user))
-    ).map((userName) => {
-      const userLogs = (accessLogs as any[]).filter(
-        (log) => log.user === userName
-      );
-      const successful = userLogs.filter(
-        (log) => log.status === "Successful"
-      ).length;
-      const failed = userLogs.filter((log) => log.status === "Failed").length;
+    return Array.from(new Set((accessLogs as any[]).map((log) => log.user))).map((userName) => {
+      const userLogs = (accessLogs as any[]).filter((log) => log.user === userName);
+      const successful = userLogs.filter((log) => log.status === 'Successful').length;
+      const failed = userLogs.filter((log) => log.status === 'Failed').length;
       const totalAccesses = userLogs.length;
-      const successRate =
-        totalAccesses > 0 ? (successful / totalAccesses) * 100 : 0;
-      const firstAccess =
-        userLogs.length > 0
-          ? new Date(
-              Math.min(
-                ...userLogs.map((log) => new Date(log.timestamp).getTime())
-              )
-            ).toLocaleString()
-          : "N/A";
-      const lastAccess =
-        userLogs.length > 0
-          ? new Date(
-              Math.max(
-                ...userLogs.map((log) => new Date(log.timestamp).getTime())
-              )
-            ).toLocaleString()
-          : "N/A";
-      const zoneAccesses: Record<string, number> = userLogs.reduce(
-        (acc: Record<string, number>, log) => {
-          acc[log.zone] = (acc[log.zone] || 0) + 1;
-          return acc;
-        },
-        {}
-      );
+      const successRate = totalAccesses > 0 ? (successful / totalAccesses) * 100 : 0;
+      const firstAccess = userLogs.length > 0 ? new Date(Math.min(...userLogs.map((log) => new Date(log.timestamp).getTime()))).toLocaleString() : 'N/A';
+      const lastAccess = userLogs.length > 0 ? new Date(Math.max(...userLogs.map((log) => new Date(log.timestamp).getTime()))).toLocaleString() : 'N/A';
+      const zoneAccesses: Record<string, number> = userLogs.reduce((acc: Record<string, number>, log) => {
+        acc[log.zone] = (acc[log.zone] || 0) + 1;
+        return acc;
+      }, {});
 
       return {
         user: userName,
-        email: userLogs[0]?.email || "N/A",
+        email: userLogs[0]?.email || 'N/A',
         firstAccess,
         lastAccess,
         totalAccesses,
@@ -1310,17 +513,13 @@ export default function AdminDashboard({
     return userSummaryData
       .filter((summary: SummaryEntry) => {
         // <-- ¡Añade `: SummaryEntry` aquí!
-        const matchSearch = summarySearchTerm
-          ? JSON.stringify(summary)
-              .toLowerCase()
-              .includes(summarySearchTerm.toLowerCase())
-          : true;
+        const matchSearch = summarySearchTerm ? JSON.stringify(summary).toLowerCase().includes(summarySearchTerm.toLowerCase()) : true;
         const matchStatus =
-          summaryStatusFilter === "all"
+          summaryStatusFilter === 'all'
             ? true
-            : summaryStatusFilter === "successful"
+            : summaryStatusFilter === 'successful'
             ? summary.successful > 0
-            : summaryStatusFilter === "failed"
+            : summaryStatusFilter === 'failed'
             ? summary.failed > 0
             : true;
         return matchSearch && matchStatus;
@@ -1328,55 +527,13 @@ export default function AdminDashboard({
       .sort((a: SummaryEntry, b: SummaryEntry) => {
         // <-- ¡Añade `: SummaryEntry` aquí!
         // Implementación básica de ordenamiento para el resumen
-        if (summarySortField === "user") {
-          return summarySortDirection === "asc"
-            ? a.user.localeCompare(b.user)
-            : b.user.localeCompare(a.user);
+        if (summarySortField === 'user') {
+          return summarySortDirection === 'asc' ? a.user.localeCompare(b.user) : b.user.localeCompare(a.user);
         }
         // Añadir más lógica de ordenamiento
         return 0;
       });
-  }, [
-    userSummaryData,
-    summarySortField,
-    summarySortDirection,
-    summarySearchTerm,
-    summaryStatusFilter,
-  ]);
-
-  const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => {
-      if (sortField === "name") {
-        return sortDirection === "asc"
-          ? a.name.localeCompare(b.name)
-          : b.name.localeCompare(a.name);
-      }
-      if (sortField === "email") {
-        return sortDirection === "asc"
-          ? a.email.localeCompare(b.email)
-          : b.email.localeCompare(a.email);
-      }
-      if (sortField === "role") {
-        return sortDirection === "asc"
-          ? a.role.localeCompare(b.role)
-          : b.role.localeCompare(a.role);
-      }
-      return 0;
-    });
-  }, [users, sortField, sortDirection]);
-
-  const filteredUsers = useMemo(() => {
-    return sortedUsers.filter(
-      (user) =>
-        user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
-    );
-  }, [sortedUsers, userSearchTerm]);
-
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+  }, [userSummaryData, summarySortField, summarySortDirection, summarySearchTerm, summaryStatusFilter]);
 
   const logTotalPages = Math.ceil(sortedLogs.length / logItemsPerPage);
   const logStartIndex = (logCurrentPage - 1) * logItemsPerPage;
@@ -1385,12 +542,7 @@ export default function AdminDashboard({
 
   // Mocks para sortedRecentLogs (usado en Dashboard)
   const sortedRecentLogs = useMemo(() => {
-    return (accessLogs as any[])
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )
-      .slice(0, 5);
+    return (accessLogs as any[]).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
   }, [accessLogs]);
 
   // --- Reset Pagination on Filter Change ---
@@ -1399,170 +551,20 @@ export default function AdminDashboard({
   }, [userSearchTerm, itemsPerPage]);
   useEffect(() => {
     setLogCurrentPage(1);
-  }, [
-    searchTerm,
-    selectedUser,
-    selectedZone,
-    selectedStatus,
-    selectedMethod,
-    dateFrom,
-    dateTo,
-  ]);
-
-  // --- Función handleSaveUser (Actualizada para Face-API.js y Supabase) ---
-  const handleSaveUser = async () => {
-    // Para depuración: Muestra el estado actual del formulario en la consola.
-    console.log("Save User clicked");
-    console.log("Current form state:", {
-      fullName,
-      email,
-      emailError,
-      selectedRole,
-      selectedUserStatus,
-      selectedAccessZones,
-      currentImage,
-      faceEmbedding,
-      faceDetectionError,
-    });
-
-    // Realiza validaciones en el lado del cliente antes de enviar la petición.
-    const isEmailValid = validateEmail(email);
-
-    const missingFields = [];
-    if (!fullName) missingFields.push("Full Name");
-    if (!isEmailValid) missingFields.push("Valid Email");
-    if (!selectedRole) missingFields.push("User Role");
-    if (!selectedUserStatus) missingFields.push("User Status");
-    if (selectedAccessZones.length === 0) missingFields.push("Access Zones");
-    if (!currentImage) missingFields.push("Photo");
-    if (!faceApiModelsLoaded)
-      missingFields.push("Facial recognition models not loaded");
-    if (!faceEmbedding)
-      missingFields.push(
-        "Facial Embedding (No face detected or multiple faces)"
-      );
-    if (faceDetectionError)
-      missingFields.push(`Face Detection Issue: ${faceDetectionError}`);
-
-    // Si hay campos faltantes o errores de validación, muestra un mensaje y detén la ejecución.
-    if (missingFields.length > 0) {
-      setShowStatusMessage(
-        `Error: Please fill all required fields and ensure a single face is detected. Missing: ${missingFields.join(
-          ", "
-        )}`
-      );
-      return;
-    }
-
-    // Establece el estado de guardado para deshabilitar el botón y mostrar un indicador.
-    setIsSavingUser(true);
-    setShowStatusMessage("Saving user...");
-
-    try {
-      // Prepara los datos (payload) que se enviarán a la Edge Function.
-      const payload = {
-        fullName: fullName,
-        email: email,
-        roleName: selectedRole,
-        statusName: selectedUserStatus,
-        accessZoneNames: selectedAccessZones,
-        faceEmbedding: Array.from(faceEmbedding!), // Convierte Float32Array a un Array<number> estándar para JSON.
-        profilePictureUrl: null, //imagePreview, // Envía la URL de la imagen (Base64) si existe.
-      };
-
-      // --- ¡MUY IMPORTANTE! ---
-      // REEMPLAZA 'YOUR_PROJECT_REF' con la URL de INVOKE REAL de tu Edge Function.
-      // Esta URL la obtuviste después de desplegar la función en el paso anterior.
-      // Ejemplo: https://abcdef123456.supabase.co/functions/v1/register-new-user
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/register-new-user";
-
-      // Realiza la petición POST a la Edge Function.
-      const response = await fetch(edgeFunctionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // No se necesita el encabezado Authorization si la función se desplegó con --no-verify-jwt
-          // (ya que la función usa la Service Role Key para la autenticación en BD).
-        },
-        body: JSON.stringify(payload), // Envía los datos del formulario como JSON.
-      });
-
-      // Verifica si la petición fue exitosa (código de estado 2xx).
-      if (!response.ok) {
-        const errorData = await response.json(); // Intenta parsear el error del cuerpo de la respuesta.
-        // Lanza un error con el mensaje de error de la función o un mensaje HTTP genérico.
-        throw new Error(errorData.error || `HTTP Error: ${response.status}`);
-      }
-
-      // Si la petición fue exitosa, parsea la respuesta JSON.
-      const result = await response.json();
-      // Muestra un mensaje de éxito con el ID del usuario si se devuelve.
-      setShowStatusMessage(
-        `User saved successfully! ID: ${result.userId || "N/A"}`
-      );
-      console.log("User registration successful:", result);
-
-      // Reinicia el formulario a sus valores iniciales después de un guardado exitoso.
-      setFullName("");
-      setEmail("");
-      setEmailError(null);
-      setSelectedRole("");
-      setSelectedUserStatus("Inactive"); // Restablece a 'Inactive' por defecto.
-      setSelectedAccessZones([]);
-      clearImage(); // Limpia la imagen y los estados relacionados (embedding, error de detección).
-      setFaceEmbedding(null);
-      setFaceDetectionError(null);
-    } catch (error: any) {
-      // Captura cualquier error que ocurra durante la petición o procesamiento.
-      console.error("Error during user registration:", error);
-      // Muestra un mensaje de error en la interfaz.
-      setShowStatusMessage(`Failed to save user: ${error.message}`);
-    } finally {
-      // Restablece el estado de guardado, sin importar si fue exitoso o fallido.
-      setIsSavingUser(false);
-    }
-  };
+  }, [searchTerm, selectedUser, selectedZone, selectedStatus, selectedMethod, dateFrom, dateTo]);
 
   // --- COMPONENTES AUXILIARES DE UI (Implementaciones básicas) ---
-  function RiskScoreCard({
-    score,
-    status,
-  }: {
-    score: number;
-    status: "low" | "moderate" | "high";
-  }) {
-    const statusColor =
-      status === "low"
-        ? "text-green-500"
-        : status === "moderate"
-        ? "text-yellow-500"
-        : "text-red-500";
-    const bgColor =
-      status === "low"
-        ? "bg-green-50"
-        : status === "moderate"
-        ? "bg-yellow-50"
-        : "bg-red-50";
-    const borderColor =
-      status === "low"
-        ? "border-green-200"
-        : status === "moderate"
-        ? "border-yellow-200"
-        : "border-red-200";
+  function RiskScoreCard({ score, status }: { score: number; status: 'low' | 'moderate' | 'high' }) {
+    const statusColor = status === 'low' ? 'text-green-500' : status === 'moderate' ? 'text-yellow-500' : 'text-red-500';
+    const bgColor = status === 'low' ? 'bg-green-50' : status === 'moderate' ? 'bg-yellow-50' : 'bg-red-50';
+    const borderColor = status === 'low' ? 'border-green-200' : status === 'moderate' ? 'border-yellow-200' : 'border-red-200';
 
     return (
-      <div
-        className={`rounded-xl shadow-lg p-6 flex flex-col items-center border ${borderColor} ${bgColor}`}
-      >
+      <div className={`rounded-xl shadow-lg p-6 flex flex-col items-center border ${borderColor} ${bgColor}`}>
         <Lightbulb className={`w-10 h-10 mb-2 ${statusColor}`} />
         <div className="text-sm text-gray-600 mb-1">Overall Risk Score</div>
         <div className={`text-4xl font-bold ${statusColor}`}>{score}</div>
-        <Badge
-          className={`mt-2 ${bgColor} border ${borderColor} text-gray-800`}
-        >
-          {status.charAt(0).toUpperCase() + status.slice(1)} Risk
-        </Badge>
+        <Badge className={`mt-2 ${bgColor} border ${borderColor} text-gray-800`}>{status.charAt(0).toUpperCase() + status.slice(1)} Risk</Badge>
       </div>
     );
   }
@@ -1581,16 +583,10 @@ export default function AdminDashboard({
     alert?: boolean;
   }) {
     return (
-      <div
-        className={`bg-white rounded-xl shadow-lg p-6 flex flex-col items-center ${
-          highlight ? "border-2 border-teal-500" : ""
-        }`}
-      >
+      <div className={`bg-white rounded-xl shadow-lg p-6 flex flex-col items-center ${highlight ? 'border-2 border-teal-500' : ''}`}>
         <div
           className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
-            alert
-              ? "bg-red-100 text-red-600 animate-pulse"
-              : "bg-blue-100 text-blue-600"
+            alert ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-blue-100 text-blue-600'
           }`}
         >
           {icon}
@@ -1600,38 +596,21 @@ export default function AdminDashboard({
       </div>
     );
   }
+
   function SecurityAlertCard({ count }: { count: number }) {
-    return (
-      <KpiCard
-        icon={<AlertTriangle className="w-8 h-8" />}
-        label="Active Alerts"
-        value={count}
-        alert={count > 0}
-        highlight={count > 0}
-      />
-    );
+    return <KpiCard icon={<AlertTriangle className="w-8 h-8" />} label="Active Alerts" value={count} alert={count > 0} highlight={count > 0} />;
   }
 
-  function SuspiciousUserList({
-    users,
-    onDetails,
-  }: {
-    users: any[];
-    onDetails: (user: any) => void;
-  }) {
+  function SuspiciousUserList({ users, onDetails }: { users: any[]; onDetails: (user: any) => void }) {
     return (
       <Card className="bg-white rounded-xl shadow-lg p-4">
         <div className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-red-500" /> Suspicious Activities
-          Detected
+          <AlertCircle className="w-5 h-5 text-red-500" /> Suspicious Activities Detected
         </div>
         {users.length > 0 ? (
           <ul className="space-y-3">
             {users.map((user) => (
-              <li
-                key={user.id}
-                className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200"
-              >
+              <li key={user.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
                 <div className="flex items-center">
                   <UserCircle2 className="w-6 h-6 text-red-500 mr-2" />
                   <div>
@@ -1639,32 +618,20 @@ export default function AdminDashboard({
                     <div className="text-sm text-red-600">{user.reason}</div>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onDetails(user)}
-                >
+                <Button variant="outline" size="sm" onClick={() => onDetails(user)}>
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-gray-500 text-center py-4">
-            No suspicious activities at this time.
-          </p>
+          <p className="text-gray-500 text-center py-4">No suspicious activities at this time.</p>
         )}
       </Card>
     );
   }
 
-  function AIRecommendationList({
-    recommendations,
-    onAction,
-  }: {
-    recommendations: any[];
-    onAction: (rec: any) => void;
-  }) {
+  function AIRecommendationList({ recommendations, onAction }: { recommendations: any[]; onAction: (rec: any) => void }) {
     return (
       <Card className="bg-white rounded-xl shadow-lg p-4">
         <div className="font-semibold text-lg mb-4 flex items-center gap-2">
@@ -1673,28 +640,19 @@ export default function AdminDashboard({
         {recommendations.length > 0 ? (
           <ul className="space-y-3">
             {recommendations.map((rec) => (
-              <li
-                key={rec.id}
-                className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
-              >
+              <li key={rec.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <div>
                   <div className="font-medium text-blue-800">{rec.action}</div>
                   <div className="text-sm text-blue-600">{rec.details}</div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onAction(rec)}
-                >
+                <Button variant="outline" size="sm" onClick={() => onAction(rec)}>
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-gray-500 text-center py-4">
-            No AI recommendations currently.
-          </p>
+          <p className="text-gray-500 text-center py-4">No AI recommendations currently.</p>
         )}
       </Card>
     );
@@ -1715,23 +673,10 @@ export default function AdminDashboard({
     setLogsSortField: React.Dispatch<React.SetStateAction<LogSortField>>;
     setLogsSortDirection: React.Dispatch<React.SetStateAction<SortDirection>>;
   }) {
-    // Column definition for this table specifically
-    const logColumns: Column[] = [
-      { key: "timestamp", label: "Timestamp", sortable: true },
-      { key: "user", label: "User Name", sortable: true },
-      { key: "email", label: "User Email", sortable: true },
-      { key: "role", label: "User Role", sortable: true },
-      { key: "zone", label: "Zone", sortable: true },
-      { key: "method", label: "Method", sortable: true },
-      { key: "status", label: "Status", sortable: true },
-      { key: "aiDetails", label: "AI Details", sortable: false },
-    ];
-
     return (
       <Card className="bg-white rounded-xl shadow-lg p-4">
         <div className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <FileSpreadsheet className="w-5 h-5 text-purple-500" /> Recent Access
-          Logs
+          <FileSpreadsheet className="w-5 h-5 text-purple-500" /> Recent Access Logs
         </div>
         <div className="overflow-x-auto">
           <Table>
@@ -1741,19 +686,13 @@ export default function AdminDashboard({
                   <TableHead
                     key={col.key}
                     className={`cursor-pointer hover:bg-gray-50 select-none`}
-                    onClick={() =>
-                      col.sortable && setLogsSortField(col.key as LogSortField)
-                    }
+                    onClick={() => col.sortable && setLogsSortField(col.key as LogSortField)}
                   >
                     <div className="flex items-center">
                       {col.label}
                       {col.sortable &&
                         logsSortField === col.key &&
-                        (logsSortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4 ml-1" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 ml-1" />
-                        ))}
+                        (logsSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                     </div>
                   </TableHead>
                 ))}
@@ -1763,60 +702,32 @@ export default function AdminDashboard({
               {logs.length > 0 ? (
                 logs.map((log) => (
                   <TableRow key={log.id}>
-                    <TableCell className="font-mono text-xs">
-                      {log.timestamp}
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">{log.timestamp}</TableCell>
                     <TableCell className="font-medium">{log.user}</TableCell>
                     <TableCell className="text-gray-600">{log.email}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant={log.role === "Admin" ? "default" : "secondary"}
-                      >
-                        {log.role}
-                      </Badge>
+                      <Badge variant={log.role === 'Admin' ? 'default' : 'secondary'}>{log.role}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="bg-blue-50 text-blue-700"
-                      >
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700">
                         {log.zone}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          log.method === "Facial"
-                            ? "bg-green-50 text-green-700"
-                            : "bg-orange-50 text-orange-700"
-                        }
-                      >
+                      <Badge variant="outline" className={log.method === 'Facial' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}>
                         {log.method}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={
-                          log.status === "Successful"
-                            ? "default"
-                            : "destructive"
-                        }
-                        className={
-                          log.status === "Successful"
-                            ? "bg-green-100 text-green-800"
-                            : ""
-                        }
+                        variant={log.status === 'Successful' ? 'default' : 'destructive'}
+                        className={log.status === 'Successful' ? 'bg-green-100 text-green-800' : ''}
                       >
                         {log.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onAIDetails(log)}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => onAIDetails(log)}>
                         Details
                       </Button>
                     </TableCell>
@@ -1824,10 +735,7 @@ export default function AdminDashboard({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell
-                    colSpan={logColumns.length}
-                    className="text-center py-8 text-gray-500"
-                  >
+                  <TableCell colSpan={logColumns.length} className="text-center py-8 text-gray-500">
                     No recent access logs.
                   </TableCell>
                 </TableRow>
@@ -1845,72 +753,46 @@ export default function AdminDashboard({
       data.length > 0
         ? data
         : [
-            { name: "Mon", success: 4000, failed: 2400 },
-            { name: "Tue", success: 3000, failed: 1398 },
-            { name: "Wed", success: 2000, failed: 9800 },
-            { name: "Thu", success: 2780, failed: 3908 },
-            { name: "Fri", success: 1890, failed: 4800 },
-            { name: "Sat", success: 2390, failed: 3800 },
-            { name: "Sun", success: 3490, failed: 4300 },
+            { name: 'Mon', success: 4000, failed: 2400 },
+            { name: 'Tue', success: 3000, failed: 1398 },
+            { name: 'Wed', success: 2000, failed: 9800 },
+            { name: 'Thu', success: 2780, failed: 3908 },
+            { name: 'Fri', success: 1890, failed: 4800 },
+            { name: 'Sat', success: 2390, failed: 3800 },
+            { name: 'Sun', success: 3490, failed: 4300 },
           ];
 
     return (
       <Card className="bg-white rounded-xl shadow-lg p-4">
         <div className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-green-500" /> Security Trends
-          (Weekly)
+          <TrendingUp className="w-5 h-5 text-green-500" /> Security Trends (Weekly)
         </div>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#e0e0e0"
-            />
-            <XAxis
-              dataKey="name"
-              tickLine={false}
-              axisLine={{ stroke: "#e0e0e0" }}
-            />
-            <YAxis tickLine={false} axisLine={{ stroke: "#e0e0e0" }} />
-            <RechartsTooltip cursor={{ strokeDasharray: "3 3" }} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0e0e0" />
+            <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: '#e0e0e0' }} />
+            <YAxis tickLine={false} axisLine={{ stroke: '#e0e0e0' }} />
+            <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} />
             <Legend />
-            <Line
-              type="monotone"
-              dataKey="success"
-              stroke="#22c55e"
-              strokeWidth={2}
-              dot={{ r: 4 }}
-              activeDot={{ r: 8 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="failed"
-              stroke="#ef4444"
-              strokeWidth={2}
-              dot={{ r: 4 }}
-              activeDot={{ r: 8 }}
-            />
+            <Line type="monotone" dataKey="success" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="failed" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
           </LineChart>
         </ResponsiveContainer>
-        <p className="text-xs text-gray-500 text-center mt-2">
-          Daily successful vs. failed access attempts.
-        </p>
+        <p className="text-xs text-gray-500 text-center mt-2">Daily successful vs. failed access attempts.</p>
       </Card>
     );
   }
 
-  const PIE_COLORS = ["#ef4444", "#f59e42", "#6366f1", "#a3e635"];
   function FailureCauseChart({ data }: { data: any[] }) {
     // Dummy data if actual data is not provided
     const chartData =
       data.length > 0
         ? data
         : [
-            { name: "Incorrect Face", value: 400 },
-            { name: "Access Denied", value: 300 },
-            { name: "Invalid Zone", value: 300 },
-            { name: "System Error", value: 200 },
+            { name: 'Incorrect Face', value: 400 },
+            { name: 'Access Denied', value: 300 },
+            { name: 'Invalid Zone', value: 300 },
+            { name: 'System Error', value: 200 },
           ];
 
     return (
@@ -1928,61 +810,38 @@ export default function AdminDashboard({
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"
-              label={({ name, percent }) =>
-                `${name} ${(percent * 100).toFixed(0)}%`
-              }
+              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
             >
               {chartData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={PIE_COLORS[index % PIE_COLORS.length]}
-                />
+                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
               ))}
             </Pie>
             <RechartsTooltip />
             <Legend />
           </PieChart>
         </ResponsiveContainer>
-        <p className="text-xs text-gray-500 text-center mt-2">
-          Distribution of common reasons for failed access.
-        </p>
+        <p className="text-xs text-gray-500 text-center mt-2">Distribution of common reasons for failed access.</p>
       </Card>
     );
   }
 
-  function AIDetailsModal({
-    open,
-    onClose,
-    details,
-  }: {
-    open: boolean;
-    onClose: () => void;
-    details: any;
-  }) {
+  function AIDetailsModal({ open, onClose, details }: { open: boolean; onClose: () => void; details: any }) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>AI Details</DialogTitle>
             <DialogDescription>
-              {details?.type === "user" && `Insights for user: ${details.name}`}
-              {details?.type === "log" &&
-                `Details for log entry at: ${details.timestamp}`}
-              {details?.type === "recommendation" &&
-                `Recommendation: ${details.action}`}
+              {details?.type === 'user' && `Insights for user: ${details.name}`}
+              {details?.type === 'log' && `Details for log entry at: ${details.timestamp}`}
+              {details?.type === 'recommendation' && `Recommendation: ${details.action}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 text-sm text-gray-700">
             {details &&
               Object.entries(details).map(([key, value]) => (
                 <div key={key}>
-                  <strong>
-                    {key
-                      .replace(/([A-Z])/g, " $1")
-                      .replace(/^./, (str) => str.toUpperCase())}
-                    :
-                  </strong>{" "}
-                  {JSON.stringify(value)}
+                  <strong>{key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase())}:</strong> {JSON.stringify(value)}
                 </div>
               ))}
           </div>
@@ -1994,74 +853,6 @@ export default function AdminDashboard({
     );
   }
 
-  const tabs = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "users", label: "User Management" },
-    { id: "logs", label: "Access Logs" },
-    { id: "settings", label: "Settings" },
-  ];
-
-  const columns: Column[] = [
-    { key: "photoUrl", label: "Face", sortable: false },
-    { key: "id", label: "Temporary ID", sortable: true },
-    { key: "firstSeen", label: "First Seen", sortable: true },
-    { key: "lastSeen", label: "Last Seen", sortable: true },
-    { key: "tempAccesses", label: "Temp Accesses", sortable: true },
-    { key: "accessedZones", label: "Accessed Zones", sortable: true },
-    { key: "status", label: "Status", sortable: true },
-    { key: "aiAction", label: "AI Suggested Action", sortable: true },
-    { key: "actions", label: "Admin Actions", sortable: false },
-  ];
-
-  // Mock data for users
-  const mockUsers: User[] = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john.doe@example.com",
-      role: "Admin",
-      accessZones: ["Main Entrance", "Server Room", "Office Area"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=1",
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      role: "User",
-      accessZones: ["Main Entrance", "Office Area"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=2",
-    },
-    {
-      id: 3,
-      name: "Robert Johnson",
-      email: "robert.johnson@example.com",
-      role: "User",
-      accessZones: ["Main Entrance", "Parking Lot"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=3",
-    },
-    {
-      id: 4,
-      name: "Maria Garcia",
-      email: "maria.garcia@example.com",
-      role: "Admin",
-      accessZones: [
-        "Main Entrance",
-        "Server Room",
-        "Office Area",
-        "Parking Lot",
-      ],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=4",
-    },
-    {
-      id: 5,
-      name: "David Wilson",
-      email: "david.wilson@example.com",
-      role: "User",
-      accessZones: ["Main Entrance"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=5",
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800">
       {/* Header */}
@@ -2072,16 +863,9 @@ export default function AdminDashboard({
               <div className="w-8 h-8 bg-gradient-to-br from-red-500 to-orange-500 rounded-lg flex items-center justify-center mr-3">
                 <div className="w-4 h-4 bg-white rounded opacity-90"></div>
               </div>
-              <h1 className="text-xl font-bold text-white">
-                Access Control System
-              </h1>
+              <h1 className="text-xl font-bold text-white">Access Control System</h1>
             </div>
-            <Button
-              onClick={handleLogout}
-              variant="ghost"
-              className="text-white hover:bg-white/10"
-              disabled={isLoggingOut}
-            >
+            <Button onClick={handleLogout} variant="ghost" className="text-white hover:bg-white/10" disabled={isLoggingOut}>
               {isLoggingOut ? (
                 <>Loading...</>
               ) : (
@@ -2104,9 +888,7 @@ export default function AdminDashboard({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-teal-600 text-white"
-                    : "text-white/70 hover:text-white hover:bg-white/10"
+                  activeTab === tab.id ? 'bg-teal-600 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
                 }`}
               >
                 {tab.label}
@@ -2116,24 +898,22 @@ export default function AdminDashboard({
         </div>
 
         {/* Dashboard Tab */}
-        {activeTab === "dashboard" && (
+        {activeTab === 'dashboard' && (
           <div className="space-y-8">
             {/* Secondary Tab Navigation */}
             <div className="mb-6">
               <nav className="flex space-x-6">
                 {[
-                  { id: "overview", label: "Overview" },
-                  { id: "observed", label: "Observed Users" },
-                  { id: "logs", label: "Detailed Logs" },
-                  { id: "analytics", label: "Analytics" },
+                  { id: 'overview', label: 'Overview' },
+                  { id: 'observed', label: 'Observed Users' },
+                  { id: 'logs', label: 'Detailed Logs' },
+                  { id: 'analytics', label: 'Analytics' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setDashboardTab(tab.id)}
                     className={`text-sm font-medium transition-colors duration-200 ${
-                      dashboardTab === tab.id
-                        ? "text-green-400 border-b-2 border-green-400 pb-1 font-semibold"
-                        : "text-purple-200 hover:text-purple-100"
+                      dashboardTab === tab.id ? 'text-green-400 border-b-2 border-green-400 pb-1 font-semibold' : 'text-purple-200 hover:text-purple-100'
                     }`}
                   >
                     {tab.label}
@@ -2143,39 +923,20 @@ export default function AdminDashboard({
             </div>
 
             {/* Overview Tab */}
-            {dashboardTab === "overview" && (
+            {dashboardTab === 'overview' && (
               <>
                 {/* Header / Security Executive Summary */}
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    Facial Access Control Dashboard - Security Overview
-                  </h2>
-                  <p className="text-indigo-200">
-                    AI-powered insights for proactive security management
-                  </p>
+                  <h2 className="text-3xl font-bold text-white mb-2">Facial Access Control Dashboard - Security Overview</h2>
+                  <p className="text-indigo-200">AI-powered insights for proactive security management</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                   <div className="col-span-1">
-                    <RiskScoreCard
-                      score={riskScore.score}
-                      status={riskScore.status}
-                    />
+                    <RiskScoreCard score={riskScore.score} status={riskScore.status} />
                   </div>
-                  <KpiCard
-                    icon={<Users className="w-8 h-8" />}
-                    label="Total Users"
-                    value={kpiData.totalUsers}
-                  />
-                  <KpiCard
-                    icon={<Shield className="w-8 h-8" />}
-                    label="Active Zones"
-                    value={kpiData.activeZones}
-                  />
-                  <KpiCard
-                    icon={<Zap className="w-8 h-8" />}
-                    label="Accesses Today"
-                    value={kpiData.accessesToday}
-                  />
+                  <KpiCard icon={<Users className="w-8 h-8" />} label="Total Users" value={kpiData.totalUsers} />
+                  <KpiCard icon={<Shield className="w-8 h-8" />} label="Active Zones" value={kpiData.activeZones} />
+                  <KpiCard icon={<Zap className="w-8 h-8" />} label="Accesses Today" value={kpiData.accessesToday} />
                   <SecurityAlertCard count={kpiData.activeAlerts} />
                   <KpiCard
                     icon={<AlertTriangle className="w-8 h-8 text-yellow-500" />}
@@ -2183,86 +944,50 @@ export default function AdminDashboard({
                     value={kpiData.anomalousAttempts}
                     highlight={kpiData.anomalousAttempts > 0}
                   />
-                  <KpiCard
-                    icon={<TrendingUp className="w-8 h-8" />}
-                    label="Success Rate"
-                    value={`${kpiData.successRate}%`}
-                  />
+                  <KpiCard icon={<TrendingUp className="w-8 h-8" />} label="Success Rate" value={`${kpiData.successRate}%`} />
                 </div>
                 {/* Anomalous Events & AI Suggestions */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <SuspiciousUserList
-                    users={suspiciousUsers}
-                    onDetails={setAIDetailsUser}
-                  />
-                  <AIRecommendationList
-                    recommendations={aiRecommendations}
-                    onAction={setAIRecDetails}
-                  />
+                  <SuspiciousUserList users={suspiciousUsers} onDetails={setAIDetailsUser} />
+                  <AIRecommendationList recommendations={aiRecommendations} onAction={setAIRecDetails} />
                 </div>
               </>
             )}
 
             {/* Observed Users Tab */}
-            {dashboardTab === "observed" && (
+            {dashboardTab === 'observed' && (
               <>
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    Observed Users
-                  </h2>
-                  <p className="text-indigo-200">
-                    Monitor and manage users detected by the system but not yet
-                    registered.
-                  </p>
+                  <h2 className="text-3xl font-bold text-white mb-2">Observed Users</h2>
+                  <p className="text-indigo-200">Monitor and manage users detected by the system but not yet registered.</p>
                 </div>
                 {/* KPIs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">
-                      New Observed Users (Today)
-                    </div>
+                    <div className="text-sm text-gray-600 mb-1">New Observed Users (Today)</div>
                     <div className="text-3xl font-bold text-teal-600">2</div>
                   </div>
                   <div
                     className={`rounded-xl shadow-lg p-6 flex flex-col items-center bg-white ${
-                      observedUsers.filter(
-                        (u: any) => u.status === "in_review_admin"
-                      ).length > 2
-                        ? "border-2 border-red-500 bg-red-50 animate-pulse"
-                        : ""
+                      observedUsers.filter((u: any) => u.status === 'in_review_admin').length > 2 ? 'border-2 border-red-500 bg-red-50 animate-pulse' : ''
                     }`}
                   >
-                    <div className="text-sm text-gray-600 mb-1">
-                      Observed Users Pending Review
-                    </div>
-                    <div className="text-3xl font-bold text-red-600">
-                      {
-                        observedUsers.filter(
-                          (u: any) => u.status === "in_review_admin"
-                        ).length
-                      }
-                    </div>
+                    <div className="text-sm text-gray-600 mb-1">Observed Users Pending Review</div>
+                    <div className="text-3xl font-bold text-red-600">{observedUsers.filter((u: any) => u.status === 'in_review_admin').length}</div>
                   </div>
                   <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">
-                      Observed Users (This Week)
-                    </div>
+                    <div className="text-sm text-gray-600 mb-1">Observed Users (This Week)</div>
                     <div className="text-3xl font-bold text-blue-600">5</div>
                   </div>
                   <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">
-                      Total Observed Users
-                    </div>
-                    <div className="text-3xl font-bold text-gray-800">
-                      {observedUsers.length}
-                    </div>
+                    <div className="text-sm text-gray-600 mb-1">Total Observed Users</div>
+                    <div className="text-3xl font-bold text-gray-800">{observedUsers.length}</div>
                   </div>
                 </div>
                 {/* Observed Users Table */}
                 <div className="bg-white rounded-xl shadow-lg p-4">
                   <div className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-blue-500" /> Observed Users
-                    Requiring Action
+                    <Eye className="w-5 h-5 text-blue-500" /> Observed Users Requiring Action
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
@@ -2271,22 +996,14 @@ export default function AdminDashboard({
                           {columns.map((col) => (
                             <th
                               key={col.key}
-                              className={`py-2 px-2 text-left ${
-                                col.sortable ? "cursor-pointer select-none" : ""
-                              }`}
+                              className={`py-2 px-2 text-left ${col.sortable ? 'cursor-pointer select-none' : ''}`}
                               onClick={() => {
                                 if (col.sortable) {
                                   if (observedSortField === col.key) {
-                                    setObservedSortDirection(
-                                      observedSortDirection === "asc"
-                                        ? "desc"
-                                        : "asc"
-                                    );
+                                    setObservedSortDirection(observedSortDirection === 'asc' ? 'desc' : 'asc');
                                   } else {
-                                    setObservedSortField(
-                                      col.key as ObservedUserSortField
-                                    );
-                                    setObservedSortDirection("asc");
+                                    setObservedSortField(col.key as ObservedUserSortField);
+                                    setObservedSortDirection('asc');
                                   }
                                 }
                               }}
@@ -2295,33 +1012,13 @@ export default function AdminDashboard({
                                 {col.label}
                                 {col.sortable &&
                                   observedSortField === col.key &&
-                                  (observedSortDirection === "asc" ? (
-                                    <svg
-                                      className="w-3 h-3 ml-1"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M5 15l7-7 7 7"
-                                      />
+                                  (observedSortDirection === 'asc' ? (
+                                    <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                                     </svg>
                                   ) : (
-                                    <svg
-                                      className="w-3 h-3 ml-1"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M19 9l-7 7-7-7"
-                                      />
+                                    <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                     </svg>
                                   ))}
                               </span>
@@ -2331,10 +1028,7 @@ export default function AdminDashboard({
                       </thead>
                       <tbody>
                         {sortedObservedUsers.map((u: any) => (
-                          <tr
-                            key={u.id}
-                            className="border-b hover:bg-blue-50 transition"
-                          >
+                          <tr key={u.id} className="border-b hover:bg-blue-50 transition">
                             <td className="py-2 px-2">
                               {u.photoUrl && !imageErrors[u.photoUrl] ? (
                                 <div className="relative w-8 h-8">
@@ -2342,9 +1036,7 @@ export default function AdminDashboard({
                                     src={u.photoUrl}
                                     alt={u.id}
                                     className="w-8 h-8 rounded-full object-cover"
-                                    onError={() =>
-                                      handleImageError(u.id, u.photoUrl)
-                                    }
+                                    onError={() => handleImageError(u.id, u.photoUrl)}
                                   />
                                 </div>
                               ) : (
@@ -2354,32 +1046,22 @@ export default function AdminDashboard({
                             <td className="py-2 px-2 font-mono">{u.id}</td>
                             <td className="py-2 px-2">{u.firstSeen}</td>
                             <td className="py-2 px-2">{u.lastSeen}</td>
-                            <td className="py-2 px-2 text-center">
-                              {u.tempAccesses}
-                            </td>
-                            <td className="py-2 px-2">
-                              {u.accessedZones.join(", ")}
-                            </td>
+                            <td className="py-2 px-2 text-center">{u.tempAccesses}</td>
+                            <td className="py-2 px-2">{u.accessedZones.join(', ')}</td>
                             <td className="py-2 px-2">
                               <Badge
                                 className={
-                                  u.status === "active_temporal"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : u.status === "in_review_admin"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-gray-100 text-gray-800"
+                                  u.status === 'active_temporal'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : u.status === 'in_review_admin'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-gray-100 text-gray-800'
                                 }
                               >
-                                {u.status === "active_temporal"
-                                  ? "Active (Temp)"
-                                  : u.status === "in_review_admin"
-                                  ? "Pending Review"
-                                  : "Expired"}
+                                {u.status === 'active_temporal' ? 'Active (Temp)' : u.status === 'in_review_admin' ? 'Pending Review' : 'Expired'}
                               </Badge>
                             </td>
-                            <td className="py-2 px-2 text-blue-700">
-                              {u.aiAction}
-                            </td>
+                            <td className="py-2 px-2 text-blue-700">{u.aiAction}</td>
                             <td className="py-2 px-2">
                               <div className="flex gap-1">
                                 <Button size="sm" variant="outline">
@@ -2391,11 +1073,7 @@ export default function AdminDashboard({
                                 <Button size="sm" variant="destructive">
                                   Block
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setObservedUserDetails(u)}
-                                >
+                                <Button size="sm" variant="outline" onClick={() => setObservedUserDetails(u)}>
                                   Details
                                 </Button>
                               </div>
@@ -2404,10 +1082,7 @@ export default function AdminDashboard({
                         ))}
                         {observedUsers.length === 0 && (
                           <tr>
-                            <td
-                              colSpan={9}
-                              className="text-center text-gray-400 py-4"
-                            >
+                            <td colSpan={9} className="text-center text-gray-400 py-4">
                               No observed users requiring action.
                             </td>
                           </tr>
@@ -2420,7 +1095,7 @@ export default function AdminDashboard({
             )}
 
             {/* Detailed Logs Tab */}
-            {dashboardTab === "logs" && (
+            {dashboardTab === 'logs' && (
               <AccessLogTable
                 logs={sortedRecentLogs}
                 onAIDetails={setAIDetailsLog}
@@ -2432,7 +1107,7 @@ export default function AdminDashboard({
             )}
 
             {/* Analytics Tab */}
-            {dashboardTab === "analytics" && (
+            {dashboardTab === 'analytics' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <SecurityTrendsChart data={trendData} />
                 <FailureCauseChart data={failureCauseData} />
@@ -2440,890 +1115,21 @@ export default function AdminDashboard({
             )}
 
             {/* AI Details Modals (keep these always available) */}
-            <AIDetailsModal
-              open={!!aiDetailsUser}
-              onClose={() => setAIDetailsUser(null)}
-              details={aiDetailsUser}
-            />
-            <AIDetailsModal
-              open={!!aiDetailsLog}
-              onClose={() => setAIDetailsLog(null)}
-              details={aiDetailsLog}
-            />
-            <AIDetailsModal
-              open={!!aiRecDetails}
-              onClose={() => setAIRecDetails(null)}
-              details={aiRecDetails}
-            />
+            <AIDetailsModal open={!!aiDetailsUser} onClose={() => setAIDetailsUser(null)} details={aiDetailsUser} />
+            <AIDetailsModal open={!!aiDetailsLog} onClose={() => setAIDetailsLog(null)} details={aiDetailsLog} />
+            <AIDetailsModal open={!!aiRecDetails} onClose={() => setAIRecDetails(null)} details={aiRecDetails} />
           </div>
         )}
 
         {/* User Management Tab - ENHANCED */}
-        {activeTab === "users" && (
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-3xl font-bold text-white mb-2">
-                User Management
-              </h2>
-            </div>
-
-            {/* Add New User Form - ENHANCED PHOTO UPLOAD */}
-            <Card className="bg-white shadow-lg">
-              <CardHeader>
-                <CardTitle>Add New User</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Full Name */}
-                  <div>
-                    <Label htmlFor="fullName">Full Name</Label>
-                    <Input
-                      id="fullName"
-                      placeholder="Enter full name"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Email Address with Validation */}
-                  <div>
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Enter email address"
-                      value={email}
-                      onChange={handleEmailChange}
-                      className={emailError ? "border-red-500" : ""}
-                    />
-                    {emailError && (
-                      <div className="flex items-center mt-1 text-red-500 text-sm">
-                        <X className="w-4 h-4 mr-1" />
-                        {emailError}
-                      </div>
-                    )}
-                    {email && !emailError && (
-                      <div className="flex items-center mt-1 text-green-600 text-sm">
-                        <Check className="w-4 h-4 mr-1" />
-                        Valid email format
-                      </div>
-                    )}
-                  </div>
-
-                  {/* User Role Dropdown */}
-                  <div>
-                    <Label htmlFor="userRole">User Role</Label>
-                    <Select
-                      value={selectedRole}
-                      onValueChange={setSelectedRole}
-                      // Deshabilita el Select si está cargando o si hay un error
-                      disabled={loadingRoles || !!errorRoles}
-                    >
-                      <SelectTrigger
-                        id="userRole"
-                        className="bg-slate-50 border-0 h-12"
-                      >
-                        {/* Muestra un mensaje de carga, error o el placeholder normal */}
-                        {loadingRoles ? (
-                          <SelectValue placeholder="Loading roles..." />
-                        ) : errorRoles ? (
-                          <SelectValue
-                            placeholder={`Error loading roles: ${errorRoles}`}
-                          />
-                        ) : (
-                          <SelectValue placeholder="Select role" />
-                        )}
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {/* Si hay error, mostrar un SelectItem deshabilitado con el error */}
-                          {errorRoles ? (
-                            <SelectItem value="" disabled>
-                              Error: {errorRoles}
-                            </SelectItem>
-                          ) : roles.length > 0 ? (
-                            // Mapea sobre el array 'roles' para crear los SelectItems dinámicamente
-                            roles.map((role) => (
-                              <SelectItem key={role.id} value={role.name}>
-                                {role.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            // Si no hay roles y no hay error, mostrar un mensaje "No roles available"
-                            !loadingRoles && (
-                              <SelectItem value="" disabled>
-                                No roles available
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* User Status Dropdown */}
-                  <div>
-                    <Label htmlFor="userStatus">User Status</Label>
-                    <Select
-                      value={selectedUserStatus}
-                      onValueChange={setSelectedUserStatus}
-                      disabled={loadingUserStatuses || !!errorUserStatuses} // Deshabilita si está cargando o hay error
-                    >
-                      <SelectTrigger
-                        id="userStatus"
-                        className="bg-slate-50 border-0 h-12"
-                      >
-                        <span>
-                          {
-                            loadingUserStatuses
-                              ? "Loading statuses..."
-                              : errorUserStatuses
-                              ? `Error: ${errorUserStatuses}`
-                              : selectedUserStatus // Muestra el estado seleccionado
-                              ? selectedUserStatus
-                              : "Select status" // Placeholder si no hay nada seleccionado
-                          }
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {/* Renderizar los estados de usuario dinámicamente */}
-                          {errorUserStatuses ? (
-                            <SelectItem value="" disabled>
-                              Error: {errorUserStatuses}
-                            </SelectItem>
-                          ) : userStatuses.length > 0 ? (
-                            userStatuses.map((status) => (
-                              <SelectItem key={status.id} value={status.name}>
-                                {status.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            // Mensaje si no hay estados o si hay un error persistente
-                            !loadingUserStatuses &&
-                            !errorUserStatuses && (
-                              <SelectItem value="" disabled>
-                                No statuses available
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Access Zones Multi-select */}
-                <div>
-                  <Label htmlFor="accessZones">Access Zones</Label>
-                  <Popover
-                    open={accessZonesOpen}
-                    onOpenChange={setAccessZonesOpen}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={accessZonesOpen}
-                        className="w-full justify-between bg-slate-50 border-0 h-12 text-left font-normal"
-                        disabled={loadingZones || !!errorZones}
-                      >
-                        <span>
-                          {loadingZones
-                            ? "Loading zones..."
-                            : errorZones
-                            ? `Error: ${errorZones}`
-                            : selectedAccessZones.length > 0
-                            ? `${selectedAccessZones.length} zone${
-                                selectedAccessZones.length > 1 ? "s" : ""
-                              } selected`
-                            : "Select access zones"}
-                        </span>
-                        <span className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
-                      <div className="p-2 space-y-2 max-h-[300px] overflow-auto">
-                        {errorZones ? (
-                          <div className="text-red-500 p-2">
-                            Error: {errorZones}
-                          </div>
-                        ) : loadingZones ? (
-                          <div className="text-gray-500 p-2">
-                            Loading zones...
-                          </div>
-                        ) : zonesData.length > 0 ? (
-                          zonesData.map((zone) => (
-                            <div
-                              key={zone.id}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`zone-${zone.id}`}
-                                checked={selectedAccessZones.includes(
-                                  zone.name
-                                )}
-                                onCheckedChange={() =>
-                                  toggleAccessZone(zone.name)
-                                }
-                              />
-                              <label
-                                htmlFor={`zone-${zone.id}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {zone.name}
-                              </label>
-                            </div>
-                          ))
-                        ) : (
-                          !loadingZones &&
-                          !errorZones && (
-                            <div className="p-2 text-gray-500">
-                              No zones available
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  {selectedAccessZones.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {selectedAccessZones.map((zoneName) => (
-                        <Badge
-                          key={zoneName}
-                          variant="secondary"
-                          className="bg-slate-100"
-                        >
-                          {zoneName}
-                          <button
-                            className="ml-1 hover:text-red-500"
-                            onClick={() => toggleAccessZone(zoneName)}
-                          >
-                            ×
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Enhanced Photo Upload Section with Drag & Drop */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">
-                    Upload Photo for Facial Recognition
-                  </h3>
-
-                  {/* Single file input for all photo operations */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                  />
-
-                  {!imagePreview ? (
-                    <div
-                      className={`border-2 ${
-                        isDragging
-                          ? "border-teal-500 bg-teal-50"
-                          : "border-dashed border-gray-300"
-                      } rounded-lg p-6 transition-colors`}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                    >
-                      <div className="text-center">
-                        <Upload
-                          className={`mx-auto h-12 w-12 ${
-                            isDragging ? "text-teal-500" : "text-gray-400"
-                          }`}
-                        />
-                        <div className="mt-4">
-                          <p className="text-sm text-gray-500 mb-2">
-                            Drag and drop an image here, or use one of the
-                            options below
-                          </p>
-                          <div className="flex flex-wrap justify-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="bg-slate-50"
-                              onClick={() => {
-                                console.log("Choose File clicked");
-                                fileInputRef.current?.click();
-                              }}
-                            >
-                              Choose File
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="bg-slate-50"
-                              onClick={() => setCameraOpen(true)} // Abrir el modal de CameraCapture
-                            >
-                              <Camera className="w-4 h-4 mr-2" />
-                              Take Photo
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="relative inline-block">
-                        <img
-                          src={imagePreview || "/placeholder.svg"}
-                          alt="Preview"
-                          className="w-48 h-48 object-cover rounded-lg border shadow-md"
-                        />
-                        <button
-                          onClick={clearImage}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
-                          title="Remove photo"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="bg-slate-50"
-                          onClick={() => {
-                            console.log("Replace Photo clicked");
-                            fileInputRef.current?.click();
-                          }}
-                        >
-                          <RotateCcw className="w-4 h-4 mr-2" />
-                          Replace Photo
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={clearImage}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          Remove Photo
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-500 italic">
-                        You can also drag and drop a new image to replace the
-                        current one
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Feedback de Face-API.js y Guardado */}
-                  {isProcessingImage && (
-                    <Alert className="bg-blue-50 border-blue-200">
-                      <AlertCircle className="h-4 w-4 text-blue-600" />
-                      <AlertTitle className="text-blue-800">
-                        Processing Image...
-                      </AlertTitle>
-                      <AlertDescription className="text-blue-700">
-                        Analyzing photo for face detection and embedding
-                        generation.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {faceDetectionError && (
-                    <Alert className="bg-red-50 border-red-200">
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                      <AlertTitle className="text-red-800">
-                        Facial Recognition Error
-                      </AlertTitle>
-                      <AlertDescription className="text-red-700">
-                        {faceDetectionError}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {faceEmbedding &&
-                    !faceDetectionError &&
-                    !isProcessingImage && (
-                      <Alert className="bg-green-50 border-green-200">
-                        <Check className="h-4 w-4 text-green-600" />
-                        <AlertTitle className="text-green-800">
-                          Face Detected!
-                        </AlertTitle>
-                        <AlertDescription className="text-green-700">
-                          Facial embedding successfully generated.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      <strong>Instructions:</strong> Upon saving this user, the
-                      system will automatically detect faces in the image and
-                      generate a 'facial embedding' for authentication. Ensure
-                      the image contains a clear, well-lit face.
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  className="bg-teal-600 hover:bg-teal-700"
-                  onClick={handleSaveUser}
-                  disabled={
-                    isSavingUser ||
-                    isProcessingImage ||
-                    !faceApiModelsLoaded ||
-                    !!faceDetectionError
-                  }
-                >
-                  {isSavingUser ? "Saving..." : "Save User"}
-                </Button>
-
-                {showStatusMessage && (
-                  <Alert
-                    className={
-                      showStatusMessage.startsWith("Error")
-                        ? "bg-red-50 border-red-200"
-                        : "bg-blue-50 border-blue-200"
-                    }
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="h-4 w-4 text-blue-600" />
-                        <AlertDescription
-                          className={
-                            showStatusMessage.startsWith("Error")
-                              ? "text-red-700"
-                              : "text-blue-700"
-                          }
-                        >
-                          {showStatusMessage}
-                        </AlertDescription>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowStatusMessage(null)}
-                        className="h-6 w-6 p-0 hover:bg-red-100"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Enhanced Existing Users List with Search and Pagination */}
-            <Card className="bg-white shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Existing Users</span>
-                  <div className="flex items-center space-x-2">
-                    <Search className="w-4 h-4 text-gray-400" />
-                    <Input
-                      placeholder="Search users..."
-                      value={userSearchTerm}
-                      onChange={(e) => setUserSearchTerm(e.target.value)}
-                      className="w-64"
-                    />
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSort("name")}
-                      >
-                        <div className="flex items-center">
-                          Name
-                          {sortField === "name" &&
-                            (sortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSort("email")}
-                      >
-                        <div className="flex items-center">
-                          Email
-                          {sortField === "email" &&
-                            (sortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSort("role")}
-                      >
-                        <div className="flex items-center">
-                          Role
-                          {sortField === "role" &&
-                            (sortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
-                        </div>
-                      </TableHead>
-                      <TableHead>Access Zones</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedUsers.length > 0 ? (
-                      paginatedUsers.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            {editingUserId === user.id ? (
-                              <Input
-                                value={editingUser.name}
-                                onChange={(e) =>
-                                  updateEditingUser("name", e.target.value)
-                                }
-                                className="h-8"
-                              />
-                            ) : (
-                              user.name
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {editingUserId === user.id ? (
-                              <Input
-                                value={editingUser.email}
-                                onChange={(e) =>
-                                  updateEditingUser("email", e.target.value)
-                                }
-                                className="h-8"
-                              />
-                            ) : (
-                              user.email
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {editingUserId === user.id ? (
-                              <Select
-                                value={editingUser.role}
-                                onValueChange={(value) =>
-                                  updateEditingUser("role", value)
-                                }
-                              >
-                                <SelectTrigger className="h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Admin">Admin</SelectItem>
-                                  <SelectItem value="User">User</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              user.role
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {editingUserId === user.id ? (
-                              <div>
-                                <Popover
-                                  open={editingAccessZonesOpen}
-                                  onOpenChange={setEditingAccessZonesOpen}
-                                >
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      role="combobox"
-                                      aria-expanded={editingAccessZonesOpen}
-                                      className="w-full justify-between h-8 text-left font-normal"
-                                    >
-                                      {editingAccessZones.length > 0
-                                        ? `${editingAccessZones.length} zone${
-                                            editingAccessZones.length > 1
-                                              ? "s"
-                                              : ""
-                                          }`
-                                        : "Select zones"}
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent
-                                    className="w-[200px] p-0"
-                                    align="start"
-                                  >
-                                    <div className="p-2 space-y-1 max-h-[200px] overflow-auto">
-                                      {errorZones ? (
-                                        <div className="text-red-500 p-2">
-                                          Error: {errorZones}
-                                        </div>
-                                      ) : loadingZones ? (
-                                        <div className="text-gray-500 p-2">
-                                          Loading zones...
-                                        </div>
-                                      ) : zonesData.length > 0 ? (
-                                        zonesData.map((zone) => (
-                                          <div
-                                            key={zone.id}
-                                            className="flex items-center space-x-2"
-                                          >
-                                            <Checkbox
-                                              id={`edit-zone-${zone.id}-${
-                                                editingUser?.id || ""
-                                              }`}
-                                              checked={editingAccessZones.includes(
-                                                zone.name
-                                              )}
-                                              onCheckedChange={() =>
-                                                toggleEditingAccessZone(
-                                                  zone.name
-                                                )
-                                              }
-                                            />
-                                            <label
-                                              htmlFor={`edit-zone-${zone.id}-${
-                                                editingUser?.id || ""
-                                              }`}
-                                              className="text-sm font-medium leading-none cursor-pointer"
-                                            >
-                                              {zone.name}
-                                            </label>
-                                          </div>
-                                        ))
-                                      ) : (
-                                        !loadingZones &&
-                                        !errorZones && (
-                                          <div className="p-2 text-gray-500">
-                                            No zones available
-                                          </div>
-                                        )
-                                      )}
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
-                                {editingAccessZones.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {editingAccessZones
-                                      .slice(0, 2)
-                                      .map((zone) => (
-                                        <Badge
-                                          key={zone}
-                                          variant="secondary"
-                                          className="text-xs py-0 px-1"
-                                        >
-                                          {zone}
-                                        </Badge>
-                                      ))}
-                                    {editingAccessZones.length > 2 && (
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-xs py-0 px-1"
-                                      >
-                                        +{editingAccessZones.length - 2}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                {user.accessZones.length > 2
-                                  ? `${user.accessZones
-                                      .slice(0, 2)
-                                      .join(", ")} +${
-                                      user.accessZones.length - 2
-                                    }`
-                                  : user.accessZones.join(", ")}
-                              </>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              {editingUserId === user.id ? (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={saveEditing}
-                                    className="text-green-600 hover:text-green-700"
-                                  >
-                                    <Save className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={cancelEditing}
-                                    className="text-gray-600 hover:text-gray-700"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                </>
-                              ) : (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => startEditing(user)}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => openDeleteModal(user)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={6}
-                          className="text-center py-8 text-gray-500"
-                        >
-                          {userSearchTerm
-                            ? "No users found matching your search."
-                            : "No users found."}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-
-                {/* Pagination Controls */}
-                <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">
-                      Items per page:
-                    </span>
-                    <Select
-                      value={itemsPerPage.toString()}
-                      onValueChange={(value) => setItemsPerPage(Number(value))}
-                    >
-                      <SelectTrigger className="w-20 h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5">5</SelectItem>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">
-                      Showing {startIndex + 1} to{" "}
-                      {Math.min(endIndex, filteredUsers.length)} of{" "}
-                      {filteredUsers.length} users
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentPage(Math.max(1, currentPage - 1))
-                      }
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </Button>
-
-                    <div className="flex items-center space-x-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                        (page) => (
-                          <Button
-                            key={page}
-                            variant={
-                              currentPage === page ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => setCurrentPage(page)}
-                            className={`w-8 h-8 p-0 ${
-                              currentPage === page
-                                ? "bg-teal-600 hover:bg-teal-700"
-                                : ""
-                            }`}
-                          >
-                            {page}
-                          </Button>
-                        )
-                      )}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCurrentPage(Math.min(totalPages, currentPage + 1))
-                      }
-                      disabled={currentPage === totalPages || totalPages === 0}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Enhanced Bulk Onboarding Section */}
-            <Card className="bg-white shadow-lg">
-              <CardHeader>
-                <CardTitle>Bulk Onboarding</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 mb-4">
-                  Upload a CSV file containing user data for bulk registration.
-                  The CSV must include columns for Full Name, Email Address,
-                  User Role, Job Title, Access Zones (comma-separated), and a
-                  'Photo URL' where each user's facial recognition image is
-                  publicly accessible.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    variant="outline"
-                    className="bg-slate-50"
-                    onClick={() => setBulkUploadModalOpen(true)}
-                  >
-                    <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Bulk User Upload
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="bg-slate-50"
-                    onClick={downloadCsvTemplate}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download Template CSV
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        {activeTab === 'users' && <UsersTab />}
 
         {/* Access Logs Tab - ENHANCED WITH SORTING AND PAGINATION */}
-        {activeTab === "logs" && (
+        {activeTab === 'logs' && (
           <div className="space-y-8">
             <div>
-              <h2 className="text-3xl font-bold text-white mb-2">
-                Access Logs
-              </h2>
-              <p className="text-indigo-200">
-                Detailed history of all access attempts
-              </p>
+              <h2 className="text-3xl font-bold text-white mb-2">Access Logs</h2>
+              <p className="text-indigo-200">Detailed history of all access attempts</p>
             </div>
 
             {/* Enhanced Filtering Controls */}
@@ -3331,10 +1137,7 @@ export default function AdminDashboard({
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>Filter Access Logs</span>
-                  <Button
-                    onClick={() => setSummaryModalOpen(true)}
-                    className="bg-teal-600 hover:bg-teal-700"
-                  >
+                  <Button onClick={() => setSummaryModalOpen(true)} className="bg-teal-600 hover:bg-teal-700">
                     <TrendingUp className="w-4 h-4 mr-2" />
                     View Summary
                   </Button>
@@ -3345,38 +1148,23 @@ export default function AdminDashboard({
                   {/* Date Range Filter */}
                   <div className="space-y-2">
                     <Label>From Date</Label>
-                    <Input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="bg-slate-50"
-                    />
+                    <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-slate-50" />
                   </div>
                   <div className="space-y-2">
                     <Label>To Date</Label>
-                    <Input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="bg-slate-50"
-                    />
+                    <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-slate-50" />
                   </div>
 
                   {/* User Filter */}
                   <div className="space-y-2">
                     <Label>User</Label>
-                    <Select
-                      value={selectedUser}
-                      onValueChange={setSelectedUser}
-                    >
+                    <Select value={selectedUser} onValueChange={setSelectedUser}>
                       <SelectTrigger className="bg-slate-50">
                         <SelectValue placeholder="All Users" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Users</SelectItem>
-                        {Array.from(
-                          new Set((accessLogs as any[]).map((log) => log.user))
-                        ).map((user) => (
+                        {Array.from(new Set((accessLogs as any[]).map((log) => log.user))).map((user) => (
                           <SelectItem key={user} value={user}>
                             {user}
                           </SelectItem>
@@ -3388,18 +1176,13 @@ export default function AdminDashboard({
                   {/* Zone Filter */}
                   <div className="space-y-2">
                     <Label>Access Zone</Label>
-                    <Select
-                      value={selectedZone}
-                      onValueChange={setSelectedZone}
-                    >
+                    <Select value={selectedZone} onValueChange={setSelectedZone}>
                       <SelectTrigger className="bg-slate-50">
                         <SelectValue placeholder="All Zones" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Zones</SelectItem>
-                        {Array.from(
-                          new Set((accessLogs as any[]).map((log) => log.zone))
-                        ).map((zone) => (
+                        {Array.from(new Set((accessLogs as any[]).map((log) => log.zone))).map((zone) => (
                           <SelectItem key={zone} value={zone}>
                             {zone}
                           </SelectItem>
@@ -3411,10 +1194,7 @@ export default function AdminDashboard({
                   {/* Status Filter */}
                   <div className="space-y-2">
                     <Label>Status</Label>
-                    <Select
-                      value={selectedStatus}
-                      onValueChange={setSelectedStatus}
-                    >
+                    <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                       <SelectTrigger className="bg-slate-50">
                         <SelectValue placeholder="All Status" />
                       </SelectTrigger>
@@ -3429,10 +1209,7 @@ export default function AdminDashboard({
                   {/* Method Filter */}
                   <div className="space-y-2">
                     <Label>Access Method</Label>
-                    <Select
-                      value={selectedMethod}
-                      onValueChange={setSelectedMethod}
-                    >
+                    <Select value={selectedMethod} onValueChange={setSelectedMethod}>
                       <SelectTrigger className="bg-slate-50">
                         <SelectValue placeholder="All Methods" />
                       </SelectTrigger>
@@ -3449,12 +1226,12 @@ export default function AdminDashboard({
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setDateFrom("");
-                      setDateTo("");
-                      setSelectedUser("all");
-                      setSelectedZone("all");
-                      setSelectedStatus("all");
-                      setSelectedMethod("all");
+                      setDateFrom('');
+                      setDateTo('');
+                      setSelectedUser('all');
+                      setSelectedZone('all');
+                      setSelectedStatus('all');
+                      setSelectedMethod('all');
                     }}
                   >
                     Clear Filters
@@ -3470,12 +1247,7 @@ export default function AdminDashboard({
                   <span>Access History ({sortedLogs.length} records)</span>
                   <div className="flex items-center space-x-2">
                     <Search className="w-4 h-4 text-gray-400" />
-                    <Input
-                      placeholder="Search logs..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-64"
-                    />
+                    <Input placeholder="Search logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -3484,102 +1256,53 @@ export default function AdminDashboard({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("timestamp")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('timestamp')}>
                           <div className="flex items-center">
                             Timestamp
-                            {logSortField === "timestamp" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'timestamp' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("user")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('user')}>
                           <div className="flex items-center">
                             User Name
-                            {logSortField === "user" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'user' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("email")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('email')}>
                           <div className="flex items-center">
                             User Email
-                            {logSortField === "email" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'email' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("role")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('role')}>
                           <div className="flex items-center">
                             User Role
-                            {logSortField === "role" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'role' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("zone")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('zone')}>
                           <div className="flex items-center">
                             Zone
-                            {logSortField === "zone" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'zone' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("method")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('method')}>
                           <div className="flex items-center">
                             Method
-                            {logSortField === "method" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'method' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer hover:bg-gray-50 select-none"
-                          onClick={() => handleLogSort("status")}
-                        >
+                        <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleLogSort('status')}>
                           <div className="flex items-center">
                             Status
-                            {logSortField === "status" &&
-                              (logSortDirection === "asc" ? (
-                                <ChevronUp className="w-4 h-4 ml-1" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 ml-1" />
-                              ))}
+                            {logSortField === 'status' &&
+                              (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                           </div>
                         </TableHead>
                       </TableRow>
@@ -3588,56 +1311,26 @@ export default function AdminDashboard({
                       {paginatedLogs.length > 0 ? (
                         paginatedLogs.map((log) => (
                           <TableRow key={log.id}>
-                            <TableCell className="font-mono text-sm">
-                              {log.timestamp}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {log.user}
-                            </TableCell>
-                            <TableCell className="text-gray-600">
-                              {log.email}
+                            <TableCell className="font-mono text-sm">{log.timestamp}</TableCell>
+                            <TableCell className="font-medium">{log.user}</TableCell>
+                            <TableCell className="text-gray-600">{log.email}</TableCell>
+                            <TableCell>
+                              <Badge variant={log.role === 'Admin' ? 'default' : 'secondary'}>{log.role}</Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant={
-                                  log.role === "Admin" ? "default" : "secondary"
-                                }
-                              >
-                                {log.role}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className="bg-blue-50 text-blue-700"
-                              >
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700">
                                 {log.zone}
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  log.method === "Facial"
-                                    ? "bg-green-50 text-green-700"
-                                    : "bg-orange-50 text-orange-700"
-                                }
-                              >
+                              <Badge variant="outline" className={log.method === 'Facial' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}>
                                 {log.method}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <Badge
-                                variant={
-                                  log.status === "Successful"
-                                    ? "default"
-                                    : "destructive"
-                                }
-                                className={
-                                  log.status === "Successful"
-                                    ? "bg-green-100 text-green-800"
-                                    : ""
-                                }
+                                variant={log.status === 'Successful' ? 'default' : 'destructive'}
+                                className={log.status === 'Successful' ? 'bg-green-100 text-green-800' : ''}
                               >
                                 {log.status}
                               </Badge>
@@ -3646,19 +1339,16 @@ export default function AdminDashboard({
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell
-                            colSpan={8}
-                            className="text-center py-8 text-gray-500"
-                          >
+                          <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                             {searchTerm ||
-                            selectedUser !== "all" ||
-                            selectedZone !== "all" ||
-                            selectedStatus !== "all" ||
-                            selectedMethod !== "all" ||
+                            selectedUser !== 'all' ||
+                            selectedZone !== 'all' ||
+                            selectedStatus !== 'all' ||
+                            selectedMethod !== 'all' ||
                             dateFrom ||
                             dateTo
-                              ? "No logs found matching your filters."
-                              : "No access logs found."}
+                              ? 'No logs found matching your filters.'
+                              : 'No access logs found.'}
                           </TableCell>
                         </TableRow>
                       )}
@@ -3669,15 +1359,8 @@ export default function AdminDashboard({
                 {/* Pagination Controls for Logs */}
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">
-                      Items per page:
-                    </span>
-                    <Select
-                      value={logItemsPerPage.toString()}
-                      onValueChange={(value) =>
-                        setLogItemsPerPage(Number(value))
-                      }
-                    >
+                    <span className="text-sm text-gray-600">Items per page:</span>
+                    <Select value={logItemsPerPage.toString()} onValueChange={(value) => setLogItemsPerPage(Number(value))}>
                       <SelectTrigger className="w-20 h-8">
                         <SelectValue />
                       </SelectTrigger>
@@ -3692,65 +1375,37 @@ export default function AdminDashboard({
 
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-600">
-                      Showing {logStartIndex + 1} to{" "}
-                      {Math.min(logEndIndex, sortedLogs.length)} of{" "}
-                      {sortedLogs.length} logs
+                      Showing {logStartIndex + 1} to {Math.min(logEndIndex, sortedLogs.length)} of {sortedLogs.length} logs
                     </span>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setLogCurrentPage(Math.max(1, logCurrentPage - 1))
-                      }
-                      disabled={logCurrentPage === 1}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setLogCurrentPage(Math.max(1, logCurrentPage - 1))} disabled={logCurrentPage === 1}>
                       Previous
                     </Button>
 
                     <div className="flex items-center space-x-1">
-                      {Array.from(
-                        { length: Math.min(5, logTotalPages) },
-                        (_, i) => {
-                          const page =
-                            Math.max(
-                              1,
-                              Math.min(logTotalPages - 4, logCurrentPage - 2)
-                            ) + i;
-                          return (
-                            <Button
-                              key={page}
-                              variant={
-                                logCurrentPage === page ? "default" : "outline"
-                              }
-                              size="sm"
-                              onClick={() => setLogCurrentPage(page)}
-                              className={`w-8 h-8 p-0 ${
-                                logCurrentPage === page
-                                  ? "bg-teal-600 hover:bg-teal-700"
-                                  : ""
-                              }`}
-                            >
-                              {page}
-                            </Button>
-                          );
-                        }
-                      )}
+                      {Array.from({ length: Math.min(5, logTotalPages) }, (_, i) => {
+                        const page = Math.max(1, Math.min(logTotalPages - 4, logCurrentPage - 2)) + i;
+                        return (
+                          <Button
+                            key={page}
+                            variant={logCurrentPage === page ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setLogCurrentPage(page)}
+                            className={`w-8 h-8 p-0 ${logCurrentPage === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                          >
+                            {page}
+                          </Button>
+                        );
+                      })}
                     </div>
 
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setLogCurrentPage(
-                          Math.min(logTotalPages, logCurrentPage + 1)
-                        )
-                      }
-                      disabled={
-                        logCurrentPage === logTotalPages || logTotalPages === 0
-                      }
+                      onClick={() => setLogCurrentPage(Math.min(logTotalPages, logCurrentPage + 1))}
+                      disabled={logCurrentPage === logTotalPages || logTotalPages === 0}
                     >
                       Next
                     </Button>
@@ -3762,13 +1417,11 @@ export default function AdminDashboard({
         )}
 
         {/* Settings Tab */}
-        {activeTab === "settings" && (
+        {activeTab === 'settings' && (
           <div className="space-y-8">
             <div>
               <h2 className="text-3xl font-bold text-white mb-2">Settings</h2>
-              <p className="text-indigo-200">
-                System configuration and management
-              </p>
+              <p className="text-indigo-200">System configuration and management</p>
             </div>
 
             <Card className="bg-white shadow-lg">
@@ -3776,11 +1429,7 @@ export default function AdminDashboard({
                 <CardTitle>System Configuration</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <Tabs
-                  defaultValue="zones"
-                  value={activeSettingsTab}
-                  onValueChange={setActiveSettingsTab}
-                >
+                <Tabs defaultValue="zones" value={activeSettingsTab} onValueChange={setActiveSettingsTab}>
                   <TabsList className="mb-4">
                     <TabsTrigger value="zones">Zone Management</TabsTrigger>
                     <TabsTrigger value="cameras">Camera Management</TabsTrigger>
@@ -3789,21 +1438,16 @@ export default function AdminDashboard({
                   {/* Zone Management Tab */}
                   <TabsContent value="zones" className="space-y-6">
                     <div>
-                      <h3 className="text-lg font-semibold mb-4">
-                        Zone Management
-                      </h3>
+                      <h3 className="text-lg font-semibold mb-4">Zone Management</h3>
                       <p className="text-gray-600 mb-4">
-                        Define and manage access zones for your facility. Each
-                        zone can have multiple cameras assigned to it.
+                        Define and manage access zones for your facility. Each zone can have multiple cameras assigned to it.
                       </p>
                     </div>
 
                     {/* Add New Zone Form */}
                     <Card>
                       <CardHeader>
-                        <CardTitle className="text-base">
-                          Add New Zone
-                        </CardTitle>
+                        <CardTitle className="text-base">Add New Zone</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="flex gap-4">
@@ -3818,11 +1462,7 @@ export default function AdminDashboard({
                             />
                           </div>
                           <div className="flex items-end">
-                            <Button
-                              onClick={handleAddZone}
-                              className="bg-teal-600 hover:bg-teal-700"
-                              disabled={!newZoneName.trim()}
-                            >
+                            <Button onClick={handleAddZone} className="bg-teal-600 hover:bg-teal-700" disabled={!newZoneName.trim()}>
                               Add Zone
                             </Button>
                           </div>
@@ -3833,18 +1473,14 @@ export default function AdminDashboard({
                     {/* Existing Zones Table */}
                     <Card>
                       <CardHeader>
-                        <CardTitle className="text-base">
-                          Existing Zones
-                        </CardTitle>
+                        <CardTitle className="text-base">Existing Zones</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Zone Name</TableHead>
-                              <TableHead className="w-[200px]">
-                                Actions
-                              </TableHead>
+                              <TableHead className="w-[200px]">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -3853,13 +1489,7 @@ export default function AdminDashboard({
                                 <TableRow key={zone.id}>
                                   <TableCell>
                                     {editingZoneId === zone.id ? (
-                                      <Input
-                                        value={editingZoneName}
-                                        onChange={(e) =>
-                                          setEditingZoneName(e.target.value)
-                                        }
-                                        className="h-8"
-                                      />
+                                      <Input value={editingZoneName} onChange={(e) => setEditingZoneName(e.target.value)} className="h-8" />
                                     ) : (
                                       zone.name
                                     )}
@@ -3877,32 +1507,19 @@ export default function AdminDashboard({
                                           >
                                             <Save className="w-4 h-4" />
                                           </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={cancelEditingZone}
-                                            className="text-gray-600 hover:text-gray-700"
-                                          >
+                                          <Button size="sm" variant="outline" onClick={cancelEditingZone} className="text-gray-600 hover:text-gray-700">
                                             <X className="w-4 h-4" />
                                           </Button>
                                         </>
                                       ) : (
                                         <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                              startEditingZone(zone)
-                                            }
-                                          >
+                                          <Button size="sm" variant="outline" onClick={() => startEditingZone(zone)}>
                                             <Edit className="w-4 h-4" />
                                           </Button>
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() =>
-                                              openZoneDeleteModal(zone)
-                                            }
+                                            onClick={() => openZoneDeleteModal(zone)}
                                             className="text-red-600 hover:text-red-700"
                                           >
                                             <Trash2 className="w-4 h-4" />
@@ -3915,10 +1532,7 @@ export default function AdminDashboard({
                               ))
                             ) : (
                               <TableRow>
-                                <TableCell
-                                  colSpan={2}
-                                  className="text-center py-8 text-gray-500"
-                                >
+                                <TableCell colSpan={2} className="text-center py-8 text-gray-500">
                                   No zones defined. Add your first zone above.
                                 </TableCell>
                               </TableRow>
@@ -3932,21 +1546,14 @@ export default function AdminDashboard({
                   {/* Camera Management Tab */}
                   <TabsContent value="cameras" className="space-y-6">
                     <div>
-                      <h3 className="text-lg font-semibold mb-4">
-                        Camera Management
-                      </h3>
-                      <p className="text-gray-600 mb-4">
-                        Manage cameras and assign them to specific access zones.
-                        Each camera can be assigned to one zone.
-                      </p>
+                      <h3 className="text-lg font-semibold mb-4">Camera Management</h3>
+                      <p className="text-gray-600 mb-4">Manage cameras and assign them to specific access zones. Each camera can be assigned to one zone.</p>
                     </div>
 
                     {/* Add New Camera Form */}
                     <Card>
                       <CardHeader>
-                        <CardTitle className="text-base">
-                          Add New Camera
-                        </CardTitle>
+                        <CardTitle className="text-base">Add New Camera</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -3967,16 +1574,8 @@ export default function AdminDashboard({
                           </div>
                           <div>
                             <Label htmlFor="cameraZone">Zone</Label>
-                            <Select
-                              value={newCamera.zone}
-                              onValueChange={(value) =>
-                                setNewCamera({ ...newCamera, zone: value })
-                              }
-                            >
-                              <SelectTrigger
-                                id="cameraZone"
-                                className="bg-slate-50"
-                              >
+                            <Select value={newCamera.zone} onValueChange={(value) => setNewCamera({ ...newCamera, zone: value })}>
+                              <SelectTrigger id="cameraZone" className="bg-slate-50">
                                 <SelectValue placeholder="Select zone" />
                               </SelectTrigger>
                               <SelectContent>
@@ -3989,9 +1588,7 @@ export default function AdminDashboard({
                             </Select>
                           </div>
                           <div>
-                            <Label htmlFor="cameraLocation">
-                              Location (Optional)
-                            </Label>
+                            <Label htmlFor="cameraLocation">Location (Optional)</Label>
                             <Input
                               id="cameraLocation"
                               placeholder="Describe camera location"
@@ -4006,11 +1603,7 @@ export default function AdminDashboard({
                             />
                           </div>
                         </div>
-                        <Button
-                          onClick={handleAddCamera}
-                          className="bg-teal-600 hover:bg-teal-700"
-                          disabled={!newCamera.name.trim() || !newCamera.zone}
-                        >
+                        <Button onClick={handleAddCamera} className="bg-teal-600 hover:bg-teal-700" disabled={!newCamera.name.trim() || !newCamera.zone}>
                           Add Camera
                         </Button>
                       </CardContent>
@@ -4019,9 +1612,7 @@ export default function AdminDashboard({
                     {/* Existing Cameras Table */}
                     <Card>
                       <CardHeader>
-                        <CardTitle className="text-base">
-                          Existing Cameras
-                        </CardTitle>
+                        <CardTitle className="text-base">Existing Cameras</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <Table>
@@ -4030,9 +1621,7 @@ export default function AdminDashboard({
                               <TableHead>Camera Name</TableHead>
                               <TableHead>Zone</TableHead>
                               <TableHead>Location</TableHead>
-                              <TableHead className="w-[200px]">
-                                Actions
-                              </TableHead>
+                              <TableHead className="w-[200px]">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -4071,21 +1660,15 @@ export default function AdminDashboard({
                                         </SelectTrigger>
                                         <SelectContent>
                                           {zones.map((zone) => (
-                                            <SelectItem
-                                              key={zone.id}
-                                              value={zone.name}
-                                            >
+                                            <SelectItem key={zone.id} value={zone.name}>
                                               {zone.name}
                                             </SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
                                     ) : (
-                                      <Badge
-                                        variant="outline"
-                                        className="bg-blue-50 text-blue-700"
-                                      >
-                                        {camera.zone || "Unassigned"}
+                                      <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                                        {camera.zone || 'Unassigned'}
                                       </Badge>
                                     )}
                                   </TableCell>
@@ -4102,7 +1685,7 @@ export default function AdminDashboard({
                                         className="h-8"
                                       />
                                     ) : (
-                                      camera.location || "-"
+                                      camera.location || '-'
                                     )}
                                   </TableCell>
                                   <TableCell>
@@ -4114,39 +1697,23 @@ export default function AdminDashboard({
                                             variant="outline"
                                             onClick={saveEditingCamera}
                                             className="text-green-600 hover:text-green-700"
-                                            disabled={
-                                              !editingCamera.name.trim() ||
-                                              !editingCamera.zone
-                                            }
+                                            disabled={!editingCamera.name.trim() || !editingCamera.zone}
                                           >
                                             <Save className="w-4 h-4" />
                                           </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={cancelEditingCamera}
-                                            className="text-gray-600 hover:text-gray-700"
-                                          >
+                                          <Button size="sm" variant="outline" onClick={cancelEditingCamera} className="text-gray-600 hover:text-gray-700">
                                             <X className="w-4 h-4" />
                                           </Button>
                                         </>
                                       ) : (
                                         <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                              startEditingCamera(camera)
-                                            }
-                                          >
+                                          <Button size="sm" variant="outline" onClick={() => startEditingCamera(camera)}>
                                             <Edit className="w-4 h-4" />
                                           </Button>
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() =>
-                                              openCameraDeleteModal(camera)
-                                            }
+                                            onClick={() => openCameraDeleteModal(camera)}
                                             className="text-red-600 hover:text-red-700"
                                           >
                                             <Trash2 className="w-4 h-4" />
@@ -4159,12 +1726,8 @@ export default function AdminDashboard({
                               ))
                             ) : (
                               <TableRow>
-                                <TableCell
-                                  colSpan={4}
-                                  className="text-center py-8 text-gray-500"
-                                >
-                                  No cameras defined. Add your first camera
-                                  above.
+                                <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                                  No cameras defined. Add your first camera above.
                                 </TableCell>
                               </TableRow>
                             )}
@@ -4195,20 +1758,14 @@ export default function AdminDashboard({
           <DialogHeader>
             <DialogTitle>Confirm Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete{" "}
-              <strong>{userToDelete?.name}</strong>? This action cannot be
-              undone.
+              Are you sure you want to delete <strong>{userToDelete?.name}</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={cancelDelete}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
               Confirm Delete
             </Button>
           </DialogFooter>
@@ -4221,105 +1778,65 @@ export default function AdminDashboard({
           <DialogHeader>
             <DialogTitle>Bulk User Upload</DialogTitle>
             <DialogDescription>
-              Upload a CSV file containing user data for bulk registration. The
-              CSV must include columns for Full Name, Email Address, User Role,
-              Job Title, Access Zones (comma-separated), and a 'Photo URL'.
+              Upload a CSV file containing user data for bulk registration. The CSV must include columns for Full Name, Email Address, User Role, Job Title,
+              Access Zones (comma-separated), and a 'Photo URL'.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {uploadStatus === "idle" ? (
+            {uploadStatus === 'idle' ? (
               <div
-                className={`border-2 ${
-                  csvIsDragging
-                    ? "border-teal-500 bg-teal-50"
-                    : "border-dashed border-gray-300"
-                } rounded-lg p-6 transition-colors`}
+                className={`border-2 ${csvIsDragging ? 'border-teal-500 bg-teal-50' : 'border-dashed border-gray-300'} rounded-lg p-6 transition-colors`}
                 onDragOver={handleCsvDragOver}
                 onDragLeave={handleCsvDragLeave}
                 onDrop={handleCsvDrop}
               >
                 <div className="text-center">
-                  <FileSpreadsheet
-                    className={`mx-auto h-12 w-12 ${
-                      csvIsDragging ? "text-teal-500" : "text-gray-400"
-                    }`}
-                  />
+                  <FileSpreadsheet className={`mx-auto h-12 w-12 ${csvIsDragging ? 'text-teal-500' : 'text-gray-400'}`} />
                   <div className="mt-4">
-                    <p className="text-sm text-gray-500 mb-2">
-                      Drag and drop a CSV file here, or click to select a file
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-slate-50"
-                      onClick={() => csvFileInputRef.current?.click()}
-                    >
+                    <p className="text-sm text-gray-500 mb-2">Drag and drop a CSV file here, or click to select a file</p>
+                    <Button type="button" variant="outline" className="bg-slate-50" onClick={() => csvFileInputRef.current?.click()}>
                       Choose CSV File
                     </Button>
-                    <input
-                      ref={csvFileInputRef}
-                      type="file"
-                      accept=".csv"
-                      className="hidden"
-                      onChange={handleCsvUpload}
-                    />
+                    <input ref={csvFileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
                   </div>
                 </div>
               </div>
-            ) : uploadStatus === "processing" ? (
+            ) : uploadStatus === 'processing' ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
                 <p className="text-gray-600">{uploadMessage}</p>
               </div>
-            ) : uploadStatus === "success" ? (
+            ) : uploadStatus === 'success' ? (
               <Alert className="bg-green-50 border-green-200">
                 <Check className="h-4 w-4 text-green-600" />
                 <AlertTitle className="text-green-800">Success</AlertTitle>
-                <AlertDescription className="text-green-700">
-                  {uploadMessage}
-                </AlertDescription>
+                <AlertDescription className="text-green-700">{uploadMessage}</AlertDescription>
               </Alert>
             ) : (
               <Alert className="bg-red-50 border-red-200">
                 <AlertCircle className="h-4 w-4 text-red-600" />
                 <AlertTitle className="text-red-800">Error</AlertTitle>
-                <AlertDescription className="text-red-700">
-                  {uploadMessage}
-                </AlertDescription>
+                <AlertDescription className="text-red-700">{uploadMessage}</AlertDescription>
               </Alert>
             )}
 
-            {selectedCsvFile && uploadStatus === "idle" && (
+            {selectedCsvFile && uploadStatus === 'idle' && (
               <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-md">
                 <FileSpreadsheet className="h-5 w-5 text-teal-600" />
-                <span className="text-sm font-medium truncate">
-                  {selectedCsvFile.name}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearCsvFile}
-                  className="ml-auto h-6 w-6 p-0 hover:bg-red-100"
-                >
+                <span className="text-sm font-medium truncate">{selectedCsvFile.name}</span>
+                <Button variant="ghost" size="sm" onClick={clearCsvFile} className="ml-auto h-6 w-6 p-0 hover:bg-red-100">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             )}
 
             <div className="flex flex-col gap-2">
-              <Button
-                variant="outline"
-                className="bg-slate-50"
-                onClick={downloadCsvTemplate}
-              >
+              <Button variant="outline" className="bg-slate-50" onClick={downloadCsvTemplate}>
                 <Download className="w-4 h-4 mr-2" />
                 Download Template CSV
               </Button>
-              <p className="text-xs text-gray-500">
-                Download a template CSV file with the required headers for bulk
-                upload.
-              </p>
+              <p className="text-xs text-gray-500">Download a template CSV file with the required headers for bulk upload.</p>
             </div>
           </div>
 
@@ -4329,17 +1846,13 @@ export default function AdminDashboard({
               onClick={() => {
                 setBulkUploadModalOpen(false);
                 setSelectedCsvFile(null);
-                setUploadStatus("idle");
+                setUploadStatus('idle');
               }}
-              disabled={uploadStatus === "processing"}
+              disabled={uploadStatus === 'processing'}
             >
               Cancel
             </Button>
-            <Button
-              onClick={processBulkUpload}
-              className="bg-teal-600 hover:bg-teal-700"
-              disabled={!selectedCsvFile || uploadStatus === "processing"}
-            >
+            <Button onClick={processBulkUpload} className="bg-teal-600 hover:bg-teal-700" disabled={!selectedCsvFile || uploadStatus === 'processing'}>
               Process Upload
             </Button>
           </DialogFooter>
@@ -4351,10 +1864,7 @@ export default function AdminDashboard({
         <DialogContent className="sm:max-w-6xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Access Summary & Insights</DialogTitle>
-            <DialogDescription>
-              Daily access summary for all users (Today:{" "}
-              {new Date().toLocaleDateString()})
-            </DialogDescription>
+            <DialogDescription>Daily access summary for all users (Today: {new Date().toLocaleDateString()})</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
@@ -4363,15 +1873,7 @@ export default function AdminDashboard({
               <Card>
                 <CardContent className="p-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-teal-600">
-                      {
-                        Array.from(
-                          new Set(
-                            (accessLogs as any[]).map((log: any) => log.user)
-                          )
-                        ).length
-                      }
-                    </p>
+                    <p className="text-2xl font-bold text-teal-600">{Array.from(new Set((accessLogs as any[]).map((log: any) => log.user))).length}</p>
                     <p className="text-sm text-gray-600">Active Users</p>
                   </div>
                 </CardContent>
@@ -4379,13 +1881,7 @@ export default function AdminDashboard({
               <Card>
                 <CardContent className="p-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">
-                      {
-                        (accessLogs as any[]).filter(
-                          (log: any) => log.status === "Successful"
-                        ).length
-                      }
-                    </p>
+                    <p className="text-2xl font-bold text-green-600">{(accessLogs as any[]).filter((log: any) => log.status === 'Successful').length}</p>
                     <p className="text-sm text-gray-600">Successful</p>
                   </div>
                 </CardContent>
@@ -4393,13 +1889,7 @@ export default function AdminDashboard({
               <Card>
                 <CardContent className="p-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-red-600">
-                      {
-                        (accessLogs as any[]).filter(
-                          (log: any) => log.status === "Failed"
-                        ).length
-                      }
-                    </p>
+                    <p className="text-2xl font-bold text-red-600">{(accessLogs as any[]).filter((log: any) => log.status === 'Failed').length}</p>
                     <p className="text-sm text-gray-600">Failed</p>
                   </div>
                 </CardContent>
@@ -4407,15 +1897,7 @@ export default function AdminDashboard({
               <Card>
                 <CardContent className="p-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-blue-600">
-                      {
-                        Array.from(
-                          new Set(
-                            (accessLogs as any[]).map((log: any) => log.zone)
-                          )
-                        ).length
-                      }
-                    </p>
+                    <p className="text-2xl font-bold text-blue-600">{Array.from(new Set((accessLogs as any[]).map((log: any) => log.zone))).length}</p>
                     <p className="text-sm text-gray-600">Zones Accessed</p>
                   </div>
                 </CardContent>
@@ -4446,21 +1928,14 @@ export default function AdminDashboard({
                   </div>
                   <div className="space-y-2">
                     <Label>Filter by Status</Label>
-                    <Select
-                      value={summaryStatusFilter}
-                      onValueChange={setSummaryStatusFilter}
-                    >
+                    <Select value={summaryStatusFilter} onValueChange={setSummaryStatusFilter}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Users" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Users</SelectItem>
-                        <SelectItem value="successful">
-                          Users with Successful Access
-                        </SelectItem>
-                        <SelectItem value="failed">
-                          Users with Failed Access
-                        </SelectItem>
+                        <SelectItem value="successful">Users with Successful Access</SelectItem>
+                        <SelectItem value="failed">Users with Failed Access</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -4468,8 +1943,8 @@ export default function AdminDashboard({
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setSummarySearchTerm("");
-                        setSummaryStatusFilter("all");
+                        setSummarySearchTerm('');
+                        setSummaryStatusFilter('all');
                       }}
                     >
                       Clear Filters
@@ -4481,95 +1956,51 @@ export default function AdminDashboard({
 
             {/* Enhanced Per-User Summary with Sorting */}
             <div>
-              <h3 className="text-lg font-semibold mb-4">
-                User Access Summary ({filteredSummaryData.length} users)
-              </h3>
+              <h3 className="text-lg font-semibold mb-4">User Access Summary ({filteredSummaryData.length} users)</h3>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSummarySort("user")}
-                      >
+                      <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('user')}>
                         <div className="flex items-center">
                           User
-                          {summarySortField === "user" &&
-                            (summarySortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
+                          {summarySortField === 'user' &&
+                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSummarySort("email")}
-                      >
+                      <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('email')}>
                         <div className="flex items-center">
                           Email
-                          {summarySortField === "email" &&
-                            (summarySortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
+                          {summarySortField === 'email' &&
+                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSummarySort("firstAccess")}
-                      >
+                      <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('firstAccess')}>
                         <div className="flex items-center">
                           First Access
-                          {summarySortField === "firstAccess" &&
-                            (summarySortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
+                          {summarySortField === 'firstAccess' &&
+                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSummarySort("lastAccess")}
-                      >
+                      <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('lastAccess')}>
                         <div className="flex items-center">
                           Last Access
-                          {summarySortField === "lastAccess" &&
-                            (summarySortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
+                          {summarySortField === 'lastAccess' &&
+                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSummarySort("totalAccesses")}
-                      >
+                      <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('totalAccesses')}>
                         <div className="flex items-center">
                           Total Accesses
-                          {summarySortField === "totalAccesses" &&
-                            (summarySortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
+                          {summarySortField === 'totalAccesses' &&
+                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-gray-50 select-none"
-                        onClick={() => handleSummarySort("successRate")}
-                      >
+                      <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('successRate')}>
                         <div className="flex items-center">
                           Success Rate
-                          {summarySortField === "successRate" &&
-                            (summarySortDirection === "asc" ? (
-                              <ChevronUp className="w-4 h-4 ml-1" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 ml-1" />
-                            ))}
+                          {summarySortField === 'successRate' &&
+                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead>Success/Failed</TableHead>
@@ -4580,36 +2011,16 @@ export default function AdminDashboard({
                     {filteredSummaryData.length > 0 ? (
                       filteredSummaryData.map((summary: any) => (
                         <TableRow key={summary.user}>
-                          <TableCell className="font-medium">
-                            {summary.user}
-                          </TableCell>
-                          <TableCell className="text-gray-600">
-                            {summary.email}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {summary.firstAccess}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {summary.lastAccess}
-                          </TableCell>
-                          <TableCell className="text-center font-medium">
-                            {summary.totalAccesses}
-                          </TableCell>
+                          <TableCell className="font-medium">{summary.user}</TableCell>
+                          <TableCell className="text-gray-600">{summary.email}</TableCell>
+                          <TableCell className="font-mono text-sm">{summary.firstAccess}</TableCell>
+                          <TableCell className="font-mono text-sm">{summary.lastAccess}</TableCell>
+                          <TableCell className="text-center font-medium">{summary.totalAccesses}</TableCell>
                           <TableCell className="text-center">
                             <Badge
-                              variant={
-                                summary.successRate >= 80
-                                  ? "default"
-                                  : summary.successRate >= 50
-                                  ? "secondary"
-                                  : "destructive"
-                              }
+                              variant={summary.successRate >= 80 ? 'default' : summary.successRate >= 50 ? 'secondary' : 'destructive'}
                               className={
-                                summary.successRate >= 80
-                                  ? "bg-green-100 text-green-800"
-                                  : summary.successRate >= 50
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : ""
+                                summary.successRate >= 80 ? 'bg-green-100 text-green-800' : summary.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' : ''
                               }
                             >
                               {summary.successRate}%
@@ -4617,10 +2028,7 @@ export default function AdminDashboard({
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              <Badge
-                                variant="default"
-                                className="bg-green-100 text-green-800 text-xs"
-                              >
+                              <Badge variant="default" className="bg-green-100 text-green-800 text-xs">
                                 ✓ {summary.successful}
                               </Badge>
                               <Badge variant="destructive" className="text-xs">
@@ -4630,17 +2038,8 @@ export default function AdminDashboard({
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
-                              {(
-                                Object.entries(summary.zoneAccesses) as [
-                                  string,
-                                  number
-                                ][]
-                              ).map(([zone, count]) => (
-                                <Badge
-                                  key={zone}
-                                  variant="outline"
-                                  className="bg-blue-50 text-blue-700 text-xs"
-                                >
+                              {(Object.entries(summary.zoneAccesses) as [string, number][]).map(([zone, count]) => (
+                                <Badge key={zone} variant="outline" className="bg-blue-50 text-blue-700 text-xs">
                                   {zone}: {count}
                                 </Badge>
                               ))}
@@ -4650,13 +2049,8 @@ export default function AdminDashboard({
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell
-                          colSpan={8}
-                          className="text-center py-8 text-gray-500"
-                        >
-                          {summarySearchTerm || summaryStatusFilter !== "all"
-                            ? "No users found matching your filters."
-                            : "No user data available."}
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                          {summarySearchTerm || summaryStatusFilter !== 'all' ? 'No users found matching your filters.' : 'No user data available.'}
                         </TableCell>
                       </TableRow>
                     )}
@@ -4667,10 +2061,7 @@ export default function AdminDashboard({
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSummaryModalOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setSummaryModalOpen(false)}>
               Close
             </Button>
           </DialogFooter>
@@ -4683,14 +2074,9 @@ export default function AdminDashboard({
           <DialogHeader>
             <DialogTitle>Confirm Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the zone{" "}
-              <strong>{zoneToDelete?.name}</strong>? This action cannot be
-              undone.
+              Are you sure you want to delete the zone <strong>{zoneToDelete?.name}</strong>? This action cannot be undone.
               {cameras.some((camera) => camera.zone === zoneToDelete?.name) && (
-                <div className="mt-2 text-red-600">
-                  Warning: This zone has cameras assigned to it. Deleting this
-                  zone will unassign these cameras.
-                </div>
+                <div className="mt-2 text-red-600">Warning: This zone has cameras assigned to it. Deleting this zone will unassign these cameras.</div>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -4698,11 +2084,7 @@ export default function AdminDashboard({
             <Button variant="outline" onClick={cancelZoneDelete}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmZoneDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={confirmZoneDelete} className="bg-red-600 hover:bg-red-700">
               Confirm Delete
             </Button>
           </DialogFooter>
@@ -4710,28 +2092,19 @@ export default function AdminDashboard({
       </Dialog>
 
       {/* Camera Delete Confirmation Modal */}
-      <Dialog
-        open={cameraDeleteModalOpen}
-        onOpenChange={setCameraDeleteModalOpen}
-      >
+      <Dialog open={cameraDeleteModalOpen} onOpenChange={setCameraDeleteModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Confirm Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the camera{" "}
-              <strong>{cameraToDelete?.name}</strong>? This action cannot be
-              undone.
+              Are you sure you want to delete the camera <strong>{cameraToDelete?.name}</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={cancelCameraDelete}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmCameraDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={confirmCameraDelete} className="bg-red-600 hover:bg-red-700">
               Confirm Delete
             </Button>
           </DialogFooter>
@@ -4739,10 +2112,7 @@ export default function AdminDashboard({
       </Dialog>
 
       {/* Observed User Details Modal */}
-      <Dialog
-        open={!!observedUserDetails}
-        onOpenChange={() => setObservedUserDetails(null)}
-      >
+      <Dialog open={!!observedUserDetails} onOpenChange={() => setObservedUserDetails(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Observed User Details</DialogTitle>
@@ -4758,24 +2128,19 @@ export default function AdminDashboard({
               <strong>Last Seen:</strong> {observedUserDetails?.lastSeen}
             </div>
             <div>
-              <strong>Temp Accesses:</strong>{" "}
-              {observedUserDetails?.tempAccesses}
+              <strong>Temp Accesses:</strong> {observedUserDetails?.tempAccesses}
             </div>
             <div>
-              <strong>Accessed Zones:</strong>{" "}
-              {observedUserDetails?.accessedZones?.join(", ")}
+              <strong>Accessed Zones:</strong> {observedUserDetails?.accessedZones?.join(', ')}
             </div>
             <div>
               <strong>Status:</strong> {observedUserDetails?.status}
             </div>
             <div>
-              <strong>AI Suggested Action:</strong>{" "}
-              {observedUserDetails?.aiAction}
+              <strong>AI Suggested Action:</strong> {observedUserDetails?.aiAction}
             </div>
             <div className="mt-2 text-blue-700">
-              <strong>AI Insights:</strong> This user was detected by the system
-              but is not yet registered. Please review and take appropriate
-              action.
+              <strong>AI Insights:</strong> This user was detected by the system but is not yet registered. Please review and take appropriate action.
             </div>
           </div>
           <DialogFooter>
