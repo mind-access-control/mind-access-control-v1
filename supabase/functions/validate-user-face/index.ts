@@ -11,20 +11,13 @@ interface ItemWithNameAndId {
   name: string;
 }
 
-// Nota: user_zone_access no es una tabla separada que consultamos, sino la columna JSONB
-// de 'zones_accessed_details' de la vista que contendrá un array de objetos { id, name }.
-// Por lo tanto, la interfaz 'AccessZoneEntry' ya no es directamente necesaria para 'select'.
-// Sin embargo, la mantendremos para consistencia con 'zones_accessed_details'.
-// La estructura que llega de la vista será directamente ItemWithNameAndId[] para zones_accessed_details.
-
 // Interfaz para la respuesta de Supabase ALINEADA CON LA VISTA SQL.
 interface SupabaseUserResponse {
   id: string;
   full_name: string;
-  // Estos ahora son objetos directos, no arrays, porque la vista los construye así.
   role_details: ItemWithNameAndId | null;
-  status_details: ItemWithNameAndId | null; // Puede ser null si el JOIN es LEFT y no hay match
-  zones_accessed_details: ItemWithNameAndId[]; // La vista ya lo construirá como un array de objetos
+  status_details: ItemWithNameAndId | null;
+  zones_accessed_details: ItemWithNameAndId[];
 }
 
 interface ObservedUserFromDB {
@@ -112,7 +105,7 @@ function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
 
 // Define los umbrales de similitud.
 const USER_MATCH_THRESHOLD_DISTANCE = 0.5; // Para usuarios registrados (Umbral de distancia: menor es mejor)
-const OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE = 0.5; // Para usuarios observados (Umbral de distancia: más estricto)
+const OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE = 0.35; // Para usuarios observados (Umbral de distancia: más estricto)
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -234,7 +227,6 @@ serve(async (req: Request): Promise<Response> => {
         );
 
         // CONSULTA A LA VISTA SQL para obtener todos los detalles del usuario
-        // Seleccionamos directamente de la vista, que ya hace los JOINs y formatea el JSON
         const { data, error: fullUserError } = await supabase
           .from("user_full_details_view") // <-- ¡USANDO LA VISTA AQUÍ!
           .select(`
@@ -295,15 +287,15 @@ serve(async (req: Request): Promise<Response> => {
             full_name: fullUserData.full_name,
             user_type: "registered",
             // Las propiedades role_details y status_details ya son objetos o null, no arrays
-            hasAccess: (fullUserData.status_details?.name === "active" && // Asegúrate que tu DB tiene "active"
+            hasAccess: (fullUserData.status_details?.name === "active" &&
               (fullUserData.zones_accessed_details?.some((z) =>
                 z.id === zoneId
               ) ?? false)),
             similarity: matchSimilarity,
-            role_details: fullUserData.role_details || null, // Directamente el objeto o null
-            status_details: fullUserData.status_details || // Directamente el objeto o null
-              { id: "unknown", name: "Unknown" }, // Fallback si status_details es null (ej. si usuario tiene status_id nulo)
-            zones_accessed_details: fullUserData.zones_accessed_details || [], // Ya es un array
+            role_details: fullUserData.role_details || null,
+            status_details: fullUserData.status_details ||
+              { id: "unknown", name: "Unknown" },
+            zones_accessed_details: fullUserData.zones_accessed_details || [],
           };
 
           logEntry.user_id = matchedUser.user_id;
@@ -340,7 +332,6 @@ serve(async (req: Request): Promise<Response> => {
             },
           });
         } else {
-          // Este bloque se ejecuta si fullUserData es null
           console.error(
             "❌ ERROR: Registered user found by embedding, but full user data (via .maybeSingle()) returned null from view. User ID:",
             matchedUser.user_id,
@@ -377,13 +368,11 @@ serve(async (req: Request): Promise<Response> => {
           });
         }
       } else {
-        // La distancia no está dentro del umbral para usuarios registrados
         console.log(
           `DEBUG: Closest registered user (ID: ${matchedUser.user_id}) found, but distance ${actualDistance} is ABOVE threshold ${USER_MATCH_THRESHOLD_DISTANCE}. Proceeding to observed users.`,
         );
       }
     } else {
-      // No se encontró ningún match de usuario registrado por la función RPC
       console.log(
         "DEBUG: No registered user found in public.faces table at all, or no embedding in database.",
       );
@@ -466,7 +455,7 @@ serve(async (req: Request): Promise<Response> => {
             await supabase
               .from("user_statuses_catalog")
               .select("id, name")
-              .eq("name", "active") // Asegúrate de que este 'active' coincide con la base de datos
+              .eq("id", updatedObservedUser.status_id) // <-- CAMBIO CLAVE: Usamos el ID del estatus actual del usuario
               .single();
 
           const statusDetails: ItemWithNameAndId | null = statusDetailsResult;
@@ -475,23 +464,40 @@ serve(async (req: Request): Promise<Response> => {
             console.error("Error fetching observed user status:", statusError);
           }
 
-          const zonesAccessedDetails: ItemWithNameAndId[] = updatedObservedUser
-            .last_accessed_zones?.map((id: string) => ({
-              id: id,
-              name: `Zona ${id.substring(0, 8)}...`,
-            })) || [];
+          // --- CAMBIO CLAVE AQUÍ: Obtener nombres reales de las zonas para Observed Users ---
+          let zonesAccessedDetails: ItemWithNameAndId[] = [];
+          if (
+            updatedObservedUser.last_accessed_zones &&
+            updatedObservedUser.last_accessed_zones.length > 0
+          ) {
+            const { data: zoneNamesData, error: zoneNamesError } =
+              await supabase
+                .from("zones")
+                .select("id, name")
+                .in("id", updatedObservedUser.last_accessed_zones);
+
+            if (zoneNamesError) {
+              console.error(
+                "Error fetching zone names for observed user:",
+                zoneNamesError,
+              );
+            } else {
+              zonesAccessedDetails = zoneNamesData || [];
+            }
+          }
+          // --- FIN CAMBIO CLAVE ---
 
           const successResponse: UnifiedValidationResponse = {
             user: {
               id: updatedObservedUser.id,
-              full_name: null,
+              full_name: null, // Los observados no tienen full_name en la BD
               user_type: "observed",
               hasAccess: true,
               similarity: matchSimilarity,
-              role_details: null,
+              role_details: null, // Los observados no tienen roles
               status_details: statusDetails ||
                 { id: "unknown", name: "Unknown" },
-              zones_accessed_details: zonesAccessedDetails,
+              zones_accessed_details: zonesAccessedDetails, // Usar los nombres reales
               observed_details: {
                 firstSeenAt: updatedObservedUser.first_seen_at,
                 lastSeenAt: updatedObservedUser.last_seen_at,
@@ -532,7 +538,7 @@ serve(async (req: Request): Promise<Response> => {
       const { data: observedStatusResult, error: statusError } = await supabase
         .from("user_statuses_catalog")
         .select("id, name")
-        .eq("name", "active_temporal") // Asegúrate de que este 'active_temporal' coincide con la base de datos
+        .eq("name", "active_temporal") // Usamos 'active_temporal' en minúsculas como acordamos
         .single();
 
       const observedStatus: ItemWithNameAndId | null = observedStatusResult;
@@ -599,23 +605,40 @@ serve(async (req: Request): Promise<Response> => {
         );
       }
 
-      const newZonesAccessedDetails: ItemWithNameAndId[] = createdObservedUser
-        .last_accessed_zones?.map((id: string) => ({
-          id: id,
-          name: `Zona ${id.substring(0, 8)}...`,
-        })) || [];
+      // --- CAMBIO CLAVE AQUÍ: Obtener nombres reales de las zonas para Newly Observed Users ---
+      let newZonesAccessedDetails: ItemWithNameAndId[] = [];
+      if (
+        createdObservedUser.last_accessed_zones &&
+        createdObservedUser.last_accessed_zones.length > 0
+      ) {
+        const { data: newZoneNamesData, error: newZoneNamesError } =
+          await supabase
+            .from("zones")
+            .select("id, name")
+            .in("id", createdObservedUser.last_accessed_zones);
+
+        if (newZoneNamesError) {
+          console.error(
+            "Error fetching zone names for new observed user:",
+            newZoneNamesError,
+          );
+        } else {
+          newZonesAccessedDetails = newZoneNamesData || [];
+        }
+      }
+      // --- FIN CAMBIO CLAVE ---
 
       const successResponse: UnifiedValidationResponse = {
         user: {
           id: createdObservedUser.id,
-          full_name: null,
+          full_name: null, // Los observados no tienen full_name en la BD
           user_type: "observed",
           hasAccess: true,
           similarity: 1.0,
-          role_details: null,
+          role_details: null, // Los observados no tienen roles
           status_details: newStatusDetails ||
             { id: "unknown", name: "Unknown" },
-          zones_accessed_details: newZonesAccessedDetails,
+          zones_accessed_details: newZonesAccessedDetails, // Usar los nombres reales
           observed_details: {
             firstSeenAt: createdObservedUser.first_seen_at,
             lastSeenAt: createdObservedUser.last_seen_at,

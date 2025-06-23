@@ -36,12 +36,12 @@ interface UnifiedValidationResponse {
 
     observed_details?: {
       // Opcional, solo para usuarios observados
-      first_seen_at: string;
-      last_seen_at: string;
-      access_count: number;
-      alert_triggered: boolean;
-      expires_at: string;
-      potential_match_user_id: string | null;
+      firstSeenAt: string; // Cambio a firstSeenAt para consistencia en el FE
+      lastSeenAt: string; // Cambio a lastSeenAt para consistencia en el FE
+      accessCount: number; // Cambio a accessCount para consistencia en el FE
+      alertTriggered: boolean; // Cambio a alertTriggered para consistencia en el FE
+      expiresAt: string; // Cambio a expiresAt para consistencia en el FE
+      potentialMatchUserId: string | null; // Cambio a potentialMatchUserId para consistencia en el FE
     };
   };
   type:
@@ -348,13 +348,13 @@ const FacialValidationScreen: React.FC = () => {
           result.user.observed_details
         ) {
           newUserInfo.observedDetails = {
-            firstSeenAt: result.user.observed_details.first_seen_at,
-            lastSeenAt: result.user.observed_details.last_seen_at,
-            accessCount: result.user.observed_details.access_count,
-            alertTriggered: result.user.observed_details.alert_triggered,
-            expiresAt: result.user.observed_details.expires_at,
+            firstSeenAt: result.user.observed_details.firstSeenAt, // Corregido el nombre de la propiedad
+            lastSeenAt: result.user.observed_details.lastSeenAt, // Corregido el nombre de la propiedad
+            accessCount: result.user.observed_details.accessCount, // Corregido el nombre de la propiedad
+            alertTriggered: result.user.observed_details.alertTriggered, // Corregido el nombre de la propiedad
+            expiresAt: result.user.observed_details.expiresAt, // Corregido el nombre de la propiedad
             potentialMatchUserId:
-              result.user.observed_details.potential_match_user_id,
+              result.user.observed_details.potentialMatchUserId, // Corregido el nombre de la propiedad
           };
         }
         setUserInfo(newUserInfo);
@@ -603,15 +603,20 @@ const FacialValidationScreen: React.FC = () => {
           setValidationMessage(
             "Rostro detectado! Procesando para validación..."
           );
-          await processAndValidateFace(bestDescriptor, bestImageSrc);
 
-          // Después de procesar exitosamente, iniciar cooldown
-          isCurrentlyInCooldownRef.current = true;
-          cooldownTimeoutIdRef.current = setTimeout(() => {
-            isCurrentlyInCooldownRef.current = false;
-            // Forzar el reinicio del useEffect para re-evaluar y (re)iniciar el intervalo
-            setIntervalRestartTrigger((prev) => !prev);
-          }, 10000); // 10 segundos de cooldown
+          // --- INICIO DEL CAMBIO CLAVE: Bloque try/finally para la validación de la cara y cooldown ---
+          try {
+            await processAndValidateFace(bestDescriptor, bestImageSrc);
+          } finally {
+            // Siempre iniciar cooldown DESPUÉS de un intento de validación (exitoso o fallido)
+            isCurrentlyInCooldownRef.current = true;
+            cooldownTimeoutIdRef.current = setTimeout(() => {
+              isCurrentlyInCooldownRef.current = false;
+              // Forzar el reinicio del useEffect para re-evaluar y (re)iniciar el intervalo
+              setIntervalRestartTrigger((prev) => !prev);
+            }, 10000); // 10 segundos de cooldown
+          }
+          // --- FIN DEL CAMBIO CLAVE ---
         } else {
           // Si no se detectó rostro después de varios intentos
           if (
@@ -623,7 +628,7 @@ const FacialValidationScreen: React.FC = () => {
           }
         }
       } catch (error: unknown) {
-        // Usar unknown en lugar de any
+        // Este bloque catch maneja errores en la *detección* de FaceAPI (ej. problemas de webcam, modelos)
         let errorMessage = "An unknown error occurred.";
         if (error instanceof Error) {
           errorMessage = error.message;
@@ -638,12 +643,13 @@ const FacialValidationScreen: React.FC = () => {
           errorMessage = error.message;
         }
         console.error(
-          "❌ TICK: Error durante el ciclo de detección automática:",
+          "❌ TICK: Error durante el ciclo de detección automática (detección FaceAPI):",
           error
         );
         setFaceDetectionError(`Error en detección automática: ${errorMessage}`);
+        // NO iniciamos cooldown aquí si la detección falló. Queremos que siga intentando encontrar una cara.
       } finally {
-        isProcessingAttemptRef.current = false; // Siempre resetear al finalizar el intento de tick
+        isProcessingAttemptRef.current = false; // Siempre resetear esta bandera de intento
       }
     };
 
@@ -651,8 +657,8 @@ const FacialValidationScreen: React.FC = () => {
     if (!detectionIntervalIdRef.current) {
       detectionIntervalIdRef.current = setInterval(
         runAutomaticDetectionTick,
-        500
-      ); // Intenta detectar cada 0.5 segundos
+        4000 // Frecuencia de detección ajustada (4 segundos)
+      );
     }
 
     // Función de limpieza para cuando el componente se desmonte o las dependencias cambien
