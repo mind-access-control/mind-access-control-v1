@@ -29,10 +29,17 @@ interface ObservedUserFromDB {
   last_accessed_zones: string[] | null; // jsonb en SQL, deserializa a string[] en JS
   status_id: string;
   alert_triggered: boolean;
-  expires_at: string;
+  expires_at: string; // Asegúrate de que esta propiedad exista en tu tabla observed_users
   potential_match_user_id: string | null;
   similarity?: number;
   distance?: number;
+}
+interface ObservedUserUpdatePayload {
+  last_seen_at: string;
+  access_count: number;
+  last_accessed_zones: string[] | null;
+  status_id?: string; // Hacemos status_id opcional
+  // Si hubiera otras propiedades que se pudieran actualizar, irían aquí.
 }
 
 interface ValidateFacePayload {
@@ -68,7 +75,10 @@ interface UnifiedValidationResponse {
     | "observed_user_updated"
     | "new_observed_user_registered"
     | "no_match_found"
-    | string;
+    | "registered_user_access_denied" // Tipo para acceso denegado (registrado)
+    | "observed_user_access_denied_expired" // Tipo para acceso denegado (observado por expiración de fecha)
+    | "observed_user_access_denied_status_expired" // Tipo para acceso denegado (observado por estatus 'expired')
+    | string; // Para cualquier otro tipo que pueda venir
   message?: string;
   error?: string;
 }
@@ -325,7 +335,7 @@ serve(async (req: Request): Promise<Response> => {
 
           await supabase.from("logs").insert([logEntry]);
           return new Response(JSON.stringify(successResponse), {
-            status: 200,
+            status: 200, // Siempre 200 OK para usuarios registrados, el hasAccess define el resultado
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
@@ -360,7 +370,7 @@ serve(async (req: Request): Promise<Response> => {
           };
           await supabase.from("logs").insert([logEntry]);
           return new Response(JSON.stringify(errorResponse), {
-            status: 500,
+            status: 500, // Error interno si no se pudo recuperar la data
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
@@ -420,20 +430,90 @@ serve(async (req: Request): Promise<Response> => {
           logEntry.user_type = "observed";
           logEntry.confidence_score = matchSimilarity;
 
+          // --- LOGICA DE VERIFICACION DE VIGENCIA DE expires_at ---
+          const nowUtc = new Date(); // Hora actual en UTC
+          const expiresAtDate = new Date(matchedObservedUser.expires_at); // expires_at del usuario observado
+
+          let observedUserHasAccess = true; // Por defecto, acceso concedido si hay match
+          let accessDeniedReason = `Observed user updated for zone: ${zoneId}`;
+          let responseType: UnifiedValidationResponse["type"] =
+            "observed_user_updated";
+          let responseMessage = "Access Granted (Observed User Updated).";
+          let newStatusIdForUpdate: string | undefined = undefined; // Variable para almacenar el nuevo status_id si es necesario
+
+          if (expiresAtDate < nowUtc) {
+            observedUserHasAccess = false;
+            accessDeniedReason =
+              `Expired Access: expires_at date has passed (${matchedObservedUser.expires_at}).`;
+            responseType = "observed_user_access_denied_expired";
+            responseMessage = "Access Denied (Observed User Expired).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to expired_at: ${matchedObservedUser.expires_at}`,
+            );
+
+            // --- CAMBIO CLAVE: Obtener y asignar el UUID de 'expired' para la actualización ---
+            // Solo busca el ID si realmente el usuario está expirado por fecha
+            const { data: expiredStatusData, error: expiredStatusError } =
+              await supabase
+                .from("user_statuses_catalog")
+                .select("id")
+                .eq("name", "expired") // Asegúrate de que tienes un estatus 'expired' en tu catálogo
+                .single();
+
+            if (expiredStatusError || !expiredStatusData) {
+              console.error(
+                "❌ ERROR: Missing 'expired' status in user_statuses_catalog. Please create it in your DB.",
+                expiredStatusError,
+              );
+              // No se lanza error fatal, pero se loggea y no se actualiza el status_id
+            } else {
+              newStatusIdForUpdate = expiredStatusData.id;
+              console.log(
+                `DEBUG: Found 'expired' status ID: ${newStatusIdForUpdate}. Will update observed user status.`,
+              );
+            }
+            // --- FIN CAMBIO CLAVE ---
+          } else if (
+            matchedObservedUser.status_id ===
+              "8c58b6ed-e21d-4208-82a4-c795cd0bd747"
+          ) { // Ejemplo: si ya estaba expirado manualmente
+            // Esto es por si ya tenía un estatus de expirado previo
+            observedUserHasAccess = false;
+            accessDeniedReason =
+              `Access Denied: User status is already expired.`;
+            responseType = "observed_user_access_denied_status_expired";
+            responseMessage = "Access Denied (Observed User Status Expired).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to existing expired status.`,
+            );
+          } else {
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access granted (not expired).`,
+            );
+          }
+
+          // Construir el objeto de actualización.
+          // Se incluye status_id solo si newStatusIdForUpdate tiene un valor (es decir, si el acceso expiró por fecha).
+          const updatePayload: ObservedUserUpdatePayload = {
+            last_seen_at: new Date().toISOString(),
+            access_count: matchedObservedUser.access_count + 1,
+            last_accessed_zones: matchedObservedUser.last_accessed_zones
+              ? [
+                ...new Set([
+                  ...matchedObservedUser.last_accessed_zones,
+                  zoneId || "",
+                ]),
+              ]
+              : (zoneId ? [zoneId] : []),
+          };
+
+          if (newStatusIdForUpdate) {
+            updatePayload.status_id = newStatusIdForUpdate; // Actualiza el status_id solo si se debe cambiar a 'expired'
+          }
+
           const { data: updatedObservedUser, error: updateError } =
             await supabase.from("observed_users")
-              .update({
-                last_seen_at: new Date().toISOString(),
-                access_count: matchedObservedUser.access_count + 1,
-                last_accessed_zones: matchedObservedUser.last_accessed_zones
-                  ? [
-                    ...new Set([
-                      ...matchedObservedUser.last_accessed_zones,
-                      zoneId || "",
-                    ]),
-                  ]
-                  : (zoneId ? [zoneId] : []),
-              })
+              .update(updatePayload) // Usamos el payload construido condicionalmente
               .eq("id", matchedObservedUser.id)
               .select("*")
               .single();
@@ -446,16 +526,18 @@ serve(async (req: Request): Promise<Response> => {
             throw updateError;
           }
 
-          logEntry.result = true;
-          logEntry.decision = "access_granted";
-          logEntry.reason = `Observed user updated for zone: ${zoneId}`;
-          logEntry.match_status = "observed_user_updated";
+          logEntry.result = observedUserHasAccess; // El resultado ahora depende de expires_at y/o status
+          logEntry.decision = observedUserHasAccess
+            ? "access_granted"
+            : "access_denied";
+          logEntry.reason = accessDeniedReason;
+          logEntry.match_status = responseType; // Usamos el tipo de respuesta como match_status para más detalle
 
           const { data: statusDetailsResult, error: statusError } =
             await supabase
               .from("user_statuses_catalog")
               .select("id, name")
-              .eq("id", updatedObservedUser.status_id) // <-- CAMBIO CLAVE: Usamos el ID del estatus actual del usuario
+              .eq("id", updatedObservedUser.status_id) // Usamos el ID del estatus actual del usuario (ya actualizado o el original)
               .single();
 
           const statusDetails: ItemWithNameAndId | null = statusDetailsResult;
@@ -487,12 +569,12 @@ serve(async (req: Request): Promise<Response> => {
           }
           // --- FIN CAMBIO CLAVE ---
 
-          const successResponse: UnifiedValidationResponse = {
+          const finalResponse: UnifiedValidationResponse = {
             user: {
               id: updatedObservedUser.id,
               full_name: null, // Los observados no tienen full_name en la BD
               user_type: "observed",
-              hasAccess: true,
+              hasAccess: observedUserHasAccess, // El acceso ahora depende de expires_at
               similarity: matchSimilarity,
               role_details: null, // Los observados no tienen roles
               status_details: statusDetails ||
@@ -510,14 +592,14 @@ serve(async (req: Request): Promise<Response> => {
                 distance: 0,
               },
             },
-            type: "observed_user_updated",
-            message: "Access Granted (Observed User Updated).",
+            type: responseType, // Usar el tipo de respuesta determinado por la lógica de expiración
+            message: responseMessage, // Usar el mensaje de respuesta determinado por la lógica de expiración
           };
 
           await supabase.from("logs").insert([logEntry]);
 
-          return new Response(JSON.stringify(successResponse), {
-            status: 200,
+          return new Response(JSON.stringify(finalResponse), {
+            status: 200, // <-- Siempre 200 OK, el hasAccess y el message lo indican
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
@@ -561,7 +643,7 @@ serve(async (req: Request): Promise<Response> => {
         last_accessed_zones: zoneId ? [zoneId] : [],
         status_id: observedStatus.id,
         alert_triggered: false,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expira en 24 horas por defecto
         potential_match_user_id: null,
       };
 
@@ -584,9 +666,21 @@ serve(async (req: Request): Promise<Response> => {
       logEntry.user_type = "new_observed";
       logEntry.confidence_score = 1.0;
 
-      logEntry.result = true;
-      logEntry.decision = "access_granted";
-      logEntry.reason = `New observed user registered for zone: ${zoneId}`;
+      // --- Lógica de expires_at para nuevos usuarios observados (por defecto, acceso concedido al crearse) ---
+      // Para nuevos usuarios, siempre se concede acceso al crearse.
+      const newObservedUserHasAccess = true;
+      const newAccessReason =
+        `New observed user registered for zone: ${zoneId}`;
+      const newResponseType: UnifiedValidationResponse["type"] =
+        "new_observed_user_registered";
+      const newResponseMessage =
+        "New Observed User Registered. Access Granted.";
+
+      logEntry.result = newObservedUserHasAccess;
+      logEntry.decision = newObservedUserHasAccess
+        ? "access_granted"
+        : "access_denied";
+      logEntry.reason = newAccessReason;
       logEntry.match_status = "new_observed_user_registered";
 
       const { data: newStatusDetailsResult, error: newStatusError } =
@@ -628,12 +722,12 @@ serve(async (req: Request): Promise<Response> => {
       }
       // --- FIN CAMBIO CLAVE ---
 
-      const successResponse: UnifiedValidationResponse = {
+      const finalNewObservedResponse: UnifiedValidationResponse = {
         user: {
           id: createdObservedUser.id,
           full_name: null, // Los observados no tienen full_name en la BD
           user_type: "observed",
-          hasAccess: true,
+          hasAccess: newObservedUserHasAccess,
           similarity: 1.0,
           role_details: null, // Los observados no tienen roles
           status_details: newStatusDetails ||
@@ -650,14 +744,14 @@ serve(async (req: Request): Promise<Response> => {
             distance: 0,
           },
         },
-        type: "new_observed_user_registered",
-        message: "New Observed User Registered. Access Granted.",
+        type: newResponseType,
+        message: newResponseMessage,
       };
 
       await supabase.from("logs").insert([logEntry]);
 
-      return new Response(JSON.stringify(successResponse), {
-        status: 200,
+      return new Response(JSON.stringify(finalNewObservedResponse), {
+        status: 200, // <-- Siempre 200 OK
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
@@ -689,7 +783,7 @@ serve(async (req: Request): Promise<Response> => {
 
     await supabase.from("logs").insert([logEntry]);
     return new Response(JSON.stringify(noMatchResponse), {
-      status: 404,
+      status: 404, // Mantenemos 404 para "no match encontrado"
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
@@ -746,7 +840,7 @@ serve(async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify(errorResponse),
       {
-        status: 500,
+        status: 500, // Error interno del servidor
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
