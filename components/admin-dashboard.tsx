@@ -6,9 +6,10 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { createClient, SupabaseClient } from "@supabase/supabase-js"; // Importa el cliente de Supabase JS
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { Session } from "@supabase/supabase-js"; // Importa la clase Session
+import { Session } from "@supabase/supabase-js";
+
 // --- Configuración del Cliente Supabase para el Frontend ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -77,9 +78,8 @@ import {
   SlidersHorizontal,
   AlertTriangle,
   Lightbulb,
-  Eye,
   ArrowRight,
-  UserCircle2,
+  UserCircle2, // Mantener si se usa en otro lugar
 } from "lucide-react";
 
 // --- Custom Hooks & Components ---
@@ -104,6 +104,9 @@ import {
 // --- Face-API.js ---
 import * as faceapi from "face-api.js";
 
+// --- IMPORTAR NUEVOS COMPONENTES REFACTORIZADOS ---
+import ObservedUsersTab from "@/components/ObservedUsersTab";
+
 // --- Tipos de Datos (Asegúrate de que estos tipos concuerden con tu backend/Supabase) ---
 type Role = { id: string; name: string };
 type UserStatus = { id: string; name: string };
@@ -115,7 +118,6 @@ type User = {
   email: string;
   role: string;
   accessZones: string[];
-  // Añadir un campo para el embedding facial
   faceEmbedding?: number[]; // Representado como array de números para JSON
   profilePictureUrl?: string; // Para la URL de la imagen de perfil
 };
@@ -140,7 +142,7 @@ type SummaryEntry = {
   successful: number;
   failed: number;
   successRate: number;
-  zoneAccesses: Record<string, number>; // ¡Esto es clave! Le dice que es un objeto con claves de tipo 'string' y valores de tipo 'number'.
+  zoneAccesses: Record<string, number>;
 };
 
 // --- Tipos para ordenar y filtrar ---
@@ -161,14 +163,6 @@ type SummarySortField =
   | "lastAccess"
   | "totalAccesses"
   | "successRate";
-type ObservedUserSortField =
-  | "id"
-  | "firstSeen"
-  | "lastSeen"
-  | "tempAccesses"
-  | "accessedZones"
-  | "status"
-  | "aiAction";
 
 // Tipo para las columnas de la tabla (faltaba en la versión anterior)
 type Column = {
@@ -391,6 +385,7 @@ export default function AdminDashboard({
   const [summarySearchTerm, setSummarySearchTerm] = useState("");
   const [summaryStatusFilter, setSummaryStatusFilter] = useState("all");
   const [activeSettingsTab, setActiveSettingsTab] = useState("zones");
+  // Zonas iniciales (esto se carga desde Edge Function ahora, pero se mantiene como mock para Settings)
   const [zones, setZones] = useState([
     { id: 1, name: "Main Entrance" },
     { id: 2, name: "Zone A" },
@@ -531,64 +526,25 @@ export default function AdminDashboard({
   const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
   const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
-  const [observedUsers] = useState<any[]>([
-    {
-      id: "obs1",
-      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 horas atrás
-      lastSeen: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutos atrás
-      tempAccesses: 3,
-      accessedZones: ["Main Entrance", "Parking Lot"],
-      status: "Pending Review",
-      aiAction: "Monitor",
-      confidence: 0.85,
-      faceImage: "https://i.pravatar.cc/150?img=8",
-    },
-    {
-      id: "obs2",
-      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 horas atrás
-      lastSeen: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 minutos atrás
-      tempAccesses: 5,
-      accessedZones: ["Main Entrance", "Office Area"],
-      status: "High Risk",
-      aiAction: "Block Access",
-      confidence: 0.92,
-      faceImage: "https://i.pravatar.cc/150?img=9",
-    },
-    {
-      id: "obs3",
-      firstSeen: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(), // 1 hora atrás
-      lastSeen: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 minutos atrás
-      tempAccesses: 2,
-      accessedZones: ["Main Entrance"],
-      status: "Low Risk",
-      aiAction: "Allow Access",
-      confidence: 0.78,
-      faceImage: "https://i.pravatar.cc/150?img=10",
-    },
-  ]);
-  const [observedSortField, setObservedSortField] =
-    useState<ObservedUserSortField>("id");
-  const [observedSortDirection, setObservedSortDirection] = useState<
-    "asc" | "desc"
-  >("asc");
+  // REMOVIDO: const [observedUsers] = useState<any[]>([]);
+  // REMOVIDO: const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>("id");
+  // REMOVIDO: const [observedSortDirection, setObservedSortDirection] = useState<"asc" | "desc">("asc");
   const [logsSortField, setLogsSortField] = useState<LogSortField>("timestamp");
   const [logsSortDirection, setLogsSortDirection] =
     useState<SortDirection>("desc");
-  const [observedUserDetails, setObservedUserDetails] = useState<
-    null | (typeof observedUsers)[0]
-  >(null);
+  // REMOVIDO: const [observedUserDetails, setObservedUserDetails] = useState<null | (typeof observedUsers)[0]>(null);
   const [dashboardTab, setDashboardTab] = useState("overview");
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  // REMOVIDO: const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({}); // Se movió a ObservedUsersTable
 
-  // --- USE EFFECTS PARA CARGA DE DATOS INICIALES ---
-  // useEffect para cargar los modelos de Face-API.js
+  // --- USE EFFECTS PARA CARGA DE DATOS INICIALES (Mismos que ya tienes) ---
+  // useEffect para cargar los modelos de Face-API.js (mantener si se usa en user management)
   useEffect(() => {
     const loadModels = async () => {
-      const MODEL_URL = "/models"; // La URL base donde se encuentran los modelos.
+      const MODEL_URL = "/models";
       try {
         setFaceApiModelsLoaded(false);
         setFaceApiModelsError(null);
-        await faceapi.nets.ssdMobilenetv1.load(MODEL_URL); // Usamos SSD Mobilenet V1
+        await faceapi.nets.ssdMobilenetv1.load(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.load(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.load(MODEL_URL);
         setFaceApiModelsLoaded(true);
@@ -617,7 +573,6 @@ export default function AdminDashboard({
       setFaceEmbedding(null);
 
       try {
-        // Crea un elemento HTMLImageElement temporal para face-api
         const img = document.createElement("img");
         img.src =
           currentImage instanceof File
@@ -625,11 +580,10 @@ export default function AdminDashboard({
             : URL.createObjectURL(currentImage);
 
         img.onload = async () => {
-          // Detecta todas las caras y sus puntos de referencia
           const detectionsWithLandmarks = await faceapi
             .detectAllFaces(img, new faceapi.SsdMobilenetv1Options())
             .withFaceLandmarks()
-            .withFaceDescriptors(); // ¡Añadir .withFaceDescriptors() aquí!
+            .withFaceDescriptors();
 
           if (detectionsWithLandmarks.length === 0) {
             setFaceDetectionError(
@@ -644,14 +598,13 @@ export default function AdminDashboard({
             setFaceEmbedding(null);
             console.warn("Multiple faces detected.");
           } else {
-            // Si se detecta exactamente una cara, extrae el descriptor (embedding)
-            const faceDescriptor = detectionsWithLandmarks[0].descriptor; // Ahora el descriptor ya está adjunto
-            setFaceEmbedding(new Float32Array(faceDescriptor)); // Almacena el embedding
+            const faceDescriptor = detectionsWithLandmarks[0].descriptor;
+            setFaceEmbedding(new Float32Array(faceDescriptor));
             setFaceDetectionError(null);
             console.log("Face detected and embedding generated successfully!");
-            console.log("Generated Embedding:", faceDescriptor); // Para depuración comentar esta línea
+            console.log("Generated Embedding:", faceDescriptor);
           }
-          URL.revokeObjectURL(img.src); // Libera la URL del objeto creado
+          URL.revokeObjectURL(img.src);
           setIsProcessingImage(false);
         };
 
@@ -762,7 +715,7 @@ export default function AdminDashboard({
           if (inactiveStatus) {
             setSelectedUserStatus(inactiveStatus.name);
           } else if (!selectedUserStatus) {
-            setSelectedUserStatus(result.statuses[0].name); // Fallback al primero si no existe Inactive y no hay selección previa
+            setSelectedUserStatus(result.statuses[0].name);
           }
         }
       } catch (error: any) {
@@ -780,23 +733,20 @@ export default function AdminDashboard({
     fetchUserStatuses();
   }, []);
 
-  // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA ---
+  // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA (Mantener en admin-dashboard si se usan en User Management) ---
 
-  // Maneja el evento cuando un elemento arrastrable está sobre la zona de drop
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   }, []);
 
-  // Maneja el evento cuando un elemento arrastrable deja la zona de drop
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
   }, []);
 
-  // Maneja el evento cuando un elemento es soltado en la zona de drop
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -804,12 +754,12 @@ export default function AdminDashboard({
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith("image/")) {
-        setCurrentImage(file); // Guarda el objeto File (o Blob) de la imagen para su procesamiento futuro
+        setCurrentImage(file);
         const reader = new FileReader();
         reader.onloadend = () => {
-          setImagePreview(reader.result as string); // Establece la URL para la previsualización en la UI
-          setFaceEmbedding(null); // Reinicia el embedding
-          setFaceDetectionError(null); // Reinicia errores de detección facial
+          setImagePreview(reader.result as string);
+          setFaceEmbedding(null);
+          setFaceDetectionError(null);
         };
         reader.readAsDataURL(file);
       } else {
@@ -819,7 +769,6 @@ export default function AdminDashboard({
     }
   }, []);
 
-  // Maneja la carga de imagen desde el input de archivo
   const handleImageUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -841,7 +790,6 @@ export default function AdminDashboard({
     []
   );
 
-  // Función corregida: Limpia la imagen seleccionada/capturada y sus estados relacionados
   const clearImage = useCallback(() => {
     setImagePreview(null);
     setCurrentImage(null);
@@ -852,17 +800,15 @@ export default function AdminDashboard({
     }
   }, []);
 
-  // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
   const handleCameraCapture = useCallback((imageData: string) => {
-    setImagePreview(imageData); // Muestra la previsualización en el formulario principal
-    // Convierte la cadena base64 a un objeto Blob
+    setImagePreview(imageData);
     fetch(imageData)
       .then((res) => res.blob())
       .then((blob) => {
-        setCurrentImage(blob); // Establece el Blob como la imagen actual para procesamiento
-        setFaceEmbedding(null); // Reinicia el embedding
-        setFaceDetectionError(null); // Reinicia errores de detección
-        setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
+        setCurrentImage(blob);
+        setFaceEmbedding(null);
+        setFaceDetectionError(null);
+        setCameraOpen(false);
       })
       .catch((error) => {
         console.error("Error converting captured image to blob:", error);
@@ -876,12 +822,12 @@ export default function AdminDashboard({
       await supabase.auth.signOut();
       router.push("/");
     } catch (error) {
+      // FIX: Removed 'protobuf_autogen.pb'
       console.error("Error signing out:", error);
     }
   };
 
   const validateEmail = (email: string) => {
-    // Expresión regular simple para validar el formato de email
     const re =
       /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
     return re.test(String(email).toLowerCase());
@@ -942,8 +888,8 @@ export default function AdminDashboard({
 
   const startEditing = (user: User) => {
     setEditingUserId(user.id);
-    setEditingUser({ ...user }); // Copia del usuario para editar
-    setEditingAccessZones([...user.accessZones]); // Copia de zonas
+    setEditingUser({ ...user });
+    setEditingAccessZones([...user.accessZones]);
   };
 
   const cancelEditing = () => {
@@ -953,9 +899,7 @@ export default function AdminDashboard({
   };
 
   const saveEditing = () => {
-    // Lógica para guardar el usuario editado en Supabase
     console.log("Saving edited user:", editingUser, editingAccessZones);
-    // Actualizar el estado 'users' localmente
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
         user.id === editingUserId
@@ -976,7 +920,6 @@ export default function AdminDashboard({
   };
 
   const confirmDelete = () => {
-    // Lógica para eliminar el usuario de Supabase
     console.log("Deleting user:", userToDelete);
     setUsers((prevUsers) =>
       prevUsers.filter((user) => user.id !== userToDelete.id)
@@ -1005,7 +948,6 @@ export default function AdminDashboard({
     });
     const link = document.createElement("a");
     if (link.download !== undefined) {
-      // Feature detection
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
       link.setAttribute("download", "user_onboarding_template.csv");
@@ -1027,17 +969,14 @@ export default function AdminDashboard({
     setUploadMessage("Processing CSV file...");
 
     try {
-      // Implement your CSV parsing and Supabase insertion logic here
-      // This is a placeholder. You'll need a library like 'papaparse'
-      // and potentially a Supabase Edge Function for bulk insertion.
       console.log("Processing bulk upload for file:", selectedCsvFile.name);
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async work
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       setUploadStatus("success");
       setUploadMessage(
         `Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`
       );
-      setSelectedCsvFile(null); // Clear selected file after processing
+      setSelectedCsvFile(null);
     } catch (error: any) {
       console.error("Error processing bulk upload:", error);
       setUploadStatus("error");
@@ -1125,7 +1064,7 @@ export default function AdminDashboard({
       prev.map((cam) =>
         cam.zone === zoneToDelete.name ? { ...cam, zone: "" } : cam
       )
-    ); // Unassign cameras
+    );
     setZoneDeleteModalOpen(false);
     setZoneToDelete(null);
   };
@@ -1179,25 +1118,8 @@ export default function AdminDashboard({
     setCameraToDelete(null);
   };
 
-  function handleImageError(userId: number | string, photoUrl: string) {
-    setImageErrors((prev) => ({ ...prev, [photoUrl]: true }));
-    console.warn(`Failed to load image for user ${userId} at URL: ${photoUrl}`);
-  }
-
   // --- UseMemos para Datos Calculados ---
-  const sortedObservedUsers = useMemo(() => {
-    // Ejemplo de implementación de sort, deberás llenar con tu lógica real
-    return [...observedUsers].sort((a, b) => {
-      if (observedSortField === "id") {
-        return observedSortDirection === "asc" ? a.id - b.id : b.id - a.id;
-      }
-      // Añadir más lógica para otros campos si es necesario
-      return 0;
-    });
-  }, [observedUsers, observedSortField, observedSortDirection]);
-
   const filteredLogs = useMemo(() => {
-    // Simulación de filtrado, adaptar a tus datos y filtros
     return (accessLogs as any[]).filter((log) => {
       const matchSearch = searchTerm
         ? JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase())
@@ -1241,20 +1163,16 @@ export default function AdminDashboard({
 
   const sortedLogs = useMemo(() => {
     return [...filteredLogs].sort((a, b) => {
-      // Implementación básica de ordenamiento para logs
       if (logSortField === "timestamp") {
         return logSortDirection === "asc"
           ? new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
           : new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       }
-      // Añadir más lógica de ordenamiento
       return 0;
     });
   }, [filteredLogs, logSortField, logSortDirection]);
 
   const userSummaryData = useMemo((): SummaryEntry[] => {
-    // <-- ¡Añade `: SummaryEntry[]` aquí!
-    // Esta lógica podría ser más compleja, es una simulación
     return Array.from(
       new Set((accessLogs as any[]).map((log) => log.user))
     ).map((userName) => {
@@ -1309,7 +1227,6 @@ export default function AdminDashboard({
   const filteredSummaryData = useMemo(() => {
     return userSummaryData
       .filter((summary: SummaryEntry) => {
-        // <-- ¡Añade `: SummaryEntry` aquí!
         const matchSearch = summarySearchTerm
           ? JSON.stringify(summary)
               .toLowerCase()
@@ -1326,14 +1243,11 @@ export default function AdminDashboard({
         return matchSearch && matchStatus;
       })
       .sort((a: SummaryEntry, b: SummaryEntry) => {
-        // <-- ¡Añade `: SummaryEntry` aquí!
-        // Implementación básica de ordenamiento para el resumen
         if (summarySortField === "user") {
           return summarySortDirection === "asc"
             ? a.user.localeCompare(b.user)
             : b.user.localeCompare(a.user);
         }
-        // Añadir más lógica de ordenamiento
         return 0;
       });
   }, [
@@ -1383,7 +1297,6 @@ export default function AdminDashboard({
   const logEndIndex = logStartIndex + logItemsPerPage;
   const paginatedLogs = sortedLogs.slice(logStartIndex, logEndIndex);
 
-  // Mocks para sortedRecentLogs (usado en Dashboard)
   const sortedRecentLogs = useMemo(() => {
     return (accessLogs as any[])
       .sort(
@@ -1411,7 +1324,6 @@ export default function AdminDashboard({
 
   // --- Función handleSaveUser (Actualizada para Face-API.js y Supabase) ---
   const handleSaveUser = async () => {
-    // Para depuración: Muestra el estado actual del formulario en la consola.
     console.log("Save User clicked");
     console.log("Current form state:", {
       fullName,
@@ -1425,7 +1337,6 @@ export default function AdminDashboard({
       faceDetectionError,
     });
 
-    // Realiza validaciones en el lado del cliente antes de enviar la petición.
     const isEmailValid = validateEmail(email);
 
     const missingFields = [];
@@ -1444,7 +1355,6 @@ export default function AdminDashboard({
     if (faceDetectionError)
       missingFields.push(`Face Detection Issue: ${faceDetectionError}`);
 
-    // Si hay campos faltantes o errores de validación, muestra un mensaje y detén la ejecución.
     if (missingFields.length > 0) {
       setShowStatusMessage(
         `Error: Please fill all required fields and ensure a single face is detected. Missing: ${missingFields.join(
@@ -1454,72 +1364,55 @@ export default function AdminDashboard({
       return;
     }
 
-    // Establece el estado de guardado para deshabilitar el botón y mostrar un indicador.
     setIsSavingUser(true);
     setShowStatusMessage("Saving user...");
 
     try {
-      // Prepara los datos (payload) que se enviarán a la Edge Function.
       const payload = {
         fullName: fullName,
         email: email,
         roleName: selectedRole,
         statusName: selectedUserStatus,
         accessZoneNames: selectedAccessZones,
-        faceEmbedding: Array.from(faceEmbedding!), // Convierte Float32Array a un Array<number> estándar para JSON.
-        profilePictureUrl: null, //imagePreview, // Envía la URL de la imagen (Base64) si existe.
+        faceEmbedding: Array.from(faceEmbedding!),
+        profilePictureUrl: null,
       };
 
-      // --- ¡MUY IMPORTANTE! ---
-      // REEMPLAZA 'YOUR_PROJECT_REF' con la URL de INVOKE REAL de tu Edge Function.
-      // Esta URL la obtuviste después de desplegar la función en el paso anterior.
-      // Ejemplo: https://abcdef123456.supabase.co/functions/v1/register-new-user
       const edgeFunctionUrl =
         "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/register-new-user";
 
-      // Realiza la petición POST a la Edge Function.
       const response = await fetch(edgeFunctionUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // No se necesita el encabezado Authorization si la función se desplegó con --no-verify-jwt
-          // (ya que la función usa la Service Role Key para la autenticación en BD).
         },
-        body: JSON.stringify(payload), // Envía los datos del formulario como JSON.
+        body: JSON.stringify(payload),
       });
 
-      // Verifica si la petición fue exitosa (código de estado 2xx).
       if (!response.ok) {
-        const errorData = await response.json(); // Intenta parsear el error del cuerpo de la respuesta.
-        // Lanza un error con el mensaje de error de la función o un mensaje HTTP genérico.
+        const errorData = await response.json();
         throw new Error(errorData.error || `HTTP Error: ${response.status}`);
       }
 
-      // Si la petición fue exitosa, parsea la respuesta JSON.
       const result = await response.json();
-      // Muestra un mensaje de éxito con el ID del usuario si se devuelve.
       setShowStatusMessage(
         `User saved successfully! ID: ${result.userId || "N/A"}`
       );
       console.log("User registration successful:", result);
 
-      // Reinicia el formulario a sus valores iniciales después de un guardado exitoso.
       setFullName("");
       setEmail("");
       setEmailError(null);
       setSelectedRole("");
-      setSelectedUserStatus("Inactive"); // Restablece a 'Inactive' por defecto.
+      setSelectedUserStatus("Inactive");
       setSelectedAccessZones([]);
-      clearImage(); // Limpia la imagen y los estados relacionados (embedding, error de detección).
+      clearImage();
       setFaceEmbedding(null);
       setFaceDetectionError(null);
     } catch (error: any) {
-      // Captura cualquier error que ocurra durante la petición o procesamiento.
       console.error("Error during user registration:", error);
-      // Muestra un mensaje de error en la interfaz.
       setShowStatusMessage(`Failed to save user: ${error.message}`);
     } finally {
-      // Restablece el estado de guardado, sin importar si fue exitoso o fallido.
       setIsSavingUser(false);
     }
   };
@@ -1715,7 +1608,6 @@ export default function AdminDashboard({
     setLogsSortField: React.Dispatch<React.SetStateAction<LogSortField>>;
     setLogsSortDirection: React.Dispatch<React.SetStateAction<SortDirection>>;
   }) {
-    // Column definition for this table specifically
     const logColumns: Column[] = [
       { key: "timestamp", label: "Timestamp", sortable: true },
       { key: "user", label: "User Name", sortable: true },
@@ -1840,7 +1732,6 @@ export default function AdminDashboard({
   }
 
   function SecurityTrendsChart({ data }: { data: any[] }) {
-    // Dummy data if actual data is not provided
     const chartData =
       data.length > 0
         ? data
@@ -1902,7 +1793,6 @@ export default function AdminDashboard({
 
   const PIE_COLORS = ["#ef4444", "#f59e42", "#6366f1", "#a3e635"];
   function FailureCauseChart({ data }: { data: any[] }) {
-    // Dummy data if actual data is not provided
     const chartData =
       data.length > 0
         ? data
@@ -2001,67 +1891,6 @@ export default function AdminDashboard({
     { id: "settings", label: "Settings" },
   ];
 
-  const columns: Column[] = [
-    { key: "photoUrl", label: "Face", sortable: false },
-    { key: "id", label: "Temporary ID", sortable: true },
-    { key: "firstSeen", label: "First Seen", sortable: true },
-    { key: "lastSeen", label: "Last Seen", sortable: true },
-    { key: "tempAccesses", label: "Temp Accesses", sortable: true },
-    { key: "accessedZones", label: "Accessed Zones", sortable: true },
-    { key: "status", label: "Status", sortable: true },
-    { key: "aiAction", label: "AI Suggested Action", sortable: true },
-    { key: "actions", label: "Admin Actions", sortable: false },
-  ];
-
-  // Mock data for users
-  const mockUsers: User[] = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john.doe@example.com",
-      role: "Admin",
-      accessZones: ["Main Entrance", "Server Room", "Office Area"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=1",
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      role: "User",
-      accessZones: ["Main Entrance", "Office Area"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=2",
-    },
-    {
-      id: 3,
-      name: "Robert Johnson",
-      email: "robert.johnson@example.com",
-      role: "User",
-      accessZones: ["Main Entrance", "Parking Lot"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=3",
-    },
-    {
-      id: 4,
-      name: "Maria Garcia",
-      email: "maria.garcia@example.com",
-      role: "Admin",
-      accessZones: [
-        "Main Entrance",
-        "Server Room",
-        "Office Area",
-        "Parking Lot",
-      ],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=4",
-    },
-    {
-      id: 5,
-      name: "David Wilson",
-      email: "david.wilson@example.com",
-      role: "User",
-      accessZones: ["Main Entrance"],
-      profilePictureUrl: "https://i.pravatar.cc/150?img=5",
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800">
       {/* Header */}
@@ -2145,7 +1974,6 @@ export default function AdminDashboard({
             {/* Overview Tab */}
             {dashboardTab === "overview" && (
               <>
-                {/* Header / Security Executive Summary */}
                 <div>
                   <h2 className="text-3xl font-bold text-white mb-2">
                     Facial Access Control Dashboard - Security Overview
@@ -2203,221 +2031,8 @@ export default function AdminDashboard({
               </>
             )}
 
-            {/* Observed Users Tab */}
-            {dashboardTab === "observed" && (
-              <>
-                <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    Observed Users
-                  </h2>
-                  <p className="text-indigo-200">
-                    Monitor and manage users detected by the system but not yet
-                    registered.
-                  </p>
-                </div>
-                {/* KPIs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">
-                      New Observed Users (Today)
-                    </div>
-                    <div className="text-3xl font-bold text-teal-600">2</div>
-                  </div>
-                  <div
-                    className={`rounded-xl shadow-lg p-6 flex flex-col items-center bg-white ${
-                      observedUsers.filter(
-                        (u: any) => u.status === "in_review_admin"
-                      ).length > 2
-                        ? "border-2 border-red-500 bg-red-50 animate-pulse"
-                        : ""
-                    }`}
-                  >
-                    <div className="text-sm text-gray-600 mb-1">
-                      Observed Users Pending Review
-                    </div>
-                    <div className="text-3xl font-bold text-red-600">
-                      {
-                        observedUsers.filter(
-                          (u: any) => u.status === "in_review_admin"
-                        ).length
-                      }
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">
-                      Observed Users (This Week)
-                    </div>
-                    <div className="text-3xl font-bold text-blue-600">5</div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">
-                      Total Observed Users
-                    </div>
-                    <div className="text-3xl font-bold text-gray-800">
-                      {observedUsers.length}
-                    </div>
-                  </div>
-                </div>
-                {/* Observed Users Table */}
-                <div className="bg-white rounded-xl shadow-lg p-4">
-                  <div className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-blue-500" /> Observed Users
-                    Requiring Action
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-500 border-b">
-                          {columns.map((col) => (
-                            <th
-                              key={col.key}
-                              className={`py-2 px-2 text-left ${
-                                col.sortable ? "cursor-pointer select-none" : ""
-                              }`}
-                              onClick={() => {
-                                if (col.sortable) {
-                                  if (observedSortField === col.key) {
-                                    setObservedSortDirection(
-                                      observedSortDirection === "asc"
-                                        ? "desc"
-                                        : "asc"
-                                    );
-                                  } else {
-                                    setObservedSortField(
-                                      col.key as ObservedUserSortField
-                                    );
-                                    setObservedSortDirection("asc");
-                                  }
-                                }
-                              }}
-                            >
-                              <span className="flex items-center">
-                                {col.label}
-                                {col.sortable &&
-                                  observedSortField === col.key &&
-                                  (observedSortDirection === "asc" ? (
-                                    <svg
-                                      className="w-3 h-3 ml-1"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M5 15l7-7 7 7"
-                                      />
-                                    </svg>
-                                  ) : (
-                                    <svg
-                                      className="w-3 h-3 ml-1"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M19 9l-7 7-7-7"
-                                      />
-                                    </svg>
-                                  ))}
-                              </span>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedObservedUsers.map((u: any) => (
-                          <tr
-                            key={u.id}
-                            className="border-b hover:bg-blue-50 transition"
-                          >
-                            <td className="py-2 px-2">
-                              {u.photoUrl && !imageErrors[u.photoUrl] ? (
-                                <div className="relative w-8 h-8">
-                                  <img
-                                    src={u.photoUrl}
-                                    alt={u.id}
-                                    className="w-8 h-8 rounded-full object-cover"
-                                    onError={() =>
-                                      handleImageError(u.id, u.photoUrl)
-                                    }
-                                  />
-                                </div>
-                              ) : (
-                                <UserCircle2 className="w-8 h-8 text-gray-400" />
-                              )}
-                            </td>
-                            <td className="py-2 px-2 font-mono">{u.id}</td>
-                            <td className="py-2 px-2">{u.firstSeen}</td>
-                            <td className="py-2 px-2">{u.lastSeen}</td>
-                            <td className="py-2 px-2 text-center">
-                              {u.tempAccesses}
-                            </td>
-                            <td className="py-2 px-2">
-                              {u.accessedZones.join(", ")}
-                            </td>
-                            <td className="py-2 px-2">
-                              <Badge
-                                className={
-                                  u.status === "active_temporal"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : u.status === "in_review_admin"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-gray-100 text-gray-800"
-                                }
-                              >
-                                {u.status === "active_temporal"
-                                  ? "Active (Temp)"
-                                  : u.status === "in_review_admin"
-                                  ? "Pending Review"
-                                  : "Expired"}
-                              </Badge>
-                            </td>
-                            <td className="py-2 px-2 text-blue-700">
-                              {u.aiAction}
-                            </td>
-                            <td className="py-2 px-2">
-                              <div className="flex gap-1">
-                                <Button size="sm" variant="outline">
-                                  Register
-                                </Button>
-                                <Button size="sm" variant="outline">
-                                  Extend
-                                </Button>
-                                <Button size="sm" variant="destructive">
-                                  Block
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setObservedUserDetails(u)}
-                                >
-                                  Details
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {observedUsers.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={9}
-                              className="text-center text-gray-400 py-4"
-                            >
-                              No observed users requiring action.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
+            {/* Observed Users Tab (AHORA ES UN COMPONENTE SEPARADO) */}
+            {dashboardTab === "observed" && <ObservedUsersTab />}
 
             {/* Detailed Logs Tab */}
             {dashboardTab === "logs" && (
@@ -2759,7 +2374,7 @@ export default function AdminDashboard({
                               type="button"
                               variant="outline"
                               className="bg-slate-50"
-                              onClick={() => setCameraOpen(true)} // Abrir el modal de CameraCapture
+                              onClick={() => setCameraOpen(true)}
                             >
                               <Camera className="w-4 h-4 mr-2" />
                               Take Photo
@@ -3040,7 +2655,7 @@ export default function AdminDashboard({
                                       variant="outline"
                                       role="combobox"
                                       aria-expanded={editingAccessZonesOpen}
-                                      className="w-full justify-between h-8 text-left font-normal"
+                                      className="w-full justify-between bg-slate-50 border-0 h-12 text-left font-normal"
                                     >
                                       {editingAccessZones.length > 0
                                         ? `${editingAccessZones.length} zone${
@@ -4181,11 +3796,10 @@ export default function AdminDashboard({
       </div>
 
       {/* --- INTEGRACIÓN DEL COMPONENTE CameraCapture --- */}
-      {/* Este componente gestiona toda la lógica de la cámara y su modal */}
       <CameraCapture
-        open={isCameraOpen} // Le dice a CameraCapture si debe estar abierto o cerrado
-        onClose={() => setCameraOpen(false)} // Callback para que CameraCapture cierre su propio modal
-        onCapture={handleCameraCapture} // Callback para recibir la imagen capturada como base64
+        open={isCameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleCameraCapture}
       />
 
       {/* --- OTROS MODALES --- */}
@@ -4738,8 +4352,8 @@ export default function AdminDashboard({
         </DialogContent>
       </Dialog>
 
-      {/* Observed User Details Modal */}
-      <Dialog
+      {/* REMOVIDO: Observed User Details Modal (ya no se usa) */}
+      {/* <Dialog
         open={!!observedUserDetails}
         onOpenChange={() => setObservedUserDetails(null)}
       >
@@ -4782,7 +4396,7 @@ export default function AdminDashboard({
             <Button onClick={() => setObservedUserDetails(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </div>
   );
 }
