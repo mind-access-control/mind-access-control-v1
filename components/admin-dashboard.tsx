@@ -1,18 +1,16 @@
 'use client'; // Esta línea va al inicio si es un Client Component
-import { createClient, Session, SupabaseClient } from '@supabase/supabase-js'; // Importa el cliente de Supabase JS
+import { Session, SupabaseClient } from '@supabase/supabase-js'; // Importa el cliente de Supabase JS
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 // --- Types Import ---
-import type { LogSortField, ObservedUserSortField, Role, SortDirection, SortField, SummaryEntry, SummarySortField, User, UserStatus, Zone } from '@/types';
+import type { LogSortField, ObservedUserSortField, SortDirection, SummaryEntry, SummarySortField } from '@/types';
 
 // --- Mock Data Import ---
 import {
   accessLogs,
   columns,
-  csvTemplateContent,
   defaultNewCamera,
-  initialUsers,
   logColumns,
   aiRecommendations as mockAiRecommendations,
   cameras as mockCameras,
@@ -25,22 +23,14 @@ import {
   tabs,
 } from '@/mock-data';
 
-// --- Configuración del Cliente Supabase para el Frontend ---
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
-
 // --- Shadcn UI Components ---
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -49,24 +39,19 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
-  Camera,
-  Check,
   ChevronDown,
   ChevronUp,
-  Download,
   Edit,
   Eye,
   FileSpreadsheet,
   Lightbulb,
   LogOut,
-  RotateCcw,
   Save,
   Search,
   Shield,
   SlidersHorizontal,
   Trash2,
   TrendingUp,
-  Upload,
   UserCircle2,
   Users,
   X,
@@ -74,7 +59,6 @@ import {
 } from 'lucide-react';
 
 // --- Custom Hooks & Components ---
-import { CameraCapture } from '@/components/camera-capture'; // Importar el componente CameraCapture
 import { useAuth } from '@/hooks/use-auth';
 
 // --- Recharts (for AI-Enhanced Dashboard) ---
@@ -87,53 +71,12 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const { signOut } = useAuth(); // Asume que useAuth y signOut están correctamente implementados
   const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const csvFileInputRef = useRef<HTMLInputElement>(null);
-
-  // --- User Management States ---
-  const [users, setUsers] = useState<User[]>(initialUsers); // Usar initialUsers
-  const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editingUser, setEditingUser] = useState<any>(null); // Considerar tipado más específico
-  const [editingAccessZones, setEditingAccessZones] = useState<string[]>([]);
-  const [editingAccessZonesOpen, setEditingAccessZonesOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<any>(null); // Considerar tipado más específico
-
-  // --- New User Form States ---
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('');
-  const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive'); // Default to 'Inactive'
-  const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
-  const [accessZonesOpen, setAccessZonesOpen] = useState(false);
-
-  // --- Photo Upload & Face-API.js States ---
-  const [imagePreview, setImagePreview] = useState<string | null>(null); // URL para mostrar la imagen seleccionada/capturada
-  const [currentImage, setCurrentImage] = useState<File | Blob | null>(null); // La imagen activa (File o Blob) para procesar
-  const [faceEmbedding, setFaceEmbedding] = useState<Float32Array | null>(null); // El vector 128D resultante de face-api.js
-  const [faceDetectionError, setFaceDetectionError] = useState<string | null>(null); // Errores específicos de detección facial
-  const [isProcessingImage, setIsProcessingImage] = useState(false); // Indica si face-api está trabajando
-  const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
-  const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(null); // Errores de carga de los modelos de Face-API
-
-  // --- Camera Capture Component State (isCameraOpen es para el prop 'open') ---
-  const [isCameraOpen, setCameraOpen] = useState(false);
-
-  // --- Global UI Status / Feedback ---
-  const [showStatusMessage, setShowStatusMessage] = useState<string | null>(null); // Mensajes de éxito/error al guardar/procesar
-  const [isSavingUser, setIsSavingUser] = useState(false); // Para el estado del botón Guardar Usuario
-  const [isDragging, setIsDragging] = useState(false); // Para la sección de drag & drop de fotos
 
   // --- Dashboard Filtering/Sorting States (mantener tus existentes) ---
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
-  // Nuevo estado para el ordenamiento de la tabla de usuarios
-  const [sortField, setSortField] = useState<SortField>('name'); // Campo de ordenamiento por defecto
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // Dirección de ordenamiento por defecto
 
-  const [csvIsDragging, setCsvIsDragging] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedUser, setSelectedUser] = useState('all');
@@ -162,27 +105,8 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const [editingCamera, setEditingCamera] = useState<any>(null);
   const [cameraToDelete, setCameraToDelete] = useState<any>(null);
   const [cameraDeleteModalOpen, setCameraDeleteModalOpen] = useState(false);
-
-  // Estados para la carga masiva CSV (faltantes)
-  const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
-
   // Search term para los Access Logs (faltante)
   const [searchTerm, setSearchTerm] = useState('');
-
-  // States for data fetched from Edge Functions
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loadingRoles, setLoadingRoles] = useState(true);
-  const [errorRoles, setErrorRoles] = useState<string | null>(null);
-  const [zonesData, setZonesData] = useState<Zone[]>([]); // Renombrado a zonesData para evitar conflicto con 'zones' mock
-  const [loadingZones, setLoadingZones] = useState(true);
-  const [errorZones, setErrorZones] = useState<string | null>(null);
-  const [userStatuses, setUserStatuses] = useState<UserStatus[]>([]);
-  const [loadingUserStatuses, setLoadingUserStatuses] = useState(true);
-  const [errorUserStatuses, setErrorUserStatuses] = useState<string | null>(null);
-
   // --- AI-ENHANCED DASHBOARD STATE & DATA (Inicializados como arrays/objetos vacíos) ---
   const [riskScore] = useState(mockRiskScore);
   const [kpiData] = useState(mockKpiData);
@@ -202,24 +126,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const [observedUserDetails, setObservedUserDetails] = useState<null | (typeof observedUsers)[0]>(null);
   const [dashboardTab, setDashboardTab] = useState('overview');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-
-  // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
-  const handleCameraCapture = useCallback((imageData: string) => {
-    setImagePreview(imageData); // Muestra la previsualización en el formulario principal
-    // Convierte la cadena base64 a un objeto Blob
-    fetch(imageData)
-      .then((res) => res.blob())
-      .then((blob) => {
-        setCurrentImage(blob); // Establece el Blob como la imagen actual para procesamiento
-        setFaceEmbedding(null); // Reinicia el embedding
-        setFaceDetectionError(null); // Reinicia errores de detección
-        setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
-      })
-      .catch((error) => {
-        console.error('Error converting captured image to blob:', error);
-        setFaceDetectionError('Failed to process captured image from camera.');
-      });
-  }, []);
 
   // --- OTRAS FUNCIONES ---
   const handleLogout = async () => {
@@ -246,110 +152,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
     } else {
       setSummarySortField(field);
       setSummarySortDirection('asc');
-    }
-  };
-
-  const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedCsvFile(file);
-      setUploadStatus('idle');
-      setUploadMessage(null);
-    }
-  };
-
-  const confirmDelete = () => {
-    // Lógica para eliminar el usuario de Supabase
-    console.log('Deleting user:', userToDelete);
-    setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userToDelete.id));
-    setDeleteModalOpen(false);
-    setUserToDelete(null);
-  };
-
-  const cancelDelete = () => {
-    setDeleteModalOpen(false);
-    setUserToDelete(null);
-  };
-
-  const downloadCsvTemplate = () => {
-    const blob = new Blob([csvTemplateContent], {
-      type: 'text/csv;charset=utf-8;',
-    });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      // Feature detection
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', 'user_onboarding_template.csv');
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
-  const processBulkUpload = async () => {
-    if (!selectedCsvFile) {
-      setUploadMessage('Please select a CSV file first.');
-      setUploadStatus('error');
-      return;
-    }
-
-    setUploadStatus('processing');
-    setUploadMessage('Processing CSV file...');
-
-    try {
-      // Implement your CSV parsing and Supabase insertion logic here
-      // This is a placeholder. You'll need a library like 'papaparse'
-      // and potentially a Supabase Edge Function for bulk insertion.
-      console.log('Processing bulk upload for file:', selectedCsvFile.name);
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async work
-
-      setUploadStatus('success');
-      setUploadMessage(`Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`);
-      setSelectedCsvFile(null); // Clear selected file after processing
-    } catch (error: any) {
-      console.error('Error processing bulk upload:', error);
-      setUploadStatus('error');
-      setUploadMessage(`Failed to process CSV: ${error.message}`);
-    }
-  };
-
-  const handleCsvDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCsvIsDragging(true);
-  };
-
-  const handleCsvDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCsvIsDragging(false);
-  };
-
-  const handleCsvDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCsvIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (file.type === 'text/csv') {
-        setSelectedCsvFile(file);
-        setUploadStatus('idle');
-        setUploadMessage(null);
-      } else {
-        setUploadMessage('Please drop a CSV file.');
-        setUploadStatus('error');
-      }
-    }
-  };
-
-  const clearCsvFile = () => {
-    setSelectedCsvFile(null);
-    setUploadStatus('idle');
-    setUploadMessage(null);
-    if (csvFileInputRef.current) {
-      csvFileInputRef.current.value = '';
     }
   };
 
@@ -440,7 +242,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
     // Ejemplo de implementación de sort, deberás llenar con tu lógica real
     return [...observedUsers].sort((a, b) => {
       if (observedSortField === 'id') {
-        return observedSortDirection === 'asc' ? a.id - b.id : b.id - a.id;
+        return observedSortDirection === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
       }
       // Añadir más lógica para otros campos si es necesario
       return 0;
@@ -549,6 +351,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   useEffect(() => {
     setCurrentPage(1);
   }, [userSearchTerm, itemsPerPage]);
+
   useEffect(() => {
     setLogCurrentPage(1);
   }, [searchTerm, selectedUser, selectedZone, selectedStatus, selectedMethod, dateFrom, dateTo]);
@@ -1743,122 +1546,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
         )}
       </div>
 
-      {/* --- INTEGRACIÓN DEL COMPONENTE CameraCapture --- */}
-      {/* Este componente gestiona toda la lógica de la cámara y su modal */}
-      <CameraCapture
-        open={isCameraOpen} // Le dice a CameraCapture si debe estar abierto o cerrado
-        onClose={() => setCameraOpen(false)} // Callback para que CameraCapture cierre su propio modal
-        onCapture={handleCameraCapture} // Callback para recibir la imagen capturada como base64
-      />
-
       {/* --- OTROS MODALES --- */}
-      {/* Delete Confirmation Modal */}
-      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{userToDelete?.name}</strong>? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={cancelDelete}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
-              Confirm Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Upload Modal */}
-      <Dialog open={bulkUploadModalOpen} onOpenChange={setBulkUploadModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Bulk User Upload</DialogTitle>
-            <DialogDescription>
-              Upload a CSV file containing user data for bulk registration. The CSV must include columns for Full Name, Email Address, User Role, Job Title,
-              Access Zones (comma-separated), and a 'Photo URL'.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {uploadStatus === 'idle' ? (
-              <div
-                className={`border-2 ${csvIsDragging ? 'border-teal-500 bg-teal-50' : 'border-dashed border-gray-300'} rounded-lg p-6 transition-colors`}
-                onDragOver={handleCsvDragOver}
-                onDragLeave={handleCsvDragLeave}
-                onDrop={handleCsvDrop}
-              >
-                <div className="text-center">
-                  <FileSpreadsheet className={`mx-auto h-12 w-12 ${csvIsDragging ? 'text-teal-500' : 'text-gray-400'}`} />
-                  <div className="mt-4">
-                    <p className="text-sm text-gray-500 mb-2">Drag and drop a CSV file here, or click to select a file</p>
-                    <Button type="button" variant="outline" className="bg-slate-50" onClick={() => csvFileInputRef.current?.click()}>
-                      Choose CSV File
-                    </Button>
-                    <input ref={csvFileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-                  </div>
-                </div>
-              </div>
-            ) : uploadStatus === 'processing' ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
-                <p className="text-gray-600">{uploadMessage}</p>
-              </div>
-            ) : uploadStatus === 'success' ? (
-              <Alert className="bg-green-50 border-green-200">
-                <Check className="h-4 w-4 text-green-600" />
-                <AlertTitle className="text-green-800">Success</AlertTitle>
-                <AlertDescription className="text-green-700">{uploadMessage}</AlertDescription>
-              </Alert>
-            ) : (
-              <Alert className="bg-red-50 border-red-200">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertTitle className="text-red-800">Error</AlertTitle>
-                <AlertDescription className="text-red-700">{uploadMessage}</AlertDescription>
-              </Alert>
-            )}
-
-            {selectedCsvFile && uploadStatus === 'idle' && (
-              <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-md">
-                <FileSpreadsheet className="h-5 w-5 text-teal-600" />
-                <span className="text-sm font-medium truncate">{selectedCsvFile.name}</span>
-                <Button variant="ghost" size="sm" onClick={clearCsvFile} className="ml-auto h-6 w-6 p-0 hover:bg-red-100">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              <Button variant="outline" className="bg-slate-50" onClick={downloadCsvTemplate}>
-                <Download className="w-4 h-4 mr-2" />
-                Download Template CSV
-              </Button>
-              <p className="text-xs text-gray-500">Download a template CSV file with the required headers for bulk upload.</p>
-            </div>
-          </div>
-
-          <DialogFooter className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setBulkUploadModalOpen(false);
-                setSelectedCsvFile(null);
-                setUploadStatus('idle');
-              }}
-              disabled={uploadStatus === 'processing'}
-            >
-              Cancel
-            </Button>
-            <Button onClick={processBulkUpload} className="bg-teal-600 hover:bg-teal-700" disabled={!selectedCsvFile || uploadStatus === 'processing'}>
-              Process Upload
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Enhanced Access Summary Modal with Sorting and Filtering */}
       <Dialog open={summaryModalOpen} onOpenChange={setSummaryModalOpen}>
         <DialogContent className="sm:max-w-6xl max-h-[80vh] overflow-y-auto">

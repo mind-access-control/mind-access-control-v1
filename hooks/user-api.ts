@@ -218,10 +218,12 @@ export function useUserApi() {
     loadingZones,
     errorZones,
     currentImage,
+    setCurrentImage,
     faceEmbedding,
+    setFaceEmbedding,
     faceDetectionError,
+    setFaceDetectionError,
     isProcessingImage,
     faceApiModelsLoaded,
-    faceApiModelsError,
   };
 }

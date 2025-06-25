@@ -10,24 +10,16 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useUserApi } from '@/hooks/user-api';
 
-import {
-    csvTemplateContent,
-    defaultNewCamera,
-    initialUsers,
-    aiRecommendations as mockAiRecommendations,
-    cameras as mockCameras,
-    mockData as mockKpiData,
-    observedUsers as mockObservedUsers,
-    riskScore as mockRiskScore,
-    suspiciousUsers as mockSuspiciousUsers,
-    zones as mockZones,
-} from '@/mock-data';
-import { LogSortField, ObservedUserSortField, Role, SortDirection, SortField, SummarySortField, User, UserStatus, Zone } from '@/types';
+import { csvTemplateContent, initialUsers } from '@/mock-data';
+import { SortDirection, SortField, User } from '@/types';
 import { AlertCircle, Camera, Check, ChevronDown, ChevronUp, Download, Edit, FileSpreadsheet, RotateCcw, Save, Search, Trash2, Upload, X } from 'lucide-react';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { CameraCapture } from '../camera-capture';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const UsersTab: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   // --- User Management States ---
   const [users, setUsers] = useState<User[]>(initialUsers); // Usar initialUsers
@@ -49,12 +41,6 @@ const UsersTab: React.FC = () => {
 
   // --- Photo Upload & Face-API.js States ---
   const [imagePreview, setImagePreview] = useState<string | null>(null); // URL para mostrar la imagen seleccionada/capturada
-  const [currentImage, setCurrentImage] = useState<File | Blob | null>(null); // La imagen activa (File o Blob) para procesar
-  const [faceEmbedding, setFaceEmbedding] = useState<Float32Array | null>(null); // El vector 128D resultante de face-api.js
-  const [faceDetectionError, setFaceDetectionError] = useState<string | null>(null); // Errores específicos de detección facial
-  const [isProcessingImage, setIsProcessingImage] = useState(false); // Indica si face-api está trabajando
-  const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
-  const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(null); // Errores de carga de los modelos de Face-API
 
   // --- Camera Capture Component State (isCameraOpen es para el prop 'open') ---
   const [isCameraOpen, setCameraOpen] = useState(false);
@@ -73,34 +59,6 @@ const UsersTab: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // Dirección de ordenamiento por defecto
 
   const [csvIsDragging, setCsvIsDragging] = useState(false);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [selectedUser, setSelectedUser] = useState('all');
-  const [selectedZone, setSelectedZone] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedMethod, setSelectedMethod] = useState('all');
-  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-  const [logSortField, setLogSortField] = useState<LogSortField>('timestamp');
-  const [logSortDirection, setLogSortDirection] = useState<SortDirection>('desc');
-  const [logCurrentPage, setLogCurrentPage] = useState(1);
-  const [logItemsPerPage, setLogItemsPerPage] = useState(10);
-  const [summarySortField, setSummarySortField] = useState<SummarySortField>('user');
-  const [summarySortDirection, setSummarySortDirection] = useState<SortDirection>('asc');
-  const [summarySearchTerm, setSummarySearchTerm] = useState('');
-  const [summaryStatusFilter, setSummaryStatusFilter] = useState('all');
-  const [activeSettingsTab, setActiveSettingsTab] = useState('zones');
-  const [zones, setZones] = useState(mockZones);
-  const [cameras, setCameras] = useState(mockCameras);
-  const [newZoneName, setNewZoneName] = useState('');
-  const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
-  const [editingZoneName, setEditingZoneName] = useState('');
-  const [zoneToDelete, setZoneToDelete] = useState<any>(null);
-  const [zoneDeleteModalOpen, setZoneDeleteModalOpen] = useState(false);
-  const [newCamera, setNewCamera] = useState(defaultNewCamera);
-  const [editingCameraId, setEditingCameraId] = useState<number | null>(null);
-  const [editingCamera, setEditingCamera] = useState<any>(null);
-  const [cameraToDelete, setCameraToDelete] = useState<any>(null);
-  const [cameraDeleteModalOpen, setCameraDeleteModalOpen] = useState(false);
 
   // Estados para la carga masiva CSV (faltantes)
   const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
@@ -108,12 +66,6 @@ const UsersTab: React.FC = () => {
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
 
-  // Search term para los Access Logs (faltante)
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // States for data fetched from Edge Functions
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-  
   const {
     roles,
     loadingRoles,
@@ -124,26 +76,16 @@ const UsersTab: React.FC = () => {
     zonesData,
     loadingZones,
     errorZones,
+    // Face-API.js states from the hook
+    currentImage,
+    setCurrentImage,
+    faceEmbedding,
+    setFaceEmbedding,
+    faceDetectionError,
+    setFaceDetectionError,
+    isProcessingImage,
+    faceApiModelsLoaded,
   } = useUserApi();
-
-  // --- AI-ENHANCED DASHBOARD STATE & DATA (Inicializados como arrays/objetos vacíos) ---
-  const [riskScore] = useState(mockRiskScore);
-  const [kpiData] = useState(mockKpiData);
-  const [suspiciousUsers, setSuspiciousUsers] = useState(mockSuspiciousUsers);
-  const [aiRecommendations, setAIRecommendations] = useState(mockAiRecommendations);
-  const [recentLogs, setRecentLogs] = useState<any[]>([]); // Inicializado
-  const [trendData] = useState<any[]>([]); // Inicializado
-  const [failureCauseData] = useState<any[]>([]); // Inicializado
-  const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
-  const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
-  const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
-  const [observedUsers] = useState(mockObservedUsers);
-  const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>('id');
-  const [observedSortDirection, setObservedSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [logsSortField, setLogsSortField] = useState<LogSortField>('timestamp');
-  const [logsSortDirection, setLogsSortDirection] = useState<SortDirection>('desc');
-  const [observedUserDetails, setObservedUserDetails] = useState<null | (typeof observedUsers)[0]>(null);
-  const [dashboardTab, setDashboardTab] = useState('overview');
 
   // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA ---
 
@@ -403,6 +345,112 @@ const UsersTab: React.FC = () => {
     } finally {
       // Restablece el estado de guardado, sin importar si fue exitoso o fallido.
       setIsSavingUser(false);
+    }
+  };
+
+  // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
+  const handleCameraCapture = useCallback((imageData: string) => {
+    setImagePreview(imageData); // Muestra la previsualización en el formulario principal
+    // Convierte la cadena base64 a un objeto Blob
+    fetch(imageData)
+      .then((res) => res.blob())
+      .then((blob) => {
+        setCurrentImage(blob); // Establece el Blob como la imagen actual para procesamiento
+        setFaceEmbedding(null); // Reinicia el embedding
+        setFaceDetectionError(null); // Reinicia errores de detección
+        setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
+      })
+      .catch((error) => {
+        console.error('Error converting captured image to blob:', error);
+        setFaceDetectionError('Failed to process captured image from camera.');
+      });
+  }, []);
+
+  // Delete Confirmation Modal
+  const confirmDelete = () => {
+    // Lógica para eliminar el usuario de Supabase
+    console.log('Deleting user:', userToDelete);
+    setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userToDelete.id));
+    setDeleteModalOpen(false);
+    setUserToDelete(null);
+  };
+
+  const cancelDelete = () => {
+    setDeleteModalOpen(false);
+    setUserToDelete(null);
+  };
+
+  const processBulkUpload = async () => {
+    if (!selectedCsvFile) {
+      setUploadMessage('Please select a CSV file first.');
+      setUploadStatus('error');
+      return;
+    }
+
+    setUploadStatus('processing');
+    setUploadMessage('Processing CSV file...');
+
+    try {
+      // Implement your CSV parsing and Supabase insertion logic here
+      // This is a placeholder. You'll need a library like 'papaparse'
+      // and potentially a Supabase Edge Function for bulk insertion.
+      console.log('Processing bulk upload for file:', selectedCsvFile.name);
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async work
+
+      setUploadStatus('success');
+      setUploadMessage(`Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`);
+      setSelectedCsvFile(null); // Clear selected file after processing
+    } catch (error: any) {
+      console.error('Error processing bulk upload:', error);
+      setUploadStatus('error');
+      setUploadMessage(`Failed to process CSV: ${error.message}`);
+    }
+  };
+
+  const handleCsvDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCsvIsDragging(true);
+  };
+
+  const handleCsvDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCsvIsDragging(false);
+  };
+
+  const handleCsvDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCsvIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.type === 'text/csv') {
+        setSelectedCsvFile(file);
+        setUploadStatus('idle');
+        setUploadMessage(null);
+      } else {
+        setUploadMessage('Please drop a CSV file.');
+        setUploadStatus('error');
+      }
+    }
+  };
+
+  const clearCsvFile = () => {
+    setSelectedCsvFile(null);
+    setUploadStatus('idle');
+    setUploadMessage(null);
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = '';
+    }
+  };
+
+  const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedCsvFile(file);
+      setUploadStatus('idle');
+      setUploadMessage(null);
     }
   };
 
@@ -761,6 +809,14 @@ const UsersTab: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* --- INTEGRACIÓN DEL COMPONENTE CameraCapture --- */}
+      {/* Este componente gestiona toda la lógica de la cámara y su modal */}
+      <CameraCapture
+        open={isCameraOpen} // Le dice a CameraCapture si debe estar abierto o cerrado
+        onClose={() => setCameraOpen(false)} // Callback para que CameraCapture cierre su propio modal
+        onCapture={handleCameraCapture} // Callback para recibir la imagen capturada como base64
+      />
+
       {/* Enhanced Existing Users List with Search and Pagination */}
       <Card className="bg-white shadow-lg">
         <CardHeader>
@@ -1010,6 +1066,112 @@ const UsersTab: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      {/* Delete Confirmation Modal */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{userToDelete?.name}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={cancelDelete}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Confirm Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Upload Modal */}
+      <Dialog open={bulkUploadModalOpen} onOpenChange={setBulkUploadModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Bulk User Upload</DialogTitle>
+            <DialogDescription>
+              Upload a CSV file containing user data for bulk registration. The CSV must include columns for Full Name, Email Address, User Role, Job Title,
+              Access Zones (comma-separated), and a 'Photo URL'.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {uploadStatus === 'idle' ? (
+              <div
+                className={`border-2 ${csvIsDragging ? 'border-teal-500 bg-teal-50' : 'border-dashed border-gray-300'} rounded-lg p-6 transition-colors`}
+                onDragOver={handleCsvDragOver}
+                onDragLeave={handleCsvDragLeave}
+                onDrop={handleCsvDrop}
+              >
+                <div className="text-center">
+                  <FileSpreadsheet className={`mx-auto h-12 w-12 ${csvIsDragging ? 'text-teal-500' : 'text-gray-400'}`} />
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-500 mb-2">Drag and drop a CSV file here, or click to select a file</p>
+                    <Button type="button" variant="outline" className="bg-slate-50" onClick={() => csvFileInputRef.current?.click()}>
+                      Choose CSV File
+                    </Button>
+                    <input ref={csvFileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+                  </div>
+                </div>
+              </div>
+            ) : uploadStatus === 'processing' ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
+                <p className="text-gray-600">{uploadMessage}</p>
+              </div>
+            ) : uploadStatus === 'success' ? (
+              <Alert className="bg-green-50 border-green-200">
+                <Check className="h-4 w-4 text-green-600" />
+                <AlertTitle className="text-green-800">Success</AlertTitle>
+                <AlertDescription className="text-green-700">{uploadMessage}</AlertDescription>
+              </Alert>
+            ) : (
+              <Alert className="bg-red-50 border-red-200">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertTitle className="text-red-800">Error</AlertTitle>
+                <AlertDescription className="text-red-700">{uploadMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            {selectedCsvFile && uploadStatus === 'idle' && (
+              <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-md">
+                <FileSpreadsheet className="h-5 w-5 text-teal-600" />
+                <span className="text-sm font-medium truncate">{selectedCsvFile.name}</span>
+                <Button variant="ghost" size="sm" onClick={clearCsvFile} className="ml-auto h-6 w-6 p-0 hover:bg-red-100">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <Button variant="outline" className="bg-slate-50" onClick={downloadCsvTemplate}>
+                <Download className="w-4 h-4 mr-2" />
+                Download Template CSV
+              </Button>
+              <p className="text-xs text-gray-500">Download a template CSV file with the required headers for bulk upload.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkUploadModalOpen(false);
+                setSelectedCsvFile(null);
+                setUploadStatus('idle');
+              }}
+              disabled={uploadStatus === 'processing'}
+            >
+              Cancel
+            </Button>
+            <Button onClick={processBulkUpload} className="bg-teal-600 hover:bg-teal-700" disabled={!selectedCsvFile || uploadStatus === 'processing'}>
+              Process Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
