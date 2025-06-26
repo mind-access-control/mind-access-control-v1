@@ -46,7 +46,8 @@ interface ObservedUserForFrontend {
 // Interfaz para la respuesta final de la API, incluyendo los nuevos conteos
 interface GetObservedUsersResponse {
   users: ObservedUserForFrontend[];
-  totalCount: number;
+  totalCount: number; // Este seguirá siendo el conteo para la tabla filtrada/paginada
+  absoluteTotalCount: number; // NUEVO: Conteo total real sin aplicar filtros
   pendingReviewCount: number;
   highRiskCount: number;
   activeTemporalCount: number;
@@ -158,7 +159,7 @@ serve(async (req: Request): Promise<Response> => {
     const zonesMap = new Map<string, string>();
     zonesCatalogData.forEach((zone) => zonesMap.set(zone.id, zone.name));
 
-    // --- Obtener conteos para las cards ---
+    // --- Obtener conteo TOTAL GENERAL de la base de datos (sin filtros) ---
     const { count: totalCountFromDb, error: countError } = await supabaseAdmin
       .from("observed_users")
       .select("*", { count: "exact", head: true });
@@ -216,7 +217,7 @@ serve(async (req: Request): Promise<Response> => {
       throw expiredError;
     }
 
-    // --- CONSTRUIR LAS CONSULTAS DE DATOS Y CONTEO POR SEPARADO ---
+    // --- CONSTRUIR LAS CONSULTAS DE DATOS Y CONTEO POR SEPARADO (para la tabla filtrada) ---
     let dataQuery = supabaseAdmin.from("observed_users").select(
       `
         id,
@@ -235,13 +236,12 @@ serve(async (req: Request): Promise<Response> => {
       `,
     ).order("last_seen_at", { ascending: false });
 
-    // También construimos la consulta para el conteo de la tabla filtrada
     let countQueryForTable = supabaseAdmin.from("observed_users").select("*", {
       count: "exact",
       head: true,
     });
 
-    // Aplicar filtro basado en filterType a AMBAS consultas
+    // Aplicar filtro basado en filterType a AMBAS consultas (de datos y de conteo para la tabla)
     if (filterType === "pendingReview" && activeTemporalStatusId) {
       dataQuery = dataQuery.eq("status_id", activeTemporalStatusId).gt(
         "access_count",
@@ -252,7 +252,6 @@ serve(async (req: Request): Promise<Response> => {
         activeTemporalStatusId,
       ).gt("access_count", 5);
     } else if (filterType === "highRisk" && blockedStatusId) {
-      // Filtro para 'High Risk' en la tabla: solo 'alert_triggered = true' y no 'blocked'
       dataQuery = dataQuery.eq("alert_triggered", true).neq(
         "status_id",
         blockedStatusId,
@@ -272,7 +271,7 @@ serve(async (req: Request): Promise<Response> => {
       countQueryForTable = countQueryForTable.eq("status_id", expiredStatusId);
     }
 
-    // Obtener el conteo total de los usuarios para la tabla filtrada
+    // Obtener el conteo TOTAL FILTRADO para la tabla
     const { count: filteredUsersCountForTable, error: filteredCountError } =
       await countQueryForTable;
 
@@ -349,16 +348,19 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    const finalTotalCount = (filterType || searchTerm)
+    // El conteo final para la tabla se basa en el filtro de búsqueda/tarjeta,
+    // pero el total absoluto siempre es totalCountFromDb.
+    const finalTotalCountForTable = (filterType || searchTerm)
       ? filteredUsersCountForTable
       : totalCountFromDb;
 
     return new Response(
       JSON.stringify({
         users: finalFilteredUsers,
-        totalCount: finalTotalCount,
+        totalCount: finalTotalCountForTable, // Este es el conteo para la tabla (filtrado o total)
+        absoluteTotalCount: totalCountFromDb, // NUEVO: Este es siempre el conteo global
         pendingReviewCount: pendingReviewCount,
-        highRiskCount: highRiskCount, // Este es el conteo ya ajustado
+        highRiskCount: highRiskCount,
         activeTemporalCount: activeTemporalCount,
         expiredCount: expiredCount,
       } as GetObservedUsersResponse),

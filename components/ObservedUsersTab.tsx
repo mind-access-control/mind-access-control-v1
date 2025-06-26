@@ -22,7 +22,8 @@ import {
 // Interfaz para la respuesta completa de la Edge Function (alineada con get-observed-users EF)
 interface GetObservedUsersResponse {
   users: ObservedUser[];
-  totalCount: number;
+  totalCount: number; // Conteo para la tabla (puede ser filtrado)
+  absoluteTotalCount: number; // NUEVO: Conteo total real sin aplicar filtros
   pendingReviewCount: number;
   highRiskCount: number;
   activeTemporalCount: number;
@@ -31,7 +32,9 @@ interface GetObservedUsersResponse {
 
 const ObservedUsersTab: React.FC = () => {
   const [observedUsers, setObservedUsers] = useState<ObservedUser[]>([]);
-  const [totalObservedUsersCount, setTotalObservedUsersCount] = useState(0);
+  const [totalObservedUsersCount, setTotalObservedUsersCount] = useState(0); // Conteo para la tabla/paginación
+  const [absoluteObservedUsersCount, setAbsoluteObservedUsersCount] =
+    useState(0); // NUEVO: Conteo total real
 
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [highRiskCount, setHighRiskCount] = useState(0);
@@ -55,7 +58,6 @@ const ObservedUsersTab: React.FC = () => {
 
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // NUEVO ESTADO: Un disparador para forzar la recarga
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const fetchObservedUsers = useCallback(async () => {
@@ -96,7 +98,8 @@ const ObservedUsersTab: React.FC = () => {
       const result: GetObservedUsersResponse = await response.json();
 
       setObservedUsers(result.users);
-      setTotalObservedUsersCount(result.totalCount);
+      setTotalObservedUsersCount(result.totalCount); // Conteo para la tabla
+      setAbsoluteObservedUsersCount(result.absoluteTotalCount); // NUEVO: Conteo absoluto para la card
       setPendingReviewCount(result.pendingReviewCount);
       setHighRiskCount(result.highRiskCount);
       setActiveTemporalCount(result.activeTemporalCount);
@@ -121,7 +124,6 @@ const ObservedUsersTab: React.FC = () => {
     observedSortField,
     observedSortDirection,
     filterType,
-    // refreshTrigger, // No es necesario aquí, ya que el useEffect depende de fetchObservedUsers
   ]);
 
   useEffect(() => {
@@ -138,7 +140,7 @@ const ObservedUsersTab: React.FC = () => {
         clearTimeout(debounceTimeoutRef.current);
       }
     };
-  }, [fetchObservedUsers, refreshTrigger]); // AÑADIDO: refreshTrigger como dependencia
+  }, [fetchObservedUsers, refreshTrigger]);
 
   const totalPages = useMemo(() => {
     return Math.ceil(totalObservedUsersCount / itemsPerPage);
@@ -163,7 +165,7 @@ const ObservedUsersTab: React.FC = () => {
     setCurrentPage(1);
     setSearchTerm("");
     setFilterType("");
-    setRefreshTrigger((prev) => prev + 1); // NUEVO: Incrementa el disparador
+    setRefreshTrigger((prev) => prev + 1);
   }, []);
 
   const handleCardClick = useCallback(
@@ -300,7 +302,7 @@ const ObservedUsersTab: React.FC = () => {
       </div>
 
       <ObservedUsersOverviewCards
-        totalObserved={totalObservedUsersCount}
+        totalObserved={absoluteObservedUsersCount}
         pendingReviewCount={pendingReviewCount}
         highRiskCount={highRiskCount}
         activeTemporalCount={activeTemporalCount}
