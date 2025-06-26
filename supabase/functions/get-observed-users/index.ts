@@ -10,9 +10,10 @@ interface ItemWithNameAndId {
   name: string;
 }
 
-// Interfaz para el resultado de la consulta de Supabase (con los joins)
+// Interfaz para el resultado de la consulta de Supabase (alineada con la tabla 'observed_users')
 interface SupabaseObservedUserQueryResult {
   id: string;
+  embedding: number[] | null;
   first_seen_at: string;
   last_seen_at: string;
   access_count: number;
@@ -20,9 +21,10 @@ interface SupabaseObservedUserQueryResult {
   status_id: string;
   ai_action: string | null;
   face_image_url: string | null;
-  status_catalog: ItemWithNameAndId[] | null; // Es un array porque así lo retorna Supabase a veces en joins
   expires_at: string;
   alert_triggered: boolean;
+  potential_match_user_id: string | null;
+  consecutive_denied_accesses: number;
 }
 
 // Interfaz para el payload de respuesta al frontend
@@ -35,31 +37,55 @@ interface ObservedUserForFrontend {
   status: ItemWithNameAndId;
   aiAction: string | null;
   faceImage: string | null;
+  alertTriggered: boolean;
+  expiresAt: string;
+  potentialMatchUserId: string | null;
+  consecutiveDeniedAccesses: number;
 }
 
-// Interfaz para el payload de la solicitud
-interface GetObservedUsersPayload {
-  searchTerm?: string;
-  page: number;
-  itemsPerPage: number;
-  sortField: string;
-  sortDirection: "asc" | "desc";
+// Interfaz para la respuesta final de la API, incluyendo los nuevos conteos
+interface GetObservedUsersResponse {
+  users: ObservedUserForFrontend[];
+  totalCount: number;
+  pendingReviewCount: number;
+  highRiskCount: number;
+  activeTemporalCount: number;
+  expiredCount: number;
+}
+
+// Auxiliar para manejar errores con mensaje
+interface ErrorWithMessage {
+  message: string;
+}
+
+// Función de guardia para TypeScript para verificar si un error tiene una propiedad 'message'.
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as ErrorWithMessage).message === "string"
+  );
 }
 
 serve(async (req: Request): Promise<Response> => {
-  // CORS Preflight
+  // Configuración de CORS para solicitudes OPTIONS (preflight).
   if (req.method === "OPTIONS") {
+    console.log(
+      "DEBUG: Handling OPTIONS preflight request for get-observed-users",
+    );
     return new Response(null, {
       status: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers":
           "authorization, x-client-info, apikey, content-type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       },
     });
   }
 
-  // Cliente con service_role_key para operaciones de escritura (actualización de estados)
+  // Inicializar clientes de Supabase.
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -72,8 +98,7 @@ serve(async (req: Request): Promise<Response> => {
     },
   );
 
-  // Cliente con anon_key para operaciones de lectura (RPCs, selects de catálogos sin auth especial)
-  const supabase = createClient(
+  const _supabase = createClient( // Renombrado a _supabase para evitar el warning
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
     {
@@ -84,263 +109,237 @@ serve(async (req: Request): Promise<Response> => {
   );
 
   try {
-    const {
-      searchTerm = "",
-      page = 1,
-      itemsPerPage = 10,
-      sortField = "lastSeen",
-      sortDirection = "desc",
-    }: GetObservedUsersPayload = await req.json();
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const searchTerm = searchParams.get("searchTerm") || "";
+    const filterType = searchParams.get("filterType") || "";
 
-    const offset = (page - 1) * itemsPerPage;
+    const offset = (page - 1) * pageSize;
 
-    let dbSortField: string;
-    switch (sortField) {
-      case "firstSeen":
-        dbSortField = "first_seen_at";
-        break;
-      case "lastSeen":
-        dbSortField = "last_seen_at";
-        break;
-      case "tempAccesses":
-        dbSortField = "access_count";
-        break;
-      case "aiAction":
-        dbSortField = "ai_action";
-        break;
-      case "status":
-        dbSortField = "status_catalog.name";
-        break;
-      case "id":
-        dbSortField = "id";
-        break;
-      case "accessedZones":
-      default:
-        dbSortField = "last_seen_at";
-    }
-
-    // --- Obtener TODOS los IDs y nombres de estados del catálogo de una vez ---
-    const { data: allStatusCatalog, error: statusCatalogError } =
+    // --- Obtener el catálogo de estados ---
+    const { data: statusCatalogData, error: statusCatalogError } =
       await supabaseAdmin
         .from("user_statuses_catalog")
         .select("id, name");
 
-    if (statusCatalogError || !allStatusCatalog) {
-      console.error(
-        "❌ Error fetching all user_statuses_catalog:",
-        statusCatalogError,
-      );
-      throw new Error("Failed to retrieve all user status definitions.");
+    if (statusCatalogError || !statusCatalogData) {
+      console.error("Error fetching status catalog:", statusCatalogError);
+      throw new Error("Failed to fetch user status catalog for mapping.");
     }
+    const statusMap = new Map<string, string>();
+    statusCatalogData.forEach((status) =>
+      statusMap.set(status.id, status.name)
+    );
 
-    // Crear un mapa para una búsqueda eficiente de nombres de estado por ID
-    const statusNameMap = new Map<string, string>();
-    allStatusCatalog.forEach((s) => statusNameMap.set(s.id, s.name));
-
-    // Obtener IDs de estados específicos necesarios para la lógica de expiración
-    const activeTemporalStatusId = allStatusCatalog.find((s) =>
+    const activeTemporalStatusId = statusCatalogData.find((s) =>
       s.name === "active_temporal"
     )?.id;
-    const expiredStatusId = allStatusCatalog.find((s) => s.name === "expired")
+    const blockedStatusId = statusCatalogData.find((s) => s.name === "blocked")
+      ?.id;
+    const expiredStatusId = statusCatalogData.find((s) => s.name === "expired")
       ?.id;
 
-    if (!activeTemporalStatusId || !expiredStatusId) {
-      console.error(
-        "❌ Missing required status IDs (active_temporal, expired) in user_statuses_catalog for auto-expiration logic.",
-      );
-      // Este error indica un problema en la configuración de la base de datos de estados.
-      // No es fatal si no existen otros estados, pero sí si faltan estos dos.
+    if (!activeTemporalStatusId || !blockedStatusId || !expiredStatusId) {
+      console.error("Essential status IDs not found in catalog.");
+      throw new Error("Missing essential status IDs for dashboard cards.");
     }
 
-    // --- Consulta principal de observed_users (usando supabaseAdmin porque vamos a actualizar) ---
-    let query = supabaseAdmin
+    // --- Obtener TODO el catálogo de zonas para mapear IDs a nombres ---
+    const { data: zonesCatalogData, error: zonesCatalogError } =
+      await supabaseAdmin
+        .from("zones")
+        .select("id, name");
+
+    if (zonesCatalogError || !zonesCatalogData) {
+      console.error("Error fetching zones catalog:", zonesCatalogError);
+      throw new Error("Failed to fetch zones catalog for mapping.");
+    }
+    const zonesMap = new Map<string, string>();
+    zonesCatalogData.forEach((zone) => zonesMap.set(zone.id, zone.name));
+
+    // --- Obtener conteos para las cards ---
+    const { count: totalCountFromDb, error: countError } = await supabaseAdmin
       .from("observed_users")
-      .select(
-        `
+      .select("*", { count: "exact", head: true });
+
+    if (countError) {
+      console.error("Error fetching total observed users count:", countError);
+      throw countError;
+    }
+
+    const { count: pendingReviewCount, error: pendingReviewError } =
+      await supabaseAdmin
+        .from("observed_users")
+        .select("*", { count: "exact", head: true })
+        .eq("status_id", activeTemporalStatusId)
+        .gt("access_count", 5);
+
+    if (pendingReviewError) {
+      console.error("Error fetching pending review count:", pendingReviewError);
+      throw pendingReviewError;
+    }
+
+    // Lógica de conteo para "High Risk": solo 'alert_triggered = true' y no 'blocked'
+    const { count: highRiskCount, error: highRiskError } = await supabaseAdmin
+      .from("observed_users")
+      .select("*", { count: "exact", head: true })
+      .eq("alert_triggered", true)
+      .neq("status_id", blockedStatusId); // Excluir usuarios bloqueados manualmente
+
+    if (highRiskError) {
+      console.error("Error fetching high risk count:", highRiskError);
+      throw highRiskError;
+    }
+
+    const { count: activeTemporalCount, error: activeTemporalError } =
+      await supabaseAdmin
+        .from("observed_users")
+        .select("*", { count: "exact", head: true })
+        .eq("status_id", activeTemporalStatusId);
+
+    if (activeTemporalError) {
+      console.error(
+        "Error fetching active temporal count:",
+        activeTemporalError,
+      );
+      throw activeTemporalError;
+    }
+
+    const { count: expiredCount, error: expiredError } = await supabaseAdmin
+      .from("observed_users")
+      .select("*", { count: "exact", head: true })
+      .eq("status_id", expiredStatusId);
+
+    if (expiredError) {
+      console.error("Error fetching expired count:", expiredError);
+      throw expiredError;
+    }
+
+    // --- CONSTRUIR LAS CONSULTAS DE DATOS Y CONTEO POR SEPARADO ---
+    let dataQuery = supabaseAdmin.from("observed_users").select(
+      `
         id,
+        embedding,
         first_seen_at,
         last_seen_at,
         access_count,
-        last_accessed_zones, 
+        last_accessed_zones,
         status_id,
         ai_action,
         face_image_url,
-        expires_at,      
-        alert_triggered, 
-        status_catalog:user_statuses_catalog(id, name)
+        expires_at,
+        alert_triggered,
+        potential_match_user_id,
+        consecutive_denied_accesses
       `,
-        { count: "exact" },
-      );
+    ).order("last_seen_at", { ascending: false });
 
-    // Aplicar término de búsqueda si existe (filtrado en la DB antes de traer datos)
-    if (searchTerm) {
-      const lowerCaseSearchTerm = `%${searchTerm.toLowerCase()}%`;
-      query = query.or(
-        `id.ilike.${lowerCaseSearchTerm},` +
-          `ai_action.ilike.${lowerCaseSearchTerm},` +
-          `status_catalog.name.ilike.${lowerCaseSearchTerm}`,
-      );
-    }
-
-    query = query.order(dbSortField, { ascending: sortDirection === "asc" });
-    query = query.range(offset, offset + itemsPerPage - 1);
-
-    const { data, error, count: totalCountFromDb } = await query;
-
-    if (error) {
-      console.error("Error fetching observed users (main query):", error);
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-    }
-
-    // Castear los datos de la base de datos a nuestro tipo de interfaz
-    const observedUsersRawData = (data as unknown[]).map((item) =>
-      item as SupabaseObservedUserQueryResult
-    );
-
-    const usersToUpdateStatus: string[] = []; // Usamos const como sugiere el linter
-    const now = new Date();
-
-    // --- Lógica para validar y actualizar estados 'expired' y pre-procesar datos ---
-    const allUniqueZoneIds: string[] = [];
-
-    const processedDataForFrontend = observedUsersRawData.map((dbUser) => {
-      let currentStatusId = dbUser.status_id;
-      const userExpiresAt = new Date(dbUser.expires_at);
-
-      // Si el usuario es active_temporal y la fecha de expiración ha pasado
-      if (currentStatusId === activeTemporalStatusId && userExpiresAt < now) {
-        currentStatusId = expiredStatusId; // Actualizar estado a 'expired' para la respuesta
-        usersToUpdateStatus.push(dbUser.id); // Añadir a la lista para actualización por lotes en DB
-      }
-
-      // Recolectar zone IDs
-      if (dbUser.last_accessed_zones) {
-        dbUser.last_accessed_zones.forEach((zoneId) => {
-          if (!allUniqueZoneIds.includes(zoneId)) {
-            allUniqueZoneIds.push(zoneId);
-          }
-        });
-      }
-
-      // Devolver una versión modificada del usuario con el status_id actualizado si aplica
-      return {
-        ...dbUser,
-        status_id: currentStatusId,
-        // Acceder a status_catalog de forma segura, tomando el primer elemento si es array, y obteniendo el nombre del mapa
-        status_catalog: {
-          id: currentStatusId,
-          name: statusNameMap.get(currentStatusId) || "unknown",
-        },
-      };
+    // También construimos la consulta para el conteo de la tabla filtrada
+    let countQueryForTable = supabaseAdmin.from("observed_users").select("*", {
+      count: "exact",
+      head: true,
     });
 
-    // --- Realizar la actualización por lotes si hay usuarios que expirar en la DB ---
-    if (usersToUpdateStatus.length > 0) {
-      console.log(
-        `Updating status to 'expired' for ${usersToUpdateStatus.length} observed users in DB.`,
+    // Aplicar filtro basado en filterType a AMBAS consultas
+    if (filterType === "pendingReview" && activeTemporalStatusId) {
+      dataQuery = dataQuery.eq("status_id", activeTemporalStatusId).gt(
+        "access_count",
+        5,
       );
-      const { error: updateError } = await supabaseAdmin
-        .from("observed_users")
-        .update({ status_id: expiredStatusId })
-        .in("id", usersToUpdateStatus);
-
-      if (updateError) {
-        console.error("❌ Error updating expired statuses in DB:", updateError);
-        // No lanzamos un error fatal aquí, permitimos que la función devuelva los datos ya procesados.
-      }
+      countQueryForTable = countQueryForTable.eq(
+        "status_id",
+        activeTemporalStatusId,
+      ).gt("access_count", 5);
+    } else if (filterType === "highRisk" && blockedStatusId) {
+      // Filtro para 'High Risk' en la tabla: solo 'alert_triggered = true' y no 'blocked'
+      dataQuery = dataQuery.eq("alert_triggered", true).neq(
+        "status_id",
+        blockedStatusId,
+      );
+      countQueryForTable = countQueryForTable.eq("alert_triggered", true).neq(
+        "status_id",
+        blockedStatusId,
+      );
+    } else if (filterType === "activeTemporal" && activeTemporalStatusId) {
+      dataQuery = dataQuery.eq("status_id", activeTemporalStatusId);
+      countQueryForTable = countQueryForTable.eq(
+        "status_id",
+        activeTemporalStatusId,
+      );
+    } else if (filterType === "expired" && expiredStatusId) {
+      dataQuery = dataQuery.eq("status_id", expiredStatusId);
+      countQueryForTable = countQueryForTable.eq("status_id", expiredStatusId);
     }
 
-    // --- Obtener nombres reales de las zonas en una sola consulta ---
-    // DEBUG: Log the unique zone IDs before fetching
-    console.log("DEBUG: Unique Zone IDs to fetch:", allUniqueZoneIds);
+    // Obtener el conteo total de los usuarios para la tabla filtrada
+    const { count: filteredUsersCountForTable, error: filteredCountError } =
+      await countQueryForTable;
 
-    const zoneNamesMap: Map<string, ItemWithNameAndId> = new Map(); // Usamos const
-    if (allUniqueZoneIds.length > 0) {
-      const { data: zonesData, error: zonesError } = await supabase
-        .from("zones")
-        .select("id, name")
-        .in("id", allUniqueZoneIds);
-
-      // DEBUG: Log the result of fetching zones
-      if (zonesError) {
-        console.error(
-          "❌ Error fetching zone names (supabase.from('zones').select):",
-          zonesError,
-        );
-      } else if (!zonesData || zonesData.length === 0) {
-        console.warn(
-          "⚠️ No zone names found for the unique IDs in the 'zones' table.",
-        );
-      } else {
-        console.log("DEBUG: Fetched Zone Data:", zonesData);
-        zonesData.forEach((zone) =>
-          zoneNamesMap.set(zone.id, { id: zone.id, name: zone.name })
-        );
-        console.log(
-          "DEBUG: Populated Zone Names Map:",
-          Array.from(zoneNamesMap.entries()),
-        );
-      }
-    } else {
-      console.log(
-        "DEBUG: No unique zone IDs to fetch. Skipping zone names query.",
+    if (filteredCountError) {
+      console.error(
+        "Error fetching filtered users count for table:",
+        filteredCountError,
       );
+      throw filteredCountError;
     }
 
-    // --- Mapear datos finales para el frontend ---
-    const finalMappedUsers: ObservedUserForFrontend[] = processedDataForFrontend
-      .map((dbUser) => {
-        const statusDetails = dbUser.status_catalog;
+    // Obtener los datos paginados
+    const { data: observedUsersData, error: usersError } = await dataQuery
+      .range(offset, offset + pageSize - 1);
 
-        const accessedZonesDetails: ItemWithNameAndId[] =
-          (dbUser.last_accessed_zones || []).map((zoneId) => {
-            const realZone = zoneNamesMap.get(zoneId);
-            // DEBUG: Log what happens for each zone ID lookup
-            if (!realZone) {
-              console.warn(
-                `⚠️ Zone ID ${zoneId} not found in fetched zones. Defaulting to 'Unknown Zone'.`,
-              );
-            }
-            return realZone ? realZone : {
-              id: zoneId,
-              name: `Unknown Zone (${zoneId.substring(0, 4)}...)`,
-            };
-          });
+    if (usersError) {
+      console.error(
+        "Error fetching observed users data (main query):",
+        usersError,
+      );
+      throw usersError;
+    }
+
+    const processedUsers: ObservedUserForFrontend[] = observedUsersData.map(
+      (user: SupabaseObservedUserQueryResult) => {
+        const statusName = statusMap.get(user.status_id) || "Unknown";
+        const statusDetails: ItemWithNameAndId = {
+          id: user.status_id,
+          name: statusName,
+        };
+
+        const accessedZones: ItemWithNameAndId[] =
+          (user.last_accessed_zones || [])
+            .map((zoneId) => {
+              const zoneName = zonesMap.get(zoneId) ||
+                `Unknown Zone (${zoneId.substring(0, 4)}...)`;
+              return { id: zoneId, name: zoneName };
+            });
 
         return {
-          id: dbUser.id,
-          firstSeen: dbUser.first_seen_at,
-          lastSeen: dbUser.last_seen_at,
-          tempAccesses: dbUser.access_count,
-          accessedZones: accessedZonesDetails,
-          status: statusDetails || { id: "unknown", name: "Unknown" },
-          aiAction: dbUser.ai_action,
-          faceImage: dbUser.face_image_url,
+          id: user.id,
+          firstSeen: new Date(user.first_seen_at).toLocaleString(),
+          lastSeen: new Date(user.last_seen_at).toLocaleString(),
+          tempAccesses: user.access_count,
+          accessedZones: accessedZones,
+          status: statusDetails,
+          aiAction: user.ai_action,
+          faceImage: user.face_image_url,
+          alertTriggered: user.alert_triggered,
+          expiresAt: user.expires_at,
+          potentialMatchUserId: user.potential_match_user_id,
+          consecutiveDeniedAccesses: user.consecutive_denied_accesses,
         };
-      });
+      },
+    );
 
-    // El filtro de búsqueda se aplica en la base de datos si searchTerm existe.
-    // El filtro final en el array en 'finalFilteredUsers' se mantiene para compatibilidad
-    // si se quisiera un filtro post-base de datos, pero podría ser redundante.
-    // Mantenemos la lógica de contar finalFilteredUsers.length para searchTerm,
-    // que es lo que se envía al frontend.
-    let finalFilteredUsers = finalMappedUsers;
-    if (searchTerm) {
+    let finalFilteredUsers = processedUsers;
+    if (searchTerm && !filterType) { // Aplicar searchTerm solo si no hay un filterType activo de card
       const lowerCaseSearchTerm = searchTerm.toLowerCase();
-      finalFilteredUsers = finalMappedUsers.filter((user) => {
+      finalFilteredUsers = processedUsers.filter((user) => {
         const matchesId = user.id.toLowerCase().includes(lowerCaseSearchTerm);
-        const matchesAiAction = (user.aiAction || "").toLowerCase().includes(
-          lowerCaseSearchTerm,
-        );
+        const matchesAiAction = user.aiAction &&
+          user.aiAction.toLowerCase().includes(lowerCaseSearchTerm);
         const matchesStatusName = user.status.name.toLowerCase().includes(
           lowerCaseSearchTerm,
         );
+        // También buscar en los nombres de zona completos
         const matchesAccessedZoneName = user.accessedZones.some((zone) =>
           zone.name.toLowerCase().includes(lowerCaseSearchTerm)
         );
@@ -350,13 +349,19 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
+    const finalTotalCount = (filterType || searchTerm)
+      ? filteredUsersCountForTable
+      : totalCountFromDb;
+
     return new Response(
       JSON.stringify({
         users: finalFilteredUsers,
-        // Si hay searchTerm, totalCount debe ser el de los usuarios filtrados localmente.
-        // Si no hay searchTerm, es el total de la DB antes de la paginación.
-        totalCount: searchTerm ? finalFilteredUsers.length : totalCountFromDb,
-      }),
+        totalCount: finalTotalCount,
+        pendingReviewCount: pendingReviewCount,
+        highRiskCount: highRiskCount, // Este es el conteo ya ajustado
+        activeTemporalCount: activeTemporalCount,
+        expiredCount: expiredCount,
+      } as GetObservedUsersResponse),
       {
         status: 200,
         headers: {
@@ -368,7 +373,7 @@ serve(async (req: Request): Promise<Response> => {
   } catch (error: unknown) {
     let errorMessage =
       "An unknown error occurred while fetching observed users.";
-    if (error instanceof Error) {
+    if (isErrorWithMessage(error)) {
       errorMessage = error.message;
     } else if (typeof error === "string") {
       errorMessage = error;
@@ -378,12 +383,15 @@ serve(async (req: Request): Promise<Response> => {
       error,
     );
 
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
       },
-    });
+    );
   }
 });

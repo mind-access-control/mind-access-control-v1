@@ -3,52 +3,46 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, AlertTriangle, Zap, CheckCircle, XCircle } from "lucide-react";
 
 // IMPORTAR LAS INTERFACES DESDE EL ARCHIVO COMPARTIDO
-import { ObservedUser, ItemWithNameAndId } from "@/types/common"; // AJUSTA LA RUTA SI ES NECESARIO
-
-// ELIMINAR LAS DEFINICIONES DE INTERFACE ObservedUser, ItemWithNameAndId
-// DE AQUÍ, YA VIENEN IMPORTADAS.
-// No deben existir líneas como:
-// interface ItemWithNameAndId { ... }
-// interface ObservedUser { ... }
+import { ObservedUser, ItemWithNameAndId } from "@/types/common";
 
 interface ObservedUsersOverviewCardsProps {
-  observedUsers: ObservedUser[];
+  totalObserved: number;
+  pendingReviewCount: number;
+  highRiskCount: number;
+  activeTemporalCount: number;
+  expiredCount: number;
+  onCardClick: (
+    type: "total" | "pendingReview" | "highRisk" | "activeTemporal" | "expired"
+  ) => void;
 }
 
 const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
-  observedUsers,
+  totalObserved,
+  pendingReviewCount,
+  highRiskCount,
+  activeTemporalCount,
+  expiredCount,
+  onCardClick,
 }) => {
-  // Calculate summary data using useMemo for performance
   const summary = useMemo(() => {
-    const totalObserved = observedUsers.length;
-    const pendingReview = observedUsers.filter(
-      (user) =>
-        user.status.name === "Pending Review" ||
-        user.status.name === "in_review_admin"
-    ).length;
-    const highRisk = observedUsers.filter(
-      (user) => user.status.name === "High Risk"
-    ).length;
-    const activeTemporal = observedUsers.filter(
-      (user) => user.status.name === "active_temporal"
-    ).length;
-    const expired = observedUsers.filter(
-      (user) => user.status.name === "expired"
-    ).length;
+    const total = totalObserved;
+    const pending = pendingReviewCount;
+    const high = highRiskCount;
+    const active = activeTemporalCount;
+    const expired = expiredCount;
 
-    // Determine the primary alert/action needed
     let primaryActionMessage = "All good!";
     let primaryActionColor = "text-green-600";
     let primaryActionIcon = <CheckCircle className="w-8 h-8" />;
 
-    if (pendingReview > 0) {
-      primaryActionMessage = `${pendingReview} users pending review!`;
-      primaryActionColor = "text-yellow-600";
-      primaryActionIcon = <AlertTriangle className="w-8 h-8" />;
-    } else if (highRisk > 0) {
-      primaryActionMessage = `${highRisk} high-risk users!`;
+    if (high > 0) {
+      primaryActionMessage = `${high} high-risk users!`;
       primaryActionColor = "text-red-600";
       primaryActionIcon = <XCircle className="w-8 h-8" />;
+    } else if (pending > 0) {
+      primaryActionMessage = `${pending} users pending review!`;
+      primaryActionColor = "text-yellow-600";
+      primaryActionIcon = <AlertTriangle className="w-8 h-8" />;
     } else if (expired > 0) {
       primaryActionMessage = `${expired} expired temporal accesses.`;
       primaryActionColor = "text-blue-600";
@@ -56,21 +50,31 @@ const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
     }
 
     return {
-      totalObserved,
-      pendingReview,
-      highRisk,
-      activeTemporal,
-      expired,
+      totalObserved: total,
+      pendingReview: pending,
+      highRisk: high,
+      activeTemporal: active,
+      expired: expired,
       primaryActionMessage,
       primaryActionColor,
       primaryActionIcon,
     };
-  }, [observedUsers]);
+  }, [
+    totalObserved,
+    pendingReviewCount,
+    highRiskCount,
+    activeTemporalCount,
+    expiredCount,
+  ]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
       {/* Card: Total Observed Users */}
-      <Card className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center">
+      <Card
+        className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl transition-shadow"
+        title="Total Observed: All users detected by the system."
+        onClick={() => onCardClick("total")}
+      >
         <CardHeader className="p-0 pb-2">
           <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-400" /> Total Observed
@@ -85,7 +89,11 @@ const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
       </Card>
 
       {/* Card: Pending Review */}
-      <Card className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center">
+      <Card
+        className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl transition-shadow"
+        title="Pending Review: Users with active temporary access and more than 5 accesses. They might need admin review for permanent registration."
+        onClick={() => onCardClick("pendingReview")}
+      >
         <CardHeader className="p-0 pb-2">
           <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-yellow-500" /> Pending Review
@@ -100,7 +108,11 @@ const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
       </Card>
 
       {/* Card: High Risk */}
-      <Card className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center">
+      <Card
+        className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl transition-shadow"
+        title="High Risk: Users who have triggered an automatic alert (e.g., after 3 consecutive denied access attempts). Does not include manually blocked users." // ¡TOOLTIP ACTUALIZADO!
+        onClick={() => onCardClick("highRisk")}
+      >
         <CardHeader className="p-0 pb-2">
           <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
             <XCircle className="w-4 h-4 text-red-500" /> High Risk
@@ -115,7 +127,11 @@ const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
       </Card>
 
       {/* Card: Active Temporal */}
-      <Card className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center">
+      <Card
+        className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl transition-shadow"
+        title="Active (Temp): Users with currently allowed temporary access."
+        onClick={() => onCardClick("activeTemporal")}
+      >
         <CardHeader className="p-0 pb-2">
           <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
             <Zap className="w-4 h-4 text-blue-500" /> Active (Temp)
@@ -130,7 +146,11 @@ const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
       </Card>
 
       {/* Card: Expired Temporal Accesses */}
-      <Card className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center">
+      <Card
+        className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:shadow-xl transition-shadow"
+        title="Expired: Users whose temporary access has ended."
+        onClick={() => onCardClick("expired")}
+      >
         <CardHeader className="p-0 pb-2">
           <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
             <XCircle className="w-4 h-4 text-gray-500" /> Expired
@@ -142,21 +162,6 @@ const ObservedUsersOverviewCards: React.FC<ObservedUsersOverviewCardsProps> = ({
           </div>
           <p className="text-xs text-gray-500">Access has ended</p>
         </CardContent>
-      </Card>
-
-      {/* Primary Action / Status Card (optional, can be integrated elsewhere) */}
-      <Card
-        className={`col-span-full bg-white rounded-xl shadow-lg p-4 flex items-center justify-center transition-colors duration-200 ${summary.primaryActionColor.replace(
-          "text",
-          "border"
-        )}-100 border-l-4`}
-      >
-        <div className={`mr-4 ${summary.primaryActionColor}`}>
-          {summary.primaryActionIcon}
-        </div>
-        <p className={`text-xl font-semibold ${summary.primaryActionColor}`}>
-          {summary.primaryActionMessage}
-        </p>
       </Card>
     </div>
   );
