@@ -161,7 +161,7 @@ serve(async (req: Request): Promise<Response> => {
         first_seen_at,
         last_seen_at,
         access_count,
-        last_accessed_zones,
+        last_accessed_zones, 
         status_id,
         ai_action,
         face_image_url,
@@ -257,6 +257,9 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // --- Obtener nombres reales de las zonas en una sola consulta ---
+    // DEBUG: Log the unique zone IDs before fetching
+    console.log("DEBUG: Unique Zone IDs to fetch:", allUniqueZoneIds);
+
     const zoneNamesMap: Map<string, ItemWithNameAndId> = new Map(); // Usamos const
     if (allUniqueZoneIds.length > 0) {
       const { data: zonesData, error: zonesError } = await supabase
@@ -264,13 +267,30 @@ serve(async (req: Request): Promise<Response> => {
         .select("id, name")
         .in("id", allUniqueZoneIds);
 
+      // DEBUG: Log the result of fetching zones
       if (zonesError) {
-        console.error("❌ Error fetching zone names:", zonesError);
-      } else if (zonesData) {
+        console.error(
+          "❌ Error fetching zone names (supabase.from('zones').select):",
+          zonesError,
+        );
+      } else if (!zonesData || zonesData.length === 0) {
+        console.warn(
+          "⚠️ No zone names found for the unique IDs in the 'zones' table.",
+        );
+      } else {
+        console.log("DEBUG: Fetched Zone Data:", zonesData);
         zonesData.forEach((zone) =>
           zoneNamesMap.set(zone.id, { id: zone.id, name: zone.name })
         );
+        console.log(
+          "DEBUG: Populated Zone Names Map:",
+          Array.from(zoneNamesMap.entries()),
+        );
       }
+    } else {
+      console.log(
+        "DEBUG: No unique zone IDs to fetch. Skipping zone names query.",
+      );
     }
 
     // --- Mapear datos finales para el frontend ---
@@ -281,6 +301,12 @@ serve(async (req: Request): Promise<Response> => {
         const accessedZonesDetails: ItemWithNameAndId[] =
           (dbUser.last_accessed_zones || []).map((zoneId) => {
             const realZone = zoneNamesMap.get(zoneId);
+            // DEBUG: Log what happens for each zone ID lookup
+            if (!realZone) {
+              console.warn(
+                `⚠️ Zone ID ${zoneId} not found in fetched zones. Defaulting to 'Unknown Zone'.`,
+              );
+            }
             return realZone ? realZone : {
               id: zoneId,
               name: `Unknown Zone (${zoneId.substring(0, 4)}...)`,
