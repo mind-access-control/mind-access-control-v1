@@ -17,7 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Eye, UserCircle2, ChevronUp, ChevronDown, Search } from "lucide-react";
+import {
+  Eye,
+  UserCircle2,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  RefreshCcw,
+} from "lucide-react";
 
 // IMPORTAR LAS INTERFACES DESDE EL ARCHIVO COMPARTIDO
 import {
@@ -25,15 +32,7 @@ import {
   ItemWithNameAndId,
   ObservedUserSortField,
   SortDirection,
-} from "@/types/common"; // AJUSTA LA RUTA SI ES NECESARIO
-
-// ELIMINAR LAS DEFINICIONES DE INTERFACE ObservedUser, ItemWithNameAndId,
-// ObservedUserSortField, SortDirection DE AQUÍ, YA VIENEN IMPORTADAS.
-// No deben existir líneas como:
-// interface ItemWithNameAndId { ... }
-// interface ObservedUser { ... }
-// type ObservedUserSortField = ...
-// type SortDirection = ...
+} from "@/types/common";
 
 // Define the props this component will receive
 interface ObservedUsersTableProps {
@@ -52,6 +51,7 @@ interface ObservedUsersTableProps {
   itemsPerPage: number;
   onItemsPerPageChange: (items: number) => void;
   totalObservedUsersCount: number;
+  onRefresh: () => void;
 }
 
 const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
@@ -70,8 +70,12 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
   itemsPerPage,
   onItemsPerPageChange,
   totalObservedUsersCount,
+  onRefresh,
 }) => {
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [showImageModal, setShowImageModal] = useState<boolean>(false);
+  const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
+  const [selectedImageAlt, setSelectedImageAlt] = useState<string>("");
 
   // Define table columns
   const columns = [
@@ -88,11 +92,20 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
 
   // Function to handle image load errors
   const handleImageError = (userId: string, photoUrl: string | null) => {
-    const imageUrlKey = photoUrl || "no-image-url";
-    setImageErrors((prev) => ({ ...prev, [imageUrlKey]: true }));
+    // Si la URL ya tiene un cache buster, eliminémoslo para evitar claves duplicadas
+    const cleanPhotoUrl = photoUrl ? photoUrl.split("?")[0] : "no-image-url";
+    setImageErrors((prev) => ({ ...prev, [cleanPhotoUrl]: true }));
     console.warn(
       `Failed to load image for user ${userId} at URL: ${photoUrl || "N/A"}`
     );
+  };
+
+  // Función para abrir la modal de imagen
+  const handleImageClick = (imageUrl: string, altText: string) => {
+    // Cuando se hace clic, la URL ya debería tener el cache buster
+    setSelectedImageSrc(imageUrl);
+    setSelectedImageAlt(altText);
+    setShowImageModal(true);
   };
 
   const startIndex = (currentPage - 1) * itemsPerPage + 1;
@@ -107,6 +120,15 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
         <div className="font-semibold text-lg flex items-center gap-2">
           <Eye className="w-5 h-5 text-blue-500" /> Observed Users Requiring
           Action
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRefresh}
+            className="ml-2 p-1 rounded-full text-gray-500 hover:bg-gray-100"
+            title="Refresh List"
+          >
+            <RefreshCcw className="w-4 h-4" />
+          </Button>
         </div>
         <div className="flex items-center space-x-2">
           <Search className="w-4 h-4 text-gray-400" />
@@ -152,97 +174,117 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
             </TableRow>
           </thead>
           <tbody>
-            {observedUsers.map((u: ObservedUser) => (
-              <TableRow
-                key={u.id}
-                className="border-b hover:bg-blue-50 transition"
-              >
-                <TableCell className="py-2 px-2">
-                  {u.faceImage && !imageErrors[u.faceImage] ? (
-                    <div className="relative w-8 h-8">
-                      <img
-                        src={u.faceImage}
-                        alt={u.id}
-                        className="w-8 h-8 rounded-full object-cover"
-                        onError={() => handleImageError(u.id, u.faceImage)}
-                      />
-                    </div>
-                  ) : (
-                    <UserCircle2 className="w-8 h-8 text-gray-400" />
-                  )}
-                </TableCell>
-                <TableCell className="py-2 px-2 font-mono">{u.id}</TableCell>
-                <TableCell className="py-2 px-2">
-                  {new Date(u.firstSeen).toLocaleString()}
-                </TableCell>
-                <TableCell className="py-2 px-2">
-                  {new Date(u.lastSeen).toLocaleString()}
-                </TableCell>
-                <TableCell className="py-2 px-2 text-center">
-                  {u.tempAccesses}
-                </TableCell>
-                <TableCell className="py-2 px-2">
-                  <div className="flex flex-wrap gap-1">
-                    {u.accessedZones.map((zone) => (
-                      <Badge
-                        key={zone.id}
-                        variant="outline"
-                        className="bg-blue-50 text-blue-700"
+            {observedUsers.map((u: ObservedUser) => {
+              // GENERAR LA URL CON EL CACHE BUSTER AQUÍ
+              // Esto asegurará que cada vez que los datos se recarguen, la URL de la imagen sea 'nueva'
+              const imageUrlWithCacheBuster = u.faceImage
+                ? `${u.faceImage}?t=${new Date(u.lastSeen).getTime()}` // Usamos u.lastSeen para el timestamp
+                : null;
+
+              // Clave para el seguimiento de errores de imagen, sin el cache buster
+              const imageErrorKey = u.faceImage
+                ? u.faceImage.split("?")[0]
+                : "no-image-url";
+
+              return (
+                <TableRow
+                  key={u.id}
+                  className="border-b hover:bg-blue-50 transition"
+                >
+                  <TableCell className="py-2 px-2">
+                    {imageUrlWithCacheBuster && !imageErrors[imageErrorKey] ? ( // Usar imageErrorKey para el seguimiento
+                      <div
+                        className="relative w-8 h-8 cursor-pointer"
+                        onClick={() =>
+                          handleImageClick(
+                            imageUrlWithCacheBuster,
+                            `Face of ${u.id}`
+                          )
+                        }
                       >
-                        {zone.name}
-                      </Badge>
-                    ))}
-                    {u.accessedZones.length === 0 && (
-                      <span className="text-gray-400 text-xs">N/A</span>
+                        <img
+                          src={imageUrlWithCacheBuster} // Usar la URL con el cache buster
+                          alt={u.id}
+                          className="w-8 h-8 rounded-full object-cover"
+                          onError={() => handleImageError(u.id, u.faceImage)} // Pasar la URL original para la clave de error
+                        />
+                      </div>
+                    ) : (
+                      <UserCircle2 className="w-8 h-8 text-gray-400" />
                     )}
-                  </div>
-                </TableCell>
-                <TableCell className="py-2 px-2">
-                  <Badge
-                    className={
-                      u.status.name === "active_temporal"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : u.status.name === "in_review_admin"
-                        ? "bg-red-100 text-red-800"
-                        : u.status.name === "expired"
-                        ? "bg-gray-100 text-gray-800"
-                        : "bg-gray-100 text-gray-800"
-                    }
-                  >
-                    {u.status.name}
-                  </Badge>
-                </TableCell>
-                <TableCell className="py-2 px-2 text-blue-700">
-                  {u.aiAction || "No action"}{" "}
-                  {/* Display "No action" if null */}
-                </TableCell>
-                <TableCell className="py-2 px-2">
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onRegister(u)}
+                  </TableCell>
+                  <TableCell className="py-2 px-2 font-mono">{u.id}</TableCell>
+                  <TableCell className="py-2 px-2">
+                    {new Date(u.firstSeen).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="py-2 px-2">
+                    {new Date(u.lastSeen).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="py-2 px-2 text-center">
+                    {u.tempAccesses}
+                  </TableCell>
+                  <TableCell className="py-2 px-2">
+                    <div className="flex flex-wrap gap-1">
+                      {u.accessedZones.map((zone) => (
+                        <Badge
+                          key={zone.id}
+                          variant="outline"
+                          className="bg-blue-50 text-blue-700"
+                        >
+                          {zone.name}
+                        </Badge>
+                      ))}
+                      {u.accessedZones.length === 0 && (
+                        <span className="text-gray-400 text-xs">N/A</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2 px-2">
+                    <Badge
+                      className={
+                        u.status.name === "active_temporal"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : u.status.name === "in_review_admin"
+                          ? "bg-red-100 text-red-800"
+                          : u.status.name === "expired"
+                          ? "bg-gray-100 text-gray-800"
+                          : "bg-gray-100 text-gray-800"
+                      }
                     >
-                      Register
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onExtend(u)}
-                    >
-                      Extend
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => onBlock(u)}
-                    >
-                      Block
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                      {u.status.name}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="py-2 px-2 text-blue-700">
+                    {u.aiAction || "No action"}{" "}
+                  </TableCell>
+                  <TableCell className="py-2 px-2">
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRegister(u)}
+                      >
+                        Register
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onExtend(u)}
+                      >
+                        Extend
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => onBlock(u)}
+                      >
+                        Block
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {observedUsers.length === 0 && (
               <TableRow>
                 <TableCell
@@ -318,6 +360,43 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* MODAL DE IMAGEN (CUSTOM CON TAILWIND) */}
+      {showImageModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div
+            className="relative bg-white rounded-lg shadow-xl p-6 max-w-lg w-full m-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-800">
+                Observed User Face
+              </h3>
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="flex justify-center items-center py-4">
+              {selectedImageSrc && (
+                <img
+                  src={selectedImageSrc}
+                  alt={selectedImageAlt}
+                  className="max-w-full h-auto rounded-lg shadow-md"
+                />
+              )}
+            </div>
+            <p className="text-center text-sm text-gray-500 mt-2">
+              {selectedImageAlt}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

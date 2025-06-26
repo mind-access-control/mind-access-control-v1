@@ -29,22 +29,24 @@ interface ObservedUserFromDB {
   last_accessed_zones: string[] | null; // jsonb en SQL, deserializa a string[] en JS
   status_id: string;
   alert_triggered: boolean;
-  expires_at: string; // Asegúrate de que esta propiedad exista en tu tabla observed_users
+  expires_at: string;
   potential_match_user_id: string | null;
   similarity?: number;
   distance?: number;
+  face_image_url: string | null; // Asegúrate de que esto siempre esté aquí
 }
 interface ObservedUserUpdatePayload {
   last_seen_at: string;
   access_count: number;
   last_accessed_zones: string[] | null;
-  status_id?: string; // Hacemos status_id opcional
-  // Si hubiera otras propiedades que se pudieran actualizar, irían aquí.
+  status_id?: string;
+  face_image_url?: string | null; // Añadimos esto para la actualización
 }
 
 interface ValidateFacePayload {
   faceEmbedding: number[];
   zoneId?: string;
+  imageData?: string; // La imagen en Base64 (opcional si no siempre se envía)
 }
 
 // --- Definiciones de Tipos para la Respuesta Unificada ---
@@ -68,6 +70,7 @@ interface UnifiedValidationResponse {
       potentialMatchUserId: string | null;
       similarity: number;
       distance: number;
+      faceImageUrl: string | null; // Añadimos esto para la respuesta
     };
   };
   type:
@@ -75,10 +78,12 @@ interface UnifiedValidationResponse {
     | "observed_user_updated"
     | "new_observed_user_registered"
     | "no_match_found"
-    | "registered_user_access_denied" // Tipo para acceso denegado (registrado)
-    | "observed_user_access_denied_expired" // Tipo para acceso denegado (observado por expiración de fecha)
-    | "observed_user_access_denied_status_expired" // Tipo para acceso denegado (observado por estatus 'expired')
-    | string; // Para cualquier otro tipo que pueda venir
+    | "registered_user_access_denied"
+    | "observed_user_access_denied_expired"
+    | "observed_user_access_denied_status_expired"
+    | "observed_user_access_denied_blocked" // Nuevo tipo para bloqueados
+    | "observed_user_access_denied_other_status" // Nuevo tipo para otros estados denegados
+    | string;
   message?: string;
   error?: string;
 }
@@ -98,7 +103,6 @@ interface LogEntry {
   requested_zone_id: string | null;
 }
 
-// --- NUEVAS INTERFACES Y GUARDAS DE TIPO PARA MANEJO DE ERRORES ---
 interface ErrorWithMessage {
   message: string;
 }
@@ -111,14 +115,66 @@ function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
     typeof (error as ErrorWithMessage).message === "string"
   );
 }
-// --- FIN DE NUEVAS INTERFACES Y GUARDAS DE TIPO ---
 
 // Define los umbrales de similitud.
-const USER_MATCH_THRESHOLD_DISTANCE = 0.5; // Para usuarios registrados (Umbral de distancia: menor es mejor)
-const OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE = 0.35; // Para usuarios observados (Umbral de distancia: más estricto)
+const USER_MATCH_THRESHOLD_DISTANCE = 0.5;
+const OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE = 0.35;
+
+// --- NUEVA FUNCIÓN INTERNA PARA SUBIR IMAGEN (LLAMARÁ A LA OTRA EDGE FUNCTION) ---
+async function uploadImageToStorageAndDb(
+  userId: string,
+  imageData: string,
+  isObservedUser: boolean,
+  supabaseUrl: string,
+  _supabaseAnonKey: string,
+  serviceRoleKey: string,
+): Promise<{ imageUrl: string | null; error: string | null }> {
+  try {
+    const uploadFunctionUrl = `${supabaseUrl}/functions/v1/upload-face-image`;
+
+    const uploadResponse = await fetch(uploadFunctionUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`,
+        "apikey": serviceRoleKey,
+      },
+      body: JSON.stringify({ userId, imageData, isObservedUser }),
+    });
+
+    const uploadResult = await uploadResponse.json();
+
+    if (!uploadResponse.ok) {
+      console.error(
+        "Error calling upload-face-image EF:",
+        uploadResult.error || "Unknown error",
+      );
+      return {
+        imageUrl: null,
+        error: uploadResult.error || "Failed to upload image via internal EF.",
+      };
+    }
+
+    console.log("Image upload via EF successful:", uploadResult.imageUrl);
+    return { imageUrl: uploadResult.imageUrl, error: null };
+  } catch (err) {
+    let errorMessage = "Failed to call internal image upload EF.";
+    if (err instanceof Error) {
+      errorMessage = err.message;
+    } else if (typeof err === "string") {
+      errorMessage = err;
+    }
+    console.error("Exception calling internal upload-face-image EF:", err);
+    return { imageUrl: null, error: errorMessage };
+  }
+}
+// --- FIN NUEVA FUNCIÓN INTERNA ---
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
+    console.log(
+      "DEBUG: Handling OPTIONS preflight request for validate-user-face",
+    );
     return new Response(null, {
       status: 204,
       headers: {
@@ -128,6 +184,18 @@ serve(async (req: Request): Promise<Response> => {
       },
     });
   }
+
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+      },
+    },
+  );
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -154,7 +222,8 @@ serve(async (req: Request): Promise<Response> => {
   };
 
   try {
-    const { faceEmbedding, zoneId }: ValidateFacePayload = await req.json();
+    const { faceEmbedding, zoneId, imageData }: ValidateFacePayload = await req
+      .json();
     logEntry.vector_attempted = faceEmbedding;
     logEntry.requested_zone_id = zoneId || null;
 
@@ -197,7 +266,6 @@ serve(async (req: Request): Promise<Response> => {
       "Buscando coincidencia en usuarios registrados (public.users)...",
     );
 
-    // Usa RPC para match_user_face_embedding
     const { data: userData, error: userRpcError } = await supabase.rpc(
       "match_user_face_embedding",
       {
@@ -210,7 +278,6 @@ serve(async (req: Request): Promise<Response> => {
       throw userRpcError;
     }
 
-    // Log para depurar la respuesta cruda de la RPC
     console.log(
       "DEBUG: Raw userData from match_user_face_embedding RPC:",
       userData,
@@ -236,9 +303,9 @@ serve(async (req: Request): Promise<Response> => {
           `DEBUG: Registered user matched! Similarity: ${matchSimilarity}`,
         );
 
-        // CONSULTA A LA VISTA SQL para obtener todos los detalles del usuario
-        const { data, error: fullUserError } = await supabase
-          .from("user_full_details_view") // <-- ¡USANDO LA VISTA AQUÍ!
+        const { data, error: fullUserError } = await supabase.from(
+          "user_full_details_view",
+        )
           .select(`
             id,
             full_name,
@@ -290,13 +357,11 @@ serve(async (req: Request): Promise<Response> => {
           });
         }
 
-        // Manejo de fullUserData cuando es null (si .maybeSingle() no encontró nada)
         if (fullUserData) {
           userMatchDetails = {
             id: fullUserData.id,
             full_name: fullUserData.full_name,
             user_type: "registered",
-            // Las propiedades role_details y status_details ya son objetos o null, no arrays
             hasAccess: (fullUserData.status_details?.name === "active" &&
               (fullUserData.zones_accessed_details?.some((z) =>
                 z.id === zoneId
@@ -335,7 +400,7 @@ serve(async (req: Request): Promise<Response> => {
 
           await supabase.from("logs").insert([logEntry]);
           return new Response(JSON.stringify(successResponse), {
-            status: 200, // Siempre 200 OK para usuarios registrados, el hasAccess define el resultado
+            status: 200,
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
@@ -370,7 +435,7 @@ serve(async (req: Request): Promise<Response> => {
           };
           await supabase.from("logs").insert([logEntry]);
           return new Response(JSON.stringify(errorResponse), {
-            status: 500, // Error interno si no se pudo recuperar la data
+            status: 500,
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
@@ -393,7 +458,6 @@ serve(async (req: Request): Promise<Response> => {
       console.log(
         "No se encontró coincidencia con usuario registrado. Buscando en usuarios observados (public.observed_users)...",
       );
-      // La llamada RPC para observed_users se mantiene usando RPC
       const { data: observedUserData, error: observedUserRpcError } =
         await supabase.rpc("match_observed_face_embedding", {
           query_embedding: faceEmbedding,
@@ -430,70 +494,96 @@ serve(async (req: Request): Promise<Response> => {
           logEntry.user_type = "observed";
           logEntry.confidence_score = matchSimilarity;
 
-          // --- LOGICA DE VERIFICACION DE VIGENCIA DE expires_at ---
-          const nowUtc = new Date(); // Hora actual en UTC
-          const expiresAtDate = new Date(matchedObservedUser.expires_at); // expires_at del usuario observado
+          const nowUtc = new Date();
+          const expiresAtDate = new Date(matchedObservedUser.expires_at);
 
-          let observedUserHasAccess = true; // Por defecto, acceso concedido si hay match
-          let accessDeniedReason = `Observed user updated for zone: ${zoneId}`;
+          let observedUserHasAccess = false;
+          let accessDeniedReason = "Access Denied (Unknown Reason).";
           let responseType: UnifiedValidationResponse["type"] =
-            "observed_user_updated";
-          let responseMessage = "Access Granted (Observed User Updated).";
-          let newStatusIdForUpdate: string | undefined = undefined; // Variable para almacenar el nuevo status_id si es necesario
+            "observed_user_access_denied_other_status";
+          let responseMessage = "Access Denied.";
 
-          if (expiresAtDate < nowUtc) {
-            observedUserHasAccess = false;
-            accessDeniedReason =
-              `Expired Access: expires_at date has passed (${matchedObservedUser.expires_at}).`;
-            responseType = "observed_user_access_denied_expired";
-            responseMessage = "Access Denied (Observed User Expired).";
-            console.log(
-              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to expired_at: ${matchedObservedUser.expires_at}`,
-            );
+          // Obtener los IDs de los estados relevantes usando supabaseAdmin
+          const { data: statusesData, error: statusesError } =
+            await supabaseAdmin
+              .from("user_statuses_catalog")
+              .select("id, name")
+              .in("name", [
+                "active_temporal",
+                "expired",
+                "blocked",
+                "in_review_admin",
+              ]);
 
-            // --- CAMBIO CLAVE: Obtener y asignar el UUID de 'expired' para la actualización ---
-            // Solo busca el ID si realmente el usuario está expirado por fecha
-            const { data: expiredStatusData, error: expiredStatusError } =
-              await supabase
-                .from("user_statuses_catalog")
-                .select("id")
-                .eq("name", "expired") // Asegúrate de que tienes un estatus 'expired' en tu catálogo
-                .single();
-
-            if (expiredStatusError || !expiredStatusData) {
-              console.error(
-                "❌ ERROR: Missing 'expired' status in user_statuses_catalog. Please create it in your DB.",
-                expiredStatusError,
-              );
-              // No se lanza error fatal, pero se loggea y no se actualiza el status_id
-            } else {
-              newStatusIdForUpdate = expiredStatusData.id;
-              console.log(
-                `DEBUG: Found 'expired' status ID: ${newStatusIdForUpdate}. Will update observed user status.`,
-              );
-            }
-            // --- FIN CAMBIO CLAVE ---
-          } else if (
-            matchedObservedUser.status_id ===
-              "8c58b6ed-e21d-4208-82a4-c795cd0bd747"
-          ) { // Ejemplo: si ya estaba expirado manualmente
-            // Esto es por si ya tenía un estatus de expirado previo
-            observedUserHasAccess = false;
-            accessDeniedReason =
-              `Access Denied: User status is already expired.`;
-            responseType = "observed_user_access_denied_status_expired";
-            responseMessage = "Access Denied (Observed User Status Expired).";
-            console.log(
-              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to existing expired status.`,
+          if (statusesError || !statusesData) {
+            console.error(
+              "❌ ERROR fetching relevant status IDs:",
+              statusesError,
             );
-          } else {
-            console.log(
-              `DEBUG: Observed user ${matchedObservedUser.id} access granted (not expired).`,
-            );
+            throw new Error("Failed to retrieve user status definitions.");
           }
 
-          // Construir el objeto de actualización.
-          // Se incluye status_id solo si newStatusIdForUpdate tiene un valor (es decir, si el acceso expiró por fecha).
+          const activeTemporalId = statusesData.find((s) =>
+            s.name === "active_temporal"
+          )?.id;
+          const expiredStatusId = statusesData.find((s) => s.name === "expired")
+            ?.id;
+          const blockedStatusId = statusesData.find((s) => s.name === "blocked")
+            ?.id;
+          const inReviewAdminStatusId = statusesData.find((s) =>
+            s.name === "in_review_admin"
+          )?.id;
+
+          // --- LÓGICA DE ACCESO PARA USUARIOS OBSERVADOS ---
+          // Solo active_temporal puede tener acceso, Y no debe haber expirado
+          if (
+            matchedObservedUser.status_id === activeTemporalId &&
+            expiresAtDate >= nowUtc
+          ) {
+            observedUserHasAccess = true;
+            accessDeniedReason = `Observed user updated for zone: ${zoneId}`;
+            responseType = "observed_user_updated";
+            responseMessage = "Access Granted (Observed User Updated).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access granted (active_temporal & not expired).`,
+            );
+          } else if (matchedObservedUser.status_id === blockedStatusId) {
+            accessDeniedReason = `Access Denied: User is blocked.`;
+            responseType = "observed_user_access_denied_blocked";
+            responseMessage = "Access Denied (Observed User Blocked).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to blocked status.`,
+            );
+          } else if (
+            expiresAtDate < nowUtc ||
+            matchedObservedUser.status_id === expiredStatusId
+          ) {
+            accessDeniedReason =
+              `Access Denied: Access expired or status is expired.`;
+            responseType = "observed_user_access_denied_expired";
+            responseMessage =
+              "Access Denied (Observed User Expired/Status Expired).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to expired_at or expired status.`,
+            );
+          } else if (matchedObservedUser.status_id === inReviewAdminStatusId) {
+            accessDeniedReason = `Access Denied: User is in review by admin.`;
+            responseType = "observed_user_access_denied_other_status";
+            responseMessage = "Access Denied (User in Review).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to in_review_admin status.`,
+            );
+          } else {
+            accessDeniedReason =
+              `Access Denied: Invalid status for access: ${matchedObservedUser.status_id}.`;
+            responseType = "observed_user_access_denied_other_status";
+            responseMessage = "Access Denied (Invalid Status).";
+            console.log(
+              `DEBUG: Observed user ${matchedObservedUser.id} access denied due to unknown or invalid status.`,
+            );
+          }
+          // --- FIN DE LÓGICA DE ACCESO ---
+
           const updatePayload: ObservedUserUpdatePayload = {
             last_seen_at: new Date().toISOString(),
             access_count: matchedObservedUser.access_count + 1,
@@ -507,15 +597,71 @@ serve(async (req: Request): Promise<Response> => {
               : (zoneId ? [zoneId] : []),
           };
 
-          if (newStatusIdForUpdate) {
-            updatePayload.status_id = newStatusIdForUpdate; // Actualiza el status_id solo si se debe cambiar a 'expired'
+          // Actualizar el status_id según la lógica de acceso
+          let newStatusIdForUpdate: string | undefined = undefined;
+
+          if (!observedUserHasAccess) { // Si no tiene acceso
+            if (
+              (expiresAtDate < nowUtc &&
+                matchedObservedUser.status_id !== expiredStatusId) ||
+              matchedObservedUser.status_id === expiredStatusId
+            ) {
+              newStatusIdForUpdate = expiredStatusId;
+            } else if (matchedObservedUser.status_id === blockedStatusId) {
+              newStatusIdForUpdate = blockedStatusId;
+            } else if (
+              matchedObservedUser.status_id === inReviewAdminStatusId
+            ) {
+              newStatusIdForUpdate = inReviewAdminStatusId;
+            }
+          } else { // Si tiene acceso
+            if (matchedObservedUser.status_id !== activeTemporalId) {
+              newStatusIdForUpdate = activeTemporalId;
+            }
           }
 
+          if (newStatusIdForUpdate) {
+            updatePayload.status_id = newStatusIdForUpdate;
+          }
+
+          // --- FIX: Lógica para cargar y ACTUALIZAR la URL de la imagen en la base de datos ---
+          let uploadedImageUrl: string | null =
+            matchedObservedUser.face_image_url; // Inicializar con la URL actual de la DB
+
+          if (imageData && matchedObservedUser.id) { // Solo intentar subir si imageData es proporcionado
+            console.log(
+              `Attempting to upload new image for existing observed user: ${matchedObservedUser.id}`,
+            );
+            const { imageUrl, error: uploadImageError } =
+              await uploadImageToStorageAndDb(
+                matchedObservedUser.id,
+                imageData,
+                true,
+                Deno.env.get("SUPABASE_URL") ?? "",
+                Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+                Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+              );
+            if (uploadImageError) {
+              console.error(
+                `Warning: Failed to upload new image for observed user ${matchedObservedUser.id}: ${uploadImageError}`,
+              );
+            } else if (imageUrl) {
+              uploadedImageUrl = imageUrl;
+              updatePayload.face_image_url = uploadedImageUrl; // <--- ¡AÑADIDO CRUCIAL: Actualizar payload con la nueva URL!
+              console.log(
+                `Successfully uploaded new image and added to update payload for observed user ${matchedObservedUser.id}: ${uploadedImageUrl}`,
+              );
+            }
+          }
+          // --- FIN FIX Lógica de imagen ---
+
           const { data: updatedObservedUser, error: updateError } =
-            await supabase.from("observed_users")
-              .update(updatePayload) // Usamos el payload construido condicionalmente
+            await supabaseAdmin.from("observed_users")
+              .update(updatePayload) // Este payload ahora incluye face_image_url si se actualizó
               .eq("id", matchedObservedUser.id)
-              .select("*")
+              .select(
+                "id, status_id, first_seen_at, last_seen_at, access_count, alert_triggered, expires_at, potential_match_user_id, face_image_url, last_accessed_zones",
+              )
               .single();
 
           if (updateError) {
@@ -526,18 +672,22 @@ serve(async (req: Request): Promise<Response> => {
             throw updateError;
           }
 
-          logEntry.result = observedUserHasAccess; // El resultado ahora depende de expires_at y/o status
+          // La variable uploadedImageUrl ya contiene la URL más reciente, ya sea la antigua o la recién subida.
+          // No necesitamos re-asignarla de updatedObservedUser.face_image_url si ya manejamos la subida.
+          // let uploadedImageUrl: string | null = updatedObservedUser.face_image_url; // Esta línea ya no es necesaria aquí
+
+          logEntry.result = observedUserHasAccess;
           logEntry.decision = observedUserHasAccess
             ? "access_granted"
             : "access_denied";
           logEntry.reason = accessDeniedReason;
-          logEntry.match_status = responseType; // Usamos el tipo de respuesta como match_status para más detalle
+          logEntry.match_status = responseType;
 
           const { data: statusDetailsResult, error: statusError } =
             await supabase
               .from("user_statuses_catalog")
               .select("id, name")
-              .eq("id", updatedObservedUser.status_id) // Usamos el ID del estatus actual del usuario (ya actualizado o el original)
+              .eq("id", updatedObservedUser.status_id)
               .single();
 
           const statusDetails: ItemWithNameAndId | null = statusDetailsResult;
@@ -546,7 +696,6 @@ serve(async (req: Request): Promise<Response> => {
             console.error("Error fetching observed user status:", statusError);
           }
 
-          // --- CAMBIO CLAVE AQUÍ: Obtener nombres reales de las zonas para Observed Users ---
           let zonesAccessedDetails: ItemWithNameAndId[] = [];
           if (
             updatedObservedUser.last_accessed_zones &&
@@ -567,19 +716,18 @@ serve(async (req: Request): Promise<Response> => {
               zonesAccessedDetails = zoneNamesData || [];
             }
           }
-          // --- FIN CAMBIO CLAVE ---
 
           const finalResponse: UnifiedValidationResponse = {
             user: {
               id: updatedObservedUser.id,
-              full_name: null, // Los observados no tienen full_name en la BD
+              full_name: null,
               user_type: "observed",
-              hasAccess: observedUserHasAccess, // El acceso ahora depende de expires_at
+              hasAccess: observedUserHasAccess,
               similarity: matchSimilarity,
-              role_details: null, // Los observados no tienen roles
+              role_details: null,
               status_details: statusDetails ||
                 { id: "unknown", name: "Unknown" },
-              zones_accessed_details: zonesAccessedDetails, // Usar los nombres reales
+              zones_accessed_details: zonesAccessedDetails,
               observed_details: {
                 firstSeenAt: updatedObservedUser.first_seen_at,
                 lastSeenAt: updatedObservedUser.last_seen_at,
@@ -588,18 +736,18 @@ serve(async (req: Request): Promise<Response> => {
                 expiresAt: updatedObservedUser.expires_at,
                 potentialMatchUserId:
                   updatedObservedUser.potential_match_user_id,
-                similarity: 1.0,
-                distance: 0,
+                similarity: matchSimilarity,
+                distance: observedActualDistance,
+                faceImageUrl: uploadedImageUrl, // Asegúrate de que esta es la URL correcta (la recién subida o la antigua)
               },
             },
-            type: responseType, // Usar el tipo de respuesta determinado por la lógica de expiración
-            message: responseMessage, // Usar el mensaje de respuesta determinado por la lógica de expiración
+            type: responseType,
+            message: responseMessage,
           };
 
           await supabase.from("logs").insert([logEntry]);
-
           return new Response(JSON.stringify(finalResponse), {
-            status: 200, // <-- Siempre 200 OK, el hasAccess y el message lo indican
+            status: 200,
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
@@ -617,11 +765,12 @@ serve(async (req: Request): Promise<Response> => {
         "✨ PROCESAMIENTO: No se encontró usuario registrado ni observado existente. Creando nuevo registro.",
       );
 
-      const { data: observedStatusResult, error: statusError } = await supabase
-        .from("user_statuses_catalog")
-        .select("id, name")
-        .eq("name", "active_temporal") // Usamos 'active_temporal' en minúsculas como acordamos
-        .single();
+      const { data: observedStatusResult, error: statusError } =
+        await supabaseAdmin
+          .from("user_statuses_catalog")
+          .select("id, name")
+          .eq("name", "active_temporal")
+          .single();
 
       const observedStatus: ItemWithNameAndId | null = observedStatusResult;
 
@@ -635,7 +784,7 @@ serve(async (req: Request): Promise<Response> => {
         throw new Error(logEntry.reason);
       }
 
-      const newObservedUser = {
+      const newObservedUserPayload = {
         embedding: faceEmbedding,
         first_seen_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
@@ -643,15 +792,18 @@ serve(async (req: Request): Promise<Response> => {
         last_accessed_zones: zoneId ? [zoneId] : [],
         status_id: observedStatus.id,
         alert_triggered: false,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expira en 24 horas por defecto
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         potential_match_user_id: null,
       };
 
-      const { data: createdObservedUser, error: insertError } = await supabase
-        .from("observed_users")
-        .insert([newObservedUser])
-        .select("*")
-        .single();
+      const { data: createdObservedUser, error: insertError } =
+        await supabaseAdmin
+          .from("observed_users")
+          .insert([newObservedUserPayload])
+          .select(
+            "id, status_id, first_seen_at, last_seen_at, access_count, alert_triggered, expires_at, potential_match_user_id, face_image_url, last_accessed_zones",
+          )
+          .single();
 
       if (insertError) {
         console.error(
@@ -661,13 +813,49 @@ serve(async (req: Request): Promise<Response> => {
         throw insertError;
       }
 
+      let newUploadedImageUrl: string | null = null;
+      if (imageData && createdObservedUser.id) {
+        console.log(
+          `Attempting to upload image for new observed user: ${createdObservedUser.id}`,
+        );
+        const { imageUrl, error: uploadImageError } =
+          await uploadImageToStorageAndDb(
+            createdObservedUser.id,
+            imageData,
+            true,
+            Deno.env.get("SUPABASE_URL") ?? "",
+            Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          );
+        if (uploadImageError) {
+          console.error(
+            `Warning: Failed to upload image for new observed user ${createdObservedUser.id}: ${uploadImageError}`,
+          );
+        } else if (imageUrl) {
+          newUploadedImageUrl = imageUrl;
+          // IMPORTANTE: Si la imagen se subió exitosamente, actualizar el campo face_image_url en la DB
+          // porque el insert inicial no lo pudo tener si el campo no era requerido o estaba vacío.
+          const { error: updateImgUrlError } = await supabaseAdmin
+            .from("observed_users")
+            .update({ face_image_url: newUploadedImageUrl })
+            .eq("id", createdObservedUser.id);
+
+          if (updateImgUrlError) {
+            console.error(
+              `Warning: Failed to update face_image_url for new observed user ${createdObservedUser.id} after upload: ${updateImgUrlError.message}`,
+            );
+          }
+          console.log(
+            `Successfully uploaded and updated image for new observed user ${createdObservedUser.id}: ${newUploadedImageUrl}`,
+          );
+        }
+      }
+
       logEntry.observed_user_id = createdObservedUser.id;
       logEntry.user_id = null;
       logEntry.user_type = "new_observed";
       logEntry.confidence_score = 1.0;
 
-      // --- Lógica de expires_at para nuevos usuarios observados (por defecto, acceso concedido al crearse) ---
-      // Para nuevos usuarios, siempre se concede acceso al crearse.
       const newObservedUserHasAccess = true;
       const newAccessReason =
         `New observed user registered for zone: ${zoneId}`;
@@ -699,7 +887,6 @@ serve(async (req: Request): Promise<Response> => {
         );
       }
 
-      // --- CAMBIO CLAVE AQUÍ: Obtener nombres reales de las zonas para Newly Observed Users ---
       let newZonesAccessedDetails: ItemWithNameAndId[] = [];
       if (
         createdObservedUser.last_accessed_zones &&
@@ -720,19 +907,18 @@ serve(async (req: Request): Promise<Response> => {
           newZonesAccessedDetails = newZoneNamesData || [];
         }
       }
-      // --- FIN CAMBIO CLAVE ---
 
       const finalNewObservedResponse: UnifiedValidationResponse = {
         user: {
           id: createdObservedUser.id,
-          full_name: null, // Los observados no tienen full_name en la BD
+          full_name: null,
           user_type: "observed",
           hasAccess: newObservedUserHasAccess,
           similarity: 1.0,
-          role_details: null, // Los observados no tienen roles
+          role_details: null,
           status_details: newStatusDetails ||
             { id: "unknown", name: "Unknown" },
-          zones_accessed_details: newZonesAccessedDetails, // Usar los nombres reales
+          zones_accessed_details: newZonesAccessedDetails,
           observed_details: {
             firstSeenAt: createdObservedUser.first_seen_at,
             lastSeenAt: createdObservedUser.last_seen_at,
@@ -742,6 +928,7 @@ serve(async (req: Request): Promise<Response> => {
             potentialMatchUserId: createdObservedUser.potential_match_user_id,
             similarity: 1.0,
             distance: 0,
+            faceImageUrl: newUploadedImageUrl,
           },
         },
         type: newResponseType,
@@ -749,9 +936,8 @@ serve(async (req: Request): Promise<Response> => {
       };
 
       await supabase.from("logs").insert([logEntry]);
-
       return new Response(JSON.stringify(finalNewObservedResponse), {
-        status: 200, // <-- Siempre 200 OK
+        status: 200,
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
@@ -759,7 +945,6 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    // --- Si no se encontró ningún tipo de match (ni registrado ni observado), se envía esta respuesta ---
     logEntry.result = false;
     logEntry.decision = "access_denied";
     logEntry.reason =
@@ -783,7 +968,7 @@ serve(async (req: Request): Promise<Response> => {
 
     await supabase.from("logs").insert([logEntry]);
     return new Response(JSON.stringify(noMatchResponse), {
-      status: 404, // Mantenemos 404 para "no match encontrado"
+      status: 404,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
@@ -840,7 +1025,7 @@ serve(async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify(errorResponse),
       {
-        status: 500, // Error interno del servidor
+        status: 500,
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",

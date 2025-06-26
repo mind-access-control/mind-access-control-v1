@@ -17,15 +17,7 @@ import {
   ItemWithNameAndId,
   ObservedUserSortField,
   SortDirection,
-} from "@/types/common"; // AJUSTA LA RUTA SI ES NECESARIO
-
-// ELIMINAR LAS DEFINICIONES DE INTERFACE ObservedUser, ItemWithNameAndId,
-// ObservedUserSortField, SortDirection DE AQUÍ, YA VIENEN IMPORTADAS.
-// No deben existir líneas como:
-// interface ObservedUser { ... }
-// interface ItemWithNameAndId { ... }
-// type ObservedUserSortField = ...
-// type SortDirection = ...
+} from "@/types/common";
 
 const ObservedUsersTab: React.FC = () => {
   const [observedUsers, setObservedUsers] = useState<ObservedUser[]>([]);
@@ -42,12 +34,16 @@ const ObservedUsersTab: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null); // Estado para mensajes de acción
+  const actionMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Referencia para el timeout del mensaje
 
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchObservedUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // IMPORTANTE: NO limpiar actionMessage aquí. Ahora se limpia con un timeout.
+    // setActionMessage(null);
 
     try {
       const edgeFunctionUrl =
@@ -68,14 +64,17 @@ const ObservedUsersTab: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+        const errorData: { error?: string; message?: string } =
+          await response.json();
+        throw new Error(
+          errorData.error ||
+            errorData.message ||
+            `HTTP Error: ${response.status}`
+        );
       }
 
       const result = await response.json();
 
-      // La EF ya está mapeando correctamente, solo aseguramos el tipo aquí.
-      // Confidence se asigna como valor por defecto ya que no viene de la DB
       const mappedUsers: ObservedUser[] = result.users.map((user: any) => ({
         id: user.id,
         firstSeen: user.firstSeen,
@@ -84,7 +83,7 @@ const ObservedUsersTab: React.FC = () => {
         accessedZones: user.accessedZones,
         status: user.status,
         aiAction: user.aiAction,
-        confidence: user.confidence || 0.95, // Asegúrate de que confidence tenga un valor
+        confidence: user.confidence || 0.95,
         faceImage: user.faceImage,
       }));
 
@@ -115,9 +114,11 @@ const ObservedUsersTab: React.FC = () => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
+
     debounceTimeoutRef.current = setTimeout(() => {
       fetchObservedUsers();
     }, 300);
+
     return () => {
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
@@ -143,20 +144,95 @@ const ObservedUsersTab: React.FC = () => {
     setCurrentPage(1);
   }, []);
 
+  const handleRefresh = useCallback(() => {
+    setCurrentPage(1);
+    fetchObservedUsers();
+  }, [fetchObservedUsers]);
+
+  // --- FUNCIÓN GENÉRICA PARA ENVIAR ACCIONES ---
+  const sendObservedUserAction = useCallback(
+    async (userId: string, actionType: "block" | "extend" | "register") => {
+      // Limpiar cualquier timeout previo antes de establecer un nuevo mensaje
+      if (actionMessageTimeoutRef.current) {
+        clearTimeout(actionMessageTimeoutRef.current);
+        actionMessageTimeoutRef.current = null;
+      }
+      setActionMessage(null); // Limpiar mensaje actual antes de mostrar uno nuevo
+
+      try {
+        const edgeFunctionUrl =
+          "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/manage-observed-user-actions";
+
+        const response = await fetch(edgeFunctionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            observedUserId: userId,
+            actionType: actionType,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || `Error HTTP: ${response.status}`);
+        }
+
+        setActionMessage(result.message || `Action ${actionType} successful.`);
+        // Establecer un timeout para limpiar el mensaje después de 5 segundos
+        actionMessageTimeoutRef.current = setTimeout(() => {
+          setActionMessage(null);
+        }, 10000); // 5 segundos
+
+        fetchObservedUsers(); // Recargar la tabla para ver los cambios
+      } catch (err: unknown) {
+        let errorMessage = `Failed to perform ${actionType} action.`;
+        if (err instanceof Error) {
+          errorMessage = err.message;
+        } else if (typeof err === "string") {
+          errorMessage = err;
+        }
+        console.error(`Error performing ${actionType} action:`, err);
+        setActionMessage(`Error: ${errorMessage}`);
+        // Establecer un timeout para limpiar el mensaje de error también
+        actionMessageTimeoutRef.current = setTimeout(() => {
+          setActionMessage(null);
+        }, 10000); // Un poco más de tiempo para mensajes de error
+      }
+    },
+    [fetchObservedUsers]
+  ); // Asegurar que fetchObservedUsers es una dependencia
+
+  // --- Implementación de los Handlers de los Botones ---
   const handleRegisterObservedUser = useCallback((user: ObservedUser) => {
-    console.log(`Action: Register user ${user.id}`);
-    alert(`Implement: Register user ${user.id}`);
+    console.log(`Action: Register user ${user.id} - NOT YET IMPLEMENTED`);
+    setActionMessage(`Registro de usuario ${user.id} no implementado aún.`);
+    if (actionMessageTimeoutRef.current) {
+      clearTimeout(actionMessageTimeoutRef.current);
+    }
+    actionMessageTimeoutRef.current = setTimeout(() => {
+      setActionMessage(null);
+    }, 10000); // Mensaje de "no implementado" se limpia en 5s
+    // Implementación futura: sendObservedUserAction(user.id, "register");
   }, []);
 
-  const handleExtendObservedUserAccess = useCallback((user: ObservedUser) => {
-    console.log(`Action: Extend access for user ${user.id}`);
-    alert(`Implement: Extend access for user ${user.id}`);
-  }, []);
+  const handleExtendObservedUserAccess = useCallback(
+    (user: ObservedUser) => {
+      console.log(`Action: Extend access for user ${user.id}`);
+      sendObservedUserAction(user.id, "extend");
+    },
+    [sendObservedUserAction]
+  );
 
-  const handleBlockObservedUser = useCallback((user: ObservedUser) => {
-    console.log(`Action: Block user ${user.id}`);
-    alert(`Implement: Block user ${user.id}`);
-  }, []);
+  const handleBlockObservedUser = useCallback(
+    (user: ObservedUser) => {
+      console.log(`Action: Block user ${user.id}`);
+      sendObservedUserAction(user.id, "block");
+    },
+    [sendObservedUserAction]
+  );
 
   const handleObservedSortChange = useCallback(
     (field: ObservedUserSortField) => {
@@ -173,6 +249,15 @@ const ObservedUsersTab: React.FC = () => {
     [observedSortField, observedSortDirection]
   );
 
+  // Limpiar el timeout si el componente se desmonta
+  useEffect(() => {
+    return () => {
+      if (actionMessageTimeoutRef.current) {
+        clearTimeout(actionMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="space-y-8">
       <div>
@@ -184,6 +269,19 @@ const ObservedUsersTab: React.FC = () => {
       </div>
 
       <ObservedUsersOverviewCards observedUsers={observedUsers} />
+
+      {/* Mensajes de acción */}
+      {actionMessage && (
+        <div
+          className={`p-3 rounded-md text-center font-medium ${
+            actionMessage.startsWith("Error:")
+              ? "bg-red-100 text-red-700"
+              : "bg-green-100 text-green-700"
+          }`}
+        >
+          {actionMessage}
+        </div>
+      )}
 
       {loading && (
         <div className="text-white text-center py-4">
@@ -213,6 +311,7 @@ const ObservedUsersTab: React.FC = () => {
           itemsPerPage={itemsPerPage}
           onItemsPerPageChange={handleItemsPerPageChange}
           totalObservedUsersCount={totalObservedUsersCount}
+          onRefresh={handleRefresh}
         />
       )}
       {!loading && !error && observedUsers.length === 0 && (
