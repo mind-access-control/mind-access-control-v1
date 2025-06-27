@@ -4,18 +4,16 @@ import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 
 // --- Types Import ---
-import type { LogSortField, ObservedUserSortField, SortDirection, SummaryEntry, SummarySortField } from '@/types';
+import type { LogSortField, SortDirection, SummaryEntry, SummarySortField } from '@/types';
 
 // --- Mock Data Import ---
 import {
   accessLogs,
-  columns,
   defaultNewCamera,
   logColumns,
   aiRecommendations as mockAiRecommendations,
   cameras as mockCameras,
   kpiData as mockKpiData,
-  observedUsers as mockObservedUsers,
   riskScore as mockRiskScore,
   suspiciousUsers as mockSuspiciousUsers,
   zones as mockZones,
@@ -42,7 +40,6 @@ import {
   ChevronDown,
   ChevronUp,
   Edit,
-  Eye,
   FileSpreadsheet,
   Lightbulb,
   LogOut,
@@ -65,6 +62,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
 import UsersTab from './users/UsersTab';
+import ObservedUsersTab from '@/components/ObservedUsersTab';
 
 export default function AdminDashboard({ supabase, session, onLogout }: { supabase?: SupabaseClient; session?: Session; onLogout?: () => void }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -118,14 +116,9 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
   const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
-  const [observedUsers] = useState(mockObservedUsers);
-  const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>('id');
-  const [observedSortDirection, setObservedSortDirection] = useState<'asc' | 'desc'>('asc');
   const [logsSortField, setLogsSortField] = useState<LogSortField>('timestamp');
   const [logsSortDirection, setLogsSortDirection] = useState<SortDirection>('desc');
-  const [observedUserDetails, setObservedUserDetails] = useState<null | (typeof observedUsers)[0]>(null);
   const [dashboardTab, setDashboardTab] = useState('overview');
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   // --- OTRAS FUNCIONES ---
   const handleLogout = async () => {
@@ -232,25 +225,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
     setCameraToDelete(null);
   };
 
-  function handleImageError(userId: number | string, photoUrl: string) {
-    setImageErrors((prev) => ({ ...prev, [photoUrl]: true }));
-    console.warn(`Failed to load image for user ${userId} at URL: ${photoUrl}`);
-  }
-
-  // --- UseMemos para Datos Calculados ---
-  const sortedObservedUsers = useMemo(() => {
-    // Ejemplo de implementación de sort, deberás llenar con tu lógica real
-    return [...observedUsers].sort((a, b) => {
-      if (observedSortField === 'id') {
-        return observedSortDirection === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
-      }
-      // Añadir más lógica para otros campos si es necesario
-      return 0;
-    });
-  }, [observedUsers, observedSortField, observedSortDirection]);
-
   const filteredLogs = useMemo(() => {
-    // Simulación de filtrado, adaptar a tus datos y filtros
     return (accessLogs as any[]).filter((log) => {
       const matchSearch = searchTerm ? JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase()) : true;
       const matchUser = selectedUser === 'all' ? true : log.user === selectedUser;
@@ -270,20 +245,16 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
 
   const sortedLogs = useMemo(() => {
     return [...filteredLogs].sort((a, b) => {
-      // Implementación básica de ordenamiento para logs
       if (logSortField === 'timestamp') {
         return logSortDirection === 'asc'
           ? new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
           : new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       }
-      // Añadir más lógica de ordenamiento
       return 0;
     });
   }, [filteredLogs, logSortField, logSortDirection]);
 
   const userSummaryData = useMemo((): SummaryEntry[] => {
-    // <-- ¡Añade `: SummaryEntry[]` aquí!
-    // Esta lógica podría ser más compleja, es una simulación
     return Array.from(new Set((accessLogs as any[]).map((log) => log.user))).map((userName) => {
       const userLogs = (accessLogs as any[]).filter((log) => log.user === userName);
       const successful = userLogs.filter((log) => log.status === 'Successful').length;
@@ -314,7 +285,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const filteredSummaryData = useMemo(() => {
     return userSummaryData
       .filter((summary: SummaryEntry) => {
-        // <-- ¡Añade `: SummaryEntry` aquí!
         const matchSearch = summarySearchTerm ? JSON.stringify(summary).toLowerCase().includes(summarySearchTerm.toLowerCase()) : true;
         const matchStatus =
           summaryStatusFilter === 'all'
@@ -327,12 +297,9 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
         return matchSearch && matchStatus;
       })
       .sort((a: SummaryEntry, b: SummaryEntry) => {
-        // <-- ¡Añade `: SummaryEntry` aquí!
-        // Implementación básica de ordenamiento para el resumen
         if (summarySortField === 'user') {
           return summarySortDirection === 'asc' ? a.user.localeCompare(b.user) : b.user.localeCompare(a.user);
         }
-        // Añadir más lógica de ordenamiento
         return 0;
       });
   }, [userSummaryData, summarySortField, summarySortDirection, summarySearchTerm, summaryStatusFilter]);
@@ -342,7 +309,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const logEndIndex = logStartIndex + logItemsPerPage;
   const paginatedLogs = sortedLogs.slice(logStartIndex, logEndIndex);
 
-  // Mocks para sortedRecentLogs (usado en Dashboard)
   const sortedRecentLogs = useMemo(() => {
     return (accessLogs as any[]).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
   }, [accessLogs]);
@@ -551,7 +517,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   }
 
   function SecurityTrendsChart({ data }: { data: any[] }) {
-    // Dummy data if actual data is not provided
     const chartData =
       data.length > 0
         ? data
@@ -587,7 +552,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   }
 
   function FailureCauseChart({ data }: { data: any[] }) {
-    // Dummy data if actual data is not provided
     const chartData =
       data.length > 0
         ? data
@@ -728,7 +692,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
             {/* Overview Tab */}
             {dashboardTab === 'overview' && (
               <>
-                {/* Header / Security Executive Summary */}
                 <div>
                   <h2 className="text-3xl font-bold text-white mb-2">Facial Access Control Dashboard - Security Overview</h2>
                   <p className="text-indigo-200">AI-powered insights for proactive security management</p>
@@ -758,144 +721,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
             )}
 
             {/* Observed Users Tab */}
-            {dashboardTab === 'observed' && (
-              <>
-                <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Observed Users</h2>
-                  <p className="text-indigo-200">Monitor and manage users detected by the system but not yet registered.</p>
-                </div>
-                {/* KPIs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">New Observed Users (Today)</div>
-                    <div className="text-3xl font-bold text-teal-600">2</div>
-                  </div>
-                  <div
-                    className={`rounded-xl shadow-lg p-6 flex flex-col items-center bg-white ${
-                      observedUsers.filter((u: any) => u.status === 'in_review_admin').length > 2 ? 'border-2 border-red-500 bg-red-50 animate-pulse' : ''
-                    }`}
-                  >
-                    <div className="text-sm text-gray-600 mb-1">Observed Users Pending Review</div>
-                    <div className="text-3xl font-bold text-red-600">{observedUsers.filter((u: any) => u.status === 'in_review_admin').length}</div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">Observed Users (This Week)</div>
-                    <div className="text-3xl font-bold text-blue-600">5</div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
-                    <div className="text-sm text-gray-600 mb-1">Total Observed Users</div>
-                    <div className="text-3xl font-bold text-gray-800">{observedUsers.length}</div>
-                  </div>
-                </div>
-                {/* Observed Users Table */}
-                <div className="bg-white rounded-xl shadow-lg p-4">
-                  <div className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-blue-500" /> Observed Users Requiring Action
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-500 border-b">
-                          {columns.map((col) => (
-                            <th
-                              key={col.key}
-                              className={`py-2 px-2 text-left ${col.sortable ? 'cursor-pointer select-none' : ''}`}
-                              onClick={() => {
-                                if (col.sortable) {
-                                  if (observedSortField === col.key) {
-                                    setObservedSortDirection(observedSortDirection === 'asc' ? 'desc' : 'asc');
-                                  } else {
-                                    setObservedSortField(col.key as ObservedUserSortField);
-                                    setObservedSortDirection('asc');
-                                  }
-                                }
-                              }}
-                            >
-                              <span className="flex items-center">
-                                {col.label}
-                                {col.sortable &&
-                                  observedSortField === col.key &&
-                                  (observedSortDirection === 'asc' ? (
-                                    <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                  ))}
-                              </span>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedObservedUsers.map((u: any) => (
-                          <tr key={u.id} className="border-b hover:bg-blue-50 transition">
-                            <td className="py-2 px-2">
-                              {u.photoUrl && !imageErrors[u.photoUrl] ? (
-                                <div className="relative w-8 h-8">
-                                  <img
-                                    src={u.photoUrl}
-                                    alt={u.id}
-                                    className="w-8 h-8 rounded-full object-cover"
-                                    onError={() => handleImageError(u.id, u.photoUrl)}
-                                  />
-                                </div>
-                              ) : (
-                                <UserCircle2 className="w-8 h-8 text-gray-400" />
-                              )}
-                            </td>
-                            <td className="py-2 px-2 font-mono">{u.id}</td>
-                            <td className="py-2 px-2">{u.firstSeen}</td>
-                            <td className="py-2 px-2">{u.lastSeen}</td>
-                            <td className="py-2 px-2 text-center">{u.tempAccesses}</td>
-                            <td className="py-2 px-2">{u.accessedZones.join(', ')}</td>
-                            <td className="py-2 px-2">
-                              <Badge
-                                className={
-                                  u.status === 'active_temporal'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : u.status === 'in_review_admin'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }
-                              >
-                                {u.status === 'active_temporal' ? 'Active (Temp)' : u.status === 'in_review_admin' ? 'Pending Review' : 'Expired'}
-                              </Badge>
-                            </td>
-                            <td className="py-2 px-2 text-blue-700">{u.aiAction}</td>
-                            <td className="py-2 px-2">
-                              <div className="flex gap-1">
-                                <Button size="sm" variant="outline">
-                                  Register
-                                </Button>
-                                <Button size="sm" variant="outline">
-                                  Extend
-                                </Button>
-                                <Button size="sm" variant="destructive">
-                                  Block
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => setObservedUserDetails(u)}>
-                                  Details
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {observedUsers.length === 0 && (
-                          <tr>
-                            <td colSpan={9} className="text-center text-gray-400 py-4">
-                              No observed users requiring action.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
+            {dashboardTab === 'observed' && <ObservedUsersTab />}
 
             {/* Detailed Logs Tab */}
             {dashboardTab === 'logs' && (
@@ -1795,44 +1621,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
             <Button variant="destructive" onClick={confirmCameraDelete} className="bg-red-600 hover:bg-red-700">
               Confirm Delete
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Observed User Details Modal */}
-      <Dialog open={!!observedUserDetails} onOpenChange={() => setObservedUserDetails(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Observed User Details</DialogTitle>
-            <DialogDescription>
-              Temporary ID: <strong>{observedUserDetails?.id}</strong>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <div>
-              <strong>First Seen:</strong> {observedUserDetails?.firstSeen}
-            </div>
-            <div>
-              <strong>Last Seen:</strong> {observedUserDetails?.lastSeen}
-            </div>
-            <div>
-              <strong>Temp Accesses:</strong> {observedUserDetails?.tempAccesses}
-            </div>
-            <div>
-              <strong>Accessed Zones:</strong> {observedUserDetails?.accessedZones?.join(', ')}
-            </div>
-            <div>
-              <strong>Status:</strong> {observedUserDetails?.status}
-            </div>
-            <div>
-              <strong>AI Suggested Action:</strong> {observedUserDetails?.aiAction}
-            </div>
-            <div className="mt-2 text-blue-700">
-              <strong>AI Insights:</strong> This user was detected by the system but is not yet registered. Please review and take appropriate action.
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setObservedUserDetails(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

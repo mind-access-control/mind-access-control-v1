@@ -7,6 +7,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Este console.log aparecerá en los logs de la Edge Function cuando se inicie.
 console.log('Edge Function "get-user-statuses" started!');
 
+// Interfaz para el tipo de error que esperamos con un mensaje
+interface ErrorWithMessage {
+  message: string;
+}
+
+// Función de guardia para verificar si un error tiene una propiedad 'message'
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as ErrorWithMessage).message === "string"
+  );
+}
+
 // La función 'serve' de Deno espera una función asíncrona que maneje las peticiones HTTP.
 // 'req' es el objeto de la petición entrante.
 serve(async (req: Request) => {
@@ -14,6 +29,9 @@ serve(async (req: Request) => {
   // Esto es crucial para que tu frontend (que corre en un dominio diferente, ej. localhost:3000)
   // pueda hacer peticiones a esta función.
   if (req.method === "OPTIONS") {
+    console.log(
+      "DEBUG: Handling OPTIONS preflight request for get-user-statuses",
+    ); // Log de depuración
     return new Response(null, {
       status: 204,
       headers: {
@@ -90,11 +108,21 @@ serve(async (req: Request) => {
         },
       },
     );
-  } catch (catchError: any) { // Manejo de errores inesperados
+  } catch (catchError: unknown) { // Manejo de errores inesperados (ahora 'unknown')
     console.error("Unhandled error in Edge Function:", catchError);
+
+    let errorMessage = "An unexpected error occurred"; // Declarar y inicializar errorMessage
+    if (catchError instanceof Error) {
+      errorMessage = catchError.message;
+    } else if (typeof catchError === "string") {
+      errorMessage = catchError;
+    } else if (isErrorWithMessage(catchError)) { // Usar la función de guardia
+      errorMessage = catchError.message;
+    }
+
     return new Response(
       JSON.stringify({
-        error: catchError.message || "An unexpected error occurred",
+        error: errorMessage, // Usar errorMessage ya definido
       }),
       {
         status: 500, // Error interno del servidor

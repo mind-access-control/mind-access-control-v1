@@ -12,7 +12,6 @@ interface Zone {
 
 // --- ACTUALIZACIÓN DE INTERFACES PARA LA RESPUESTA UNIFICADA DE LA EDGE FUNCTION ---
 interface ItemWithNameAndId {
-  // Re-definido aquí para coherencia con el backend
   id: string;
   name: string;
 }
@@ -30,12 +29,15 @@ interface UnifiedValidationResponse {
 
     observed_details?: {
       // Opcional, solo para usuarios observados
-      first_seen_at: string;
-      last_seen_at: string;
-      access_count: number;
-      alert_triggered: boolean;
-      expires_at: string;
-      potential_match_user_id: string | null;
+      firstSeenAt: string;
+      lastSeenAt: string;
+      accessCount: number;
+      alertTriggered: boolean;
+      expiresAt: string;
+      potentialMatchUserId: string | null;
+      similarity: number; // Añadido
+      distance: number; // Añadido
+      faceImageUrl: string | null; // <--- AÑADIDO: URL de la imagen de la cara
     };
   };
   type:
@@ -43,6 +45,9 @@ interface UnifiedValidationResponse {
     | "observed_user_updated"
     | "new_observed_user_registered"
     | "no_match_found"
+    | "registered_user_access_denied"
+    | "observed_user_access_denied_expired"
+    | "observed_user_access_denied_status_expired"
     | string;
   message?: string;
   error?: string;
@@ -50,7 +55,7 @@ interface UnifiedValidationResponse {
 // --- FIN DE ACTUALIZACIÓN DE INTERFACES ---
 
 const FacialValidationScreen: React.FC = () => {
-  // --- ESTADOS ---\
+  // --- ESTADOS ---
   const webcamRef = useRef<Webcam>(null);
   const [captureMode, setCaptureMode] = useState<"manual" | "automatic">(
     "manual"
@@ -62,7 +67,7 @@ const FacialValidationScreen: React.FC = () => {
     null
   );
   const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
-  const [isProcessingFace, setIsProcessingFace] = useState<boolean>(false); // Para la UI
+  const [isProcessingFace, setIsProcessingFace] = useState<boolean>(false);
   const [faceDetectionError, setFaceDetectionError] = useState<string | null>(
     null
   );
@@ -90,19 +95,19 @@ const FacialValidationScreen: React.FC = () => {
       alertTriggered: boolean;
       expiresAt: string;
       potentialMatchUserId: string | null;
+      faceImageUrl: string | null; // <--- AÑADIDO: para mostrar la URL de la imagen
     };
   } | null>(null);
 
-  // New state to force the main useEffect to restart
   const [intervalRestartTrigger, setIntervalRestartTrigger] = useState(false);
 
-  // --- REFERENCES (for mutable values that do not trigger re-renders) ---
+  // --- REFERENCIAS (para valores mutables que no disparan re-renders) ---
   const detectionIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
   const cooldownTimeoutIdRef = useRef<NodeJS.Timeout | null>(null);
-  const isCurrentlyInCooldownRef = useRef(false); // Cooldown flag
-  const isProcessingAttemptRef = useRef(false); // Flag for processing attempt in progress (manual or automatic)
+  const isCurrentlyInCooldownRef = useRef(false);
+  const isProcessingAttemptRef = useRef(false);
 
-  // --- HELPER FUNCTION TO CLEAR ALL TIMERS AND RESET FLAGS ---
+  // --- FUNCIÓN HELPER PARA LIMPIAR TODOS LOS TIMERS Y RESETEAR BANDERAS ---
   const clearAllTimersAndFlags = useCallback(() => {
     if (detectionIntervalIdRef.current) {
       clearInterval(detectionIntervalIdRef.current);
@@ -117,26 +122,26 @@ const FacialValidationScreen: React.FC = () => {
     setIsProcessingFace(false);
   }, []);
 
-  // --- GENERIC CLEANUP FUNCTION FOR MODE/ZONE/CAMERA CHANGES ---
+  // --- FUNCIÓN GENÉRICA DE LIMPIEZA PARA CAMBIOS DE MODO/ZONA/CÁMARA ---
   const resetStateAndClearTimers = useCallback(() => {
     setImageSrc(null);
     setValidationMessage(null);
     setFaceDetectionError(null);
-    setUserInfo(null); // <--- AHORA SÍ: Limpiar la información del usuario en cada reinicio
+    setUserInfo(null);
     clearAllTimersAndFlags();
   }, [clearAllTimersAndFlags]);
 
-  // --- Camera change handler (useCallback for stability) ---
+  // --- Manejador de cambio de cámara (useCallback para estabilidad) ---
   const handleDeviceChange = useCallback(
     (event: React.ChangeEvent<HTMLSelectElement>) => {
       setSelectedDeviceId(event.target.value);
-      resetStateAndClearTimers(); // Resetear estado al cambiar de cámara
+      resetStateAndClearTimers();
       setIntervalRestartTrigger((prev) => !prev);
     },
     [setSelectedDeviceId, resetStateAndClearTimers, setIntervalRestartTrigger]
   );
 
-  // --- Fetch zones from Supabase ---
+  // --- Obtener zonas de Supabase ---
   useEffect(() => {
     const fetchZones = async () => {
       setIsLoadingZones(true);
@@ -167,7 +172,9 @@ const FacialValidationScreen: React.FC = () => {
         }
       } catch (error) {
         console.error("❌ ERROR: Error al obtener zonas:", error);
-        setFaceDetectionError("Failed to load access zones. Please try again.");
+        setFaceDetectionError(
+          "Fallo al cargar las zonas de acceso. Intente de nuevo."
+        );
       } finally {
         setIsLoadingZones(false);
       }
@@ -176,7 +183,7 @@ const FacialValidationScreen: React.FC = () => {
     fetchZones();
   }, []);
 
-  // --- Load Face-API.js models ---
+  // --- Cargar modelos de Face-API.js ---
   useEffect(() => {
     const loadModels = async () => {
       setIsLoadingModels(true);
@@ -186,13 +193,19 @@ const FacialValidationScreen: React.FC = () => {
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
         setFaceApiModelsLoaded(true);
+        setValidationMessage(
+          "Modelos cargados. Seleccione modo de captura y zona."
+        );
       } catch (error) {
         console.error(
           "❌ ERROR: Error al cargar modelos de Face-API.js:",
           error
         );
         setFaceDetectionError(
-          "Failed to load facial recognition models. Please check your network or model path."
+          "Fallo al cargar los modelos de reconocimiento facial. Revise su red o la ruta de los modelos."
+        );
+        setValidationMessage(
+          "Error al cargar modelos de reconocimiento facial."
         );
       } finally {
         setIsLoadingModels(false);
@@ -201,7 +214,7 @@ const FacialValidationScreen: React.FC = () => {
     loadModels();
   }, []);
 
-  // --- Effect to enumerate video devices ---
+  // --- Efecto para enumerar dispositivos de video ---
   useEffect(() => {
     const enumerateDevices = async () => {
       try {
@@ -219,7 +232,7 @@ const FacialValidationScreen: React.FC = () => {
           error
         );
         setFaceDetectionError(
-          "Failed to access camera devices. Please ensure camera permissions are granted."
+          "Fallo al acceder a los dispositivos de la cámara. Asegúrese de que los permisos de la cámara estén concedidos."
         );
       }
     };
@@ -233,19 +246,19 @@ const FacialValidationScreen: React.FC = () => {
       .catch((error) => {
         console.error("❌ ERROR: Acceso inicial a la cámara denegado:", error);
         setFaceDetectionError(
-          "Camera access denied. Please grant permissions to use this feature."
+          "Acceso a la cámara denegado. Por favor, conceda los permisos para usar esta función."
         );
       });
   }, [selectedDeviceId]);
 
-  // --- Main validation function (imperatively called) ---
+  // --- Función principal de validación (llamada imperativamente) ---
   const processAndValidateFace = useCallback(
     async (descriptor: Float32Array, capturedImageSrc: string) => {
       setIsProcessingFace(true);
-      setValidationMessage("Validating face against database...");
+      setValidationMessage("Validando rostro contra la base de datos...");
       setFaceDetectionError(null);
-      setUserInfo(null); // <--- AHORA SÍ: Limpiar userInfo al inicio de CADA validación
-      setImageSrc(capturedImageSrc);
+      setUserInfo(null);
+      setImageSrc(capturedImageSrc); // Muestra la imagen capturada inmediatamente
 
       try {
         const validateEdgeFunctionUrl =
@@ -254,6 +267,7 @@ const FacialValidationScreen: React.FC = () => {
         const payload = {
           faceEmbedding: Array.from(descriptor),
           zoneId: selectedZone,
+          imageData: capturedImageSrc, // <--- CAMBIO CLAVE: Envía la imagen en Base64
         };
 
         const response = await fetch(validateEdgeFunctionUrl, {
@@ -270,7 +284,7 @@ const FacialValidationScreen: React.FC = () => {
           throw new Error(
             errorData.error ||
               errorData.message ||
-              `HTTP Error: ${response.status}`
+              `Error HTTP: ${response.status}`
           );
         }
 
@@ -281,13 +295,14 @@ const FacialValidationScreen: React.FC = () => {
         );
 
         if (result.error) {
-          setFaceDetectionError(`Validation Error: ${result.error}`);
-          setValidationMessage("Validation failed due to server error.");
-          setUserInfo(null); // Asegurar que userInfo sea null en caso de error de la Edge Function
+          setFaceDetectionError(`Error de Validación: ${result.error}`);
+          setValidationMessage(
+            "Fallo la validación debido a un error del servidor."
+          );
+          setUserInfo(null);
           return;
         }
 
-        // --- Lógica para el mensaje principal y userInfo basada en la respuesta unificada ---
         let displayMessage = "";
         let userFullNameForDisplay = result.user.full_name;
 
@@ -295,7 +310,6 @@ const FacialValidationScreen: React.FC = () => {
           !userFullNameForDisplay ||
           userFullNameForDisplay === "System Error"
         ) {
-          // Generar un nombre más amigable para usuarios observados si no hay nombre completo
           if (result.user.user_type === "observed") {
             userFullNameForDisplay = `Usuario Observado ${result.user.id.substring(
               0,
@@ -316,7 +330,7 @@ const FacialValidationScreen: React.FC = () => {
 
         const newUserInfo: typeof userInfo = {
           id: result.user.id,
-          fullName: userFullNameForDisplay, // Usar el nombre procesado
+          fullName: userFullNameForDisplay,
           userType: result.user.user_type,
           role: result.user.role_details?.name || "N/A",
           status: result.user.status_details?.name || "N/A",
@@ -332,24 +346,39 @@ const FacialValidationScreen: React.FC = () => {
           result.user.observed_details
         ) {
           newUserInfo.observedDetails = {
-            firstSeenAt: result.user.observed_details.first_seen_at,
-            lastSeenAt: result.user.observed_details.last_seen_at,
-            accessCount: result.user.observed_details.access_count,
-            alertTriggered: result.user.observed_details.alert_triggered,
-            expiresAt: result.user.observed_details.expires_at,
+            firstSeenAt: result.user.observed_details.firstSeenAt,
+            lastSeenAt: result.user.observed_details.lastSeenAt,
+            accessCount: result.user.observed_details.accessCount,
+            alertTriggered: result.user.observed_details.alertTriggered,
+            expiresAt: result.user.observed_details.expiresAt,
             potentialMatchUserId:
-              result.user.observed_details.potential_match_user_id,
+              result.user.observed_details.potentialMatchUserId,
+            faceImageUrl: result.user.observed_details.faceImageUrl || null, // <--- AÑADIDO: Guarda la URL de la imagen aquí
           };
         }
         setUserInfo(newUserInfo);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        let errorMessage = "An unknown error occurred.";
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        } else if (typeof error === "string") {
+          errorMessage = error;
+        } else if (
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+        ) {
+          errorMessage = error.message;
+        }
+
         console.error(
           "❌ ERROR: Error durante la validación del rostro:",
           error
         );
-        setFaceDetectionError(`Error: ${error.message}`);
-        setValidationMessage("Validation failed.");
-        setUserInfo(null); // Limpiar info si hay error
+        setFaceDetectionError(`Error: ${errorMessage}`);
+        setValidationMessage("Fallo la validación.");
+        setUserInfo(null);
       } finally {
         setIsProcessingFace(false);
       }
@@ -364,53 +393,80 @@ const FacialValidationScreen: React.FC = () => {
     ]
   );
 
-  // --- Function to capture photo and extract descriptor (manual or automatic) ---
-  const captureAndExtractDescriptorLogic = useCallback(async () => {
-    if (!isProcessingAttemptRef.current) {
+  // --- Función para capturar foto y extraer descriptor (manual) ---
+  const captureAndExtractDescriptorManual = useCallback(async () => {
+    if (isProcessingAttemptRef.current || isCurrentlyInCooldownRef.current) {
       return;
     }
 
+    isProcessingAttemptRef.current = true;
+
     if (!webcamRef.current || !faceApiModelsLoaded) {
       setValidationMessage(
-        "Facial recognition models are still loading or camera not ready."
+        "Los modelos de reconocimiento facial aún están cargando o la cámara no está lista."
       );
       isProcessingAttemptRef.current = false;
       return;
     }
 
-    setValidationMessage("Capturing image...");
+    setValidationMessage("Capturando imagen...");
     setFaceDetectionError(null);
-    setUserInfo(null); // <--- AHORA SÍ: Limpiar userInfo al inicio de CADA captura
-    setImageSrc(null);
+    setUserInfo(null);
+    setImageSrc(null); // Limpiar la imagen anterior antes de capturar una nueva
 
     try {
       const imageSrcData = webcamRef.current?.getScreenshot();
       if (imageSrcData) {
         const img = await faceapi.fetchImage(imageSrcData);
 
+        const detectionOptions = new faceapi.SsdMobilenetv1Options({
+          minConfidence: 0.5,
+        });
+
         const detections = await faceapi
-          .detectSingleFace(img, new faceapi.SsdMobilenetv1Options())
+          .detectSingleFace(img, detectionOptions)
           .withFaceLandmarks()
           .withFaceDescriptor();
 
         if (detections) {
-          setValidationMessage("Face detected! Processing for validation...");
+          console.log(
+            "DEBUG FACE-API.JS EMBEDDING:",
+            Array.from(detections.descriptor)
+          );
+
+          setValidationMessage(
+            "Rostro detectado! Procesando para validación..."
+          );
+          // Pasa imageSrcData a processAndValidateFace
           await processAndValidateFace(detections.descriptor, imageSrcData);
         } else {
-          setValidationMessage("No face detected in the captured image.");
+          setValidationMessage("No se detectó rostro en la imagen capturada.");
           setFaceDetectionError(
-            "No face detected in the captured image. Please ensure your face is clearly visible."
+            "No se detectó rostro en la imagen capturada. Asegúrese de que su rostro sea claramente visible y bien iluminado."
           );
           console.warn("⚠️ ADVERTENCIA: No se detectó rostro en la captura.");
-          isProcessingAttemptRef.current = false;
         }
       } else {
-        throw new Error("Could not capture image from webcam.");
+        throw new Error("No se pudo capturar imagen de la webcam.");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let errorMessage = "An unknown error occurred.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      } else if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+      ) {
+        errorMessage = error.message;
+      }
       console.error("❌ ERROR: Error durante la captura de imagen:", error);
-      setFaceDetectionError(`Error: ${error.message}`);
-      setValidationMessage("An error occurred during capture.");
+      setFaceDetectionError(`Error: ${errorMessage}`);
+      setValidationMessage("Ocurrió un error durante la captura.");
+    } finally {
       isProcessingAttemptRef.current = false;
     }
   }, [
@@ -421,16 +477,14 @@ const FacialValidationScreen: React.FC = () => {
     setFaceDetectionError,
     setUserInfo,
     setImageSrc,
+    isProcessingAttemptRef,
+    isCurrentlyInCooldownRef,
   ]);
 
-  // --- Main useEffect for automatic detection interval management ---
+  // --- Main useEffect para la gestión del intervalo de detección automática ---
   useEffect(() => {
-    // --- EFFECT INITIAL CLEANUP LOGIC ---
-    // Asegurar que se limpian los estados relevantes antes de iniciar un nuevo ciclo.
-    // Esto es CRUCIAL cuando se reinicia el efecto (e.g., cambio de modo/zona/cámara).
     resetStateAndClearTimers();
 
-    // --- CONDITIONS TO START A NEW DETECTION INTERVAL ---
     if (
       captureMode !== "automatic" ||
       !faceApiModelsLoaded ||
@@ -440,12 +494,32 @@ const FacialValidationScreen: React.FC = () => {
       !webcamRef.current.video ||
       webcamRef.current.video.readyState !== 4
     ) {
+      if (
+        captureMode === "automatic" &&
+        (!faceApiModelsLoaded || isLoadingModels)
+      ) {
+        setValidationMessage(
+          "Esperando modelos o cámara lista para modo automático..."
+        );
+      } else if (
+        captureMode === "automatic" &&
+        (!selectedDeviceId ||
+          !webcamRef.current ||
+          !webcamRef.current.video ||
+          webcamRef.current.video.readyState !== 4)
+      ) {
+        setValidationMessage(
+          "Cámara no lista para modo automático. Asegúrese de los permisos."
+        );
+      } else if (captureMode !== "automatic") {
+        setValidationMessage("Seleccione modo de captura y zona.");
+      }
+      clearAllTimersAndFlags();
       return;
     }
 
-    // --- FUNCTION THAT RUNS ON EACH setInterval TICK ---
-    const runDetectionStep = async () => {
-      if (isCurrentlyInCooldownRef.current || isProcessingAttemptRef.current) {
+    const runAutomaticDetectionTick = async () => {
+      if (isProcessingAttemptRef.current || isCurrentlyInCooldownRef.current) {
         return;
       }
 
@@ -456,32 +530,48 @@ const FacialValidationScreen: React.FC = () => {
       ) {
         console.log("⚠️ TICK: Webcam no está lista, deteniendo intervalo.");
         clearAllTimersAndFlags();
+        setValidationMessage("Cámara no lista o modelos cargando.");
+        setFaceDetectionError(
+          "Asegúrese de que la cámara esté activa y los modelos cargados."
+        );
         return;
+      }
+
+      if (
+        !userInfo &&
+        !faceDetectionError &&
+        !validationMessage?.includes("No se detectó rostro") &&
+        !validationMessage?.includes("Buscando rostro")
+      ) {
+        setValidationMessage("Buscando rostro en tiempo real...");
+        setFaceDetectionError(null);
       }
 
       isProcessingAttemptRef.current = true;
 
       try {
-        let bestDetection: any = null;
-        let highestScore = 0;
-        const ATTEMPTS = 3;
-        const ATTEMPT_DELAY_MS = 100;
+        let bestDescriptor: Float32Array | null = null;
+        let bestImageSrc: string | null = null;
+        const ATTEMPTS = 5;
+        const ATTEMPT_DELAY_MS = 200;
 
         for (let i = 0; i < ATTEMPTS; i++) {
-          const currentDetection = await faceapi
-            .detectSingleFace(
-              webcamRef.current.video,
-              new faceapi.SsdMobilenetv1Options()
-            )
-            .withFaceLandmarks()
-            .withFaceDescriptor();
+          const imageSrcData = webcamRef.current?.getScreenshot();
+          if (imageSrcData) {
+            const img = await faceapi.fetchImage(imageSrcData);
+            const detectionOptions = new faceapi.SsdMobilenetv1Options({
+              minConfidence: 0.7,
+            });
+            const detections = await faceapi
+              .detectSingleFace(img, detectionOptions)
+              .withFaceLandmarks()
+              .withFaceDescriptor();
 
-          if (
-            currentDetection &&
-            currentDetection.detection.score > highestScore
-          ) {
-            highestScore = currentDetection.detection.score;
-            bestDetection = currentDetection;
+            if (detections) {
+              bestDescriptor = detections.descriptor;
+              bestImageSrc = imageSrcData;
+              break;
+            }
           }
           if (i < ATTEMPTS - 1) {
             await new Promise((resolve) =>
@@ -490,38 +580,63 @@ const FacialValidationScreen: React.FC = () => {
           }
         }
 
-        if (bestDetection) {
-          // Detener el intervalo inmediatamente después de una detección exitosa
-          if (detectionIntervalIdRef.current) {
-            clearInterval(detectionIntervalIdRef.current);
-            detectionIntervalIdRef.current = null;
+        if (bestDescriptor && bestImageSrc) {
+          console.log(
+            "DEBUG FACE-API.JS EMBEDDING (automático):",
+            Array.from(bestDescriptor)
+          );
+
+          setValidationMessage(
+            "Rostro detectado! Procesando para validación..."
+          );
+
+          try {
+            await processAndValidateFace(bestDescriptor, bestImageSrc);
+          } finally {
+            isCurrentlyInCooldownRef.current = true;
+            cooldownTimeoutIdRef.current = setTimeout(() => {
+              isCurrentlyInCooldownRef.current = false;
+              setIntervalRestartTrigger((prev) => !prev);
+            }, 10000);
           }
-
-          isCurrentlyInCooldownRef.current = true;
-
-          // Iniciar un cooldown, después del cual se reinicia el intervalo
-          cooldownTimeoutIdRef.current = setTimeout(() => {
-            isCurrentlyInCooldownRef.current = false;
-            // Forzar el reinicio del useEffect para re-evaluar y (re)iniciar el intervalo
-            setIntervalRestartTrigger((prev) => !prev);
-          }, 10000); // 10 segundos de cooldown
-
-          await captureAndExtractDescriptorLogic();
         } else {
-          isProcessingAttemptRef.current = false;
+          if (
+            !userInfo &&
+            !faceDetectionError &&
+            !validationMessage?.includes("No se detectó rostro")
+          ) {
+            setValidationMessage("No se detectó rostro en este momento.");
+          }
         }
-      } catch (error) {
+      } catch (error: unknown) {
+        let errorMessage = "An unknown error occurred.";
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        } else if (typeof error === "string") {
+          errorMessage = error;
+        } else if (
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+        ) {
+          errorMessage = error.message;
+        }
         console.error(
-          "❌ TICK: Error during automatic face detection interval:",
+          "❌ TICK: Error durante el ciclo de detección automática (detección FaceAPI):",
           error
         );
-        clearAllTimersAndFlags();
+        setFaceDetectionError(`Error en detección automática: ${errorMessage}`);
+      } finally {
+        isProcessingAttemptRef.current = false;
       }
     };
 
-    // Solo iniciar el intervalo si no hay uno activo
     if (!detectionIntervalIdRef.current) {
-      detectionIntervalIdRef.current = setInterval(runDetectionStep, 500); // Intenta detectar cada 0.5 segundos
+      detectionIntervalIdRef.current = setInterval(
+        runAutomaticDetectionTick,
+        4000
+      );
     }
 
     return () => {
@@ -532,10 +647,14 @@ const FacialValidationScreen: React.FC = () => {
     faceApiModelsLoaded,
     isLoadingModels,
     selectedDeviceId,
-    captureAndExtractDescriptorLogic,
+    processAndValidateFace,
     clearAllTimersAndFlags,
-    intervalRestartTrigger, // Dependencia para forzar reinicio del efecto
-    resetStateAndClearTimers, // Asegurar que resetStateAndClearTimers se llama al inicio del efecto
+    intervalRestartTrigger,
+    resetStateAndClearTimers,
+    setValidationMessage,
+    setFaceDetectionError,
+    userInfo,
+    webcamRef,
   ]);
 
   return (
@@ -545,14 +664,12 @@ const FacialValidationScreen: React.FC = () => {
           Validación de Acceso Facial
         </h2>
 
-        {/* Loading models indicator */}
         {isLoadingModels && (
           <div className="text-center text-blue-500 font-semibold">
             Cargando modelos de reconocimiento facial...
           </div>
         )}
 
-        {/* Camera Selector */}
         {!isLoadingModels && devices.length > 1 && (
           <div className="w-full">
             <label
@@ -569,13 +686,12 @@ const FacialValidationScreen: React.FC = () => {
             >
               {devices.map((device) => (
                 <option key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Cámara ${device.deviceId.substring(0, 8)}`}{" "}
+                  {device.label || `Cámara ${device.deviceId.substring(0, 8)}`}
                 </option>
               ))}
             </select>
           </div>
         )}
-        {/* Warning if no cameras detected */}
         {!isLoadingModels && devices.length === 0 && (
           <div className="text-center text-red-500 font-semibold">
             No se encontraron dispositivos de cámara. Asegúrese de que una
@@ -583,7 +699,6 @@ const FacialValidationScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Zone Selector */}
         {!isLoadingZones && (
           <div className="w-full">
             <label
@@ -597,7 +712,7 @@ const FacialValidationScreen: React.FC = () => {
               value={selectedZone}
               onChange={(e) => {
                 setSelectedZone(e.target.value);
-                resetStateAndClearTimers(); // Resetear estado al cambiar de zona
+                resetStateAndClearTimers();
                 setIntervalRestartTrigger((prev) => !prev);
               }}
               className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm"
@@ -611,14 +726,12 @@ const FacialValidationScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Zone loading indicator */}
         {isLoadingZones && (
           <div className="text-center text-blue-500 font-semibold">
             Cargando zonas de acceso...
           </div>
         )}
 
-        {/* CAPTURE MODE: Manual vs. Automatic */}
         <div className="w-full mt-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Modo de Captura:
@@ -636,7 +749,7 @@ const FacialValidationScreen: React.FC = () => {
                 checked={captureMode === "manual"}
                 onChange={() => {
                   setCaptureMode("manual");
-                  resetStateAndClearTimers(); // Resetear estado al cambiar de modo
+                  resetStateAndClearTimers();
                   setIntervalRestartTrigger((prev) => !prev);
                 }}
                 className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
@@ -655,7 +768,7 @@ const FacialValidationScreen: React.FC = () => {
                 checked={captureMode === "automatic"}
                 onChange={() => {
                   setCaptureMode("automatic");
-                  resetStateAndClearTimers(); // Resetear estado al cambiar de modo
+                  resetStateAndClearTimers();
                   setIntervalRestartTrigger((prev) => !prev);
                 }}
                 className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
@@ -667,7 +780,6 @@ const FacialValidationScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Camera Area */}
         <div className="relative w-full aspect-video bg-gray-200 rounded-md overflow-hidden">
           {!isLoadingModels && selectedDeviceId && (
             <Webcam
@@ -685,23 +797,21 @@ const FacialValidationScreen: React.FC = () => {
           )}
         </div>
 
-        {/* Capture Button */}
         <button
-          onClick={() => {
-            isProcessingAttemptRef.current = true;
-            captureAndExtractDescriptorLogic();
-          }}
+          onClick={captureAndExtractDescriptorManual}
           disabled={
             !faceApiModelsLoaded ||
             isProcessingFace ||
             !selectedDeviceId ||
-            captureMode === "automatic"
+            captureMode === "automatic" ||
+            isProcessingAttemptRef.current
           }
           className={`w-full py-3 rounded-md font-semibold text-lg ${
             faceApiModelsLoaded &&
             !isProcessingFace &&
             selectedDeviceId &&
-            captureMode === "manual"
+            captureMode === "manual" &&
+            !isProcessingAttemptRef.current
               ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md transition duration-300"
               : "bg-gray-400 text-gray-700 cursor-not-allowed"
           }`}
@@ -710,7 +820,6 @@ const FacialValidationScreen: React.FC = () => {
           {isProcessingFace ? "Procesando..." : "Capturar Foto"}
         </button>
 
-        {/* Captured image preview */}
         {imageSrc && (
           <div className="mt-4 text-center">
             <h3 className="text-xl font-semibold text-gray-700 mb-2">
@@ -718,33 +827,32 @@ const FacialValidationScreen: React.FC = () => {
             </h3>
             <img
               src={imageSrc}
-              alt="Captured"
+              alt="Capturada"
               className="max-w-full h-auto rounded-md border border-gray-300 mx-auto"
             />
           </div>
         )}
 
-        {/* Status and error messages */}
         {validationMessage && (
           <div
             className="mt-4 p-3 rounded-md text-center text-lg font-medium"
             style={{
-              backgroundColor: validationMessage.includes("Access Granted")
+              backgroundColor: validationMessage.includes("Acceso Concedido")
                 ? "#dcfce7"
-                : validationMessage.includes("Access Denied")
+                : validationMessage.includes("Acceso Denegado")
                 ? "#fee2e2"
                 : validationMessage.includes("Error:") ||
-                  validationMessage.includes("No face detected") ||
-                  validationMessage.includes("Validation failed.")
+                  validationMessage.includes("No se detectó rostro") ||
+                  validationMessage.includes("Fallo la validación.")
                 ? "#fee2e2"
                 : "#dbeafe",
-              color: validationMessage.includes("Access Granted")
+              color: validationMessage.includes("Acceso Concedido")
                 ? "#166534"
-                : validationMessage.includes("Access Denied")
+                : validationMessage.includes("Acceso Denegado")
                 ? "#b91c1c"
                 : validationMessage.includes("Error:") ||
-                  validationMessage.includes("No face detected") ||
-                  validationMessage.includes("Validation failed.")
+                  validationMessage.includes("No se detectó rostro") ||
+                  validationMessage.includes("Fallo la validación.")
                 ? "#b91c1c"
                 : "#2563eb",
             }}
@@ -758,7 +866,6 @@ const FacialValidationScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Información detallada del usuario (si está disponible) */}
         {userInfo && (
           <div className="mt-6 p-4 bg-gray-50 rounded-md shadow-inner text-gray-700">
             <h3 className="text-xl font-semibold text-gray-800 mb-3">
@@ -796,6 +903,23 @@ const FacialValidationScreen: React.FC = () => {
                 ? userInfo.accessZones.join(", ")
                 : "N/A"}
             </p>
+
+            {/* <--- INICIO DEL CAMBIO CLAVE: Mostrar la imagen si es un Observed User y tiene faceImageUrl ---> */}
+            {userInfo.userType === "observed" &&
+              userInfo.observedDetails &&
+              userInfo.observedDetails.faceImageUrl && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <h4 className="text-lg font-medium text-gray-800 mb-2">
+                    Foto de Usuario Observado:
+                  </h4>
+                  <img
+                    src={userInfo.observedDetails.faceImageUrl}
+                    alt={`Face of ${userInfo.id}`}
+                    className="max-w-xs h-auto rounded-md border border-gray-300 mx-auto block"
+                  />
+                </div>
+              )}
+            {/* <--- FIN DEL CAMBIO CLAVE ---> */}
 
             {userInfo.userType === "observed" && userInfo.observedDetails && (
               <div className="mt-4 pt-4 border-t border-gray-200">

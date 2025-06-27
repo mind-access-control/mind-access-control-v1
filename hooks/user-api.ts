@@ -1,9 +1,10 @@
 'use client';
 
-import { Role, UserStatus, Zone } from '@/types';
+import { Role, UserStatus, Zone, User } from '@/types';
 import { useEffect, useState } from 'react';
 // --- Face-API.js ---
 import * as faceapi from 'face-api.js';
+import { edgeFunctions } from '@/lib/edge-functions';
 
 export function useUserApi() {
   // --- New User Form States ---
@@ -26,6 +27,26 @@ export function useUserApi() {
   const [isProcessingImage, setIsProcessingImage] = useState(false); // Indica si face-api está trabajando
   const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
   const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(null); // Errores de carga de los modelos de Face-API
+  // --- User Management States ---
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [errorUsers, setErrorUsers] = useState<string | null>(null);
+
+  // Define loadUsers function outside useEffect so it can be returned
+  const loadUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      setErrorUsers(null);
+
+      const result = await edgeFunctions.ef_users('list', {});
+      setUsers(result.users || []);
+    } catch (error: any) {
+      console.error('Error loading users:', error);
+      setErrorUsers(error.message || 'Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   // --- USE EFFECTS PARA CARGA DE DATOS INICIALES ---
   // useEffect para cargar los modelos de Face-API.js
@@ -51,22 +72,11 @@ export function useUserApi() {
   // useEffect para cargar roles
   useEffect(() => {
     const fetchRoles = async () => {
-      setLoadingRoles(true);
-      setErrorRoles(null);
-      const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-roles';
-      console.log('Fetching roles from:', edgeFunctionUrl);
       try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        console.log('Roles response status:', response.status);
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Roles response error:', errorData);
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-        const result = await response.json();
+        setLoadingRoles(true);
+        setErrorRoles(null);
+
+        const result = await edgeFunctions.getUserRoles();
         setRoles(result.roles || []);
         if (result.roles && result.roles.length > 0 && !selectedRole) {
           setSelectedRole(result.roles[0].name);
@@ -84,22 +94,10 @@ export function useUserApi() {
   // useEffect para cargar estados de usuario
   useEffect(() => {
     const fetchUserStatuses = async () => {
-      setLoadingUserStatuses(true);
-      setErrorUserStatuses(null);
-      const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-statuses';
-      console.log('Fetching user statuses from:', edgeFunctionUrl);
       try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        console.log('User statuses response status:', response.status);
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('User statuses response error:', errorData);
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-        const result = await response.json();
+        setLoadingUserStatuses(true);
+        setErrorUserStatuses(null);
+        const result = await edgeFunctions.getUserStatuses();
         setUserStatuses(result.statuses || []);
         if (result.statuses && result.statuses.length > 0) {
           const inactiveStatus = result.statuses.find((status: { name: string }) => status.name === 'Inactive');
@@ -122,22 +120,10 @@ export function useUserApi() {
   // useEffect para cargar zonas
   useEffect(() => {
     const fetchZones = async () => {
-      setLoadingZones(true);
-      setErrorZones(null);
-      const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones';
-      console.log('Fetching zones from:', edgeFunctionUrl);
       try {
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        console.log('Zones response status:', response.status);
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Zones response error:', errorData);
-          throw new Error(errorData.error || `Error HTTP: ${response.status}`);
-        }
-        const result = await response.json();
+        setLoadingZones(true);
+        setErrorZones(null);
+        const result = await edgeFunctions.getAccessZones();
         setZonesData(result.zones || []);
       } catch (error: any) {
         console.error('Error al obtener zonas de Edge Function:', error);
@@ -207,6 +193,11 @@ export function useUserApi() {
     processImageForFaceRecognition();
   }, [currentImage, faceApiModelsLoaded]);
 
+  // useEffect to load users on component mount
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
   return {
     roles,
     loadingRoles,
@@ -225,5 +216,12 @@ export function useUserApi() {
     setFaceDetectionError,
     isProcessingImage,
     faceApiModelsLoaded,
+    users,
+    loadingUsers,
+    errorUsers,
+    setLoadingUsers,
+    setErrorUsers,
+    setUsers,
+    loadUsers,
   };
 }

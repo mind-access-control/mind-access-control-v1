@@ -7,7 +7,7 @@ export type Zone = { id: string; name: string };
 
 // User related types
 export type User = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;

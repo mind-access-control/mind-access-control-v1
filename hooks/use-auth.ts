@@ -1,8 +1,10 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import type { User } from "@supabase/supabase-js";
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { edgeFunctions } from '@/lib/edge-functions';
+import { AUTH, ERROR_MESSAGES } from '@/lib/constants';
+import type { User } from '@supabase/supabase-js';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -42,65 +44,38 @@ export function useAuth() {
     if (!data.user || !data.session) {
       return {
         data: null,
-        error: new Error("Authentication data missing after login."),
+        error: new Error(ERROR_MESSAGES.AUTH_DATA_MISSING),
       };
     }
 
     // 2. Obtener el rol del usuario usando la nueva Edge Function
     const userId = data.user.id;
-    // ¡MUY IMPORTANTE: REEMPLAZA ESTA URL con la URL de INVOKE REAL de tu función!
-    // La encuentras en tu Dashboard de Supabase -> Edge Functions -> get-user-role-by-id -> INVOKE URL
-    const edgeFunctionUrl =
-      `https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-role-by-id?userId=${userId}`;
 
     try {
-      const roleResponse = await fetch(edgeFunctionUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!roleResponse.ok) {
-        // Si la función Edge devuelve un error, manejarlo
-        const errorData = await roleResponse.json();
-        throw new Error(
-          errorData.error ||
-            `Error HTTP fetching user role: ${roleResponse.status}`,
-        );
-      }
-
-      const roleResult = await roleResponse.json();
+      const roleResult = await edgeFunctions.getUserRoleById(userId);
       const userRole = roleResult.role_name;
       console.log(`User ${email} (ID: ${userId}) has role: ${userRole}`); // Para depuración
 
       // 3. Verificar si el rol es "Admin"
-      if (userRole?.toLowerCase() !== "admin") {
+      if (userRole?.toLowerCase() !== AUTH.ADMIN_ROLE.toLowerCase()) {
         // Si el rol no es "Admin", cerrar la sesión inmediatamente
         await supabase.auth.signOut();
         // Devolver un error específico para el frontend
         return {
           data: null,
-          error: new Error(
-            "Access Denied: Only administrators are allowed to log in.",
-          ),
+          error: new Error(ERROR_MESSAGES.ACCESS_DENIED),
         };
       }
 
       // Si el rol es "Admin", todo bien, devolver los datos de la sesión
       return { data, error: null };
     } catch (roleFetchError: any) {
-      console.error("Error during user role verification:", roleFetchError);
+      console.error('Error during user role verification:', roleFetchError);
       // Si ocurre un error al obtener el rol, también cerrar la sesión por seguridad
       await supabase.auth.signOut();
       return {
         data: null,
-        error: new Error(
-          `Failed to verify user role: ${
-            roleFetchError.message ||
-            "An unexpected error occurred during role verification."
-          }`,
-        ),
+        error: new Error(`${ERROR_MESSAGES.ROLE_VERIFICATION_FAILED} ${roleFetchError.message || ERROR_MESSAGES.UNEXPECTED_ERROR}`),
       };
     }
   };

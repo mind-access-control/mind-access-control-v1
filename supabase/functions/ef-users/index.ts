@@ -5,7 +5,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type PostgrestError as _PostgrestError } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Este console.log aparecerá en los logs de la Edge Function cuando se inicie.
-console.log('Edge Function "users" started!');
+console.log('Edge Function "ef-users" started!');
 
 // Interfaces for type safety
 interface UserPayload {
@@ -57,7 +57,8 @@ async function handleGet(req: Request) {
             updated_at,
             roles_catalog:roles_catalog(id, name),
             user_statuses_catalog:user_statuses_catalog(id, name),
-            user_zone_access:user_zone_access(zones:zones(id, name))
+            user_zone_access:user_zone_access(zones:zones(id, name)),
+            faces:faces(embedding)
           `);
 
     if (userId) {
@@ -69,7 +70,41 @@ async function handleGet(req: Request) {
       return createCorsResponse({ error: error.message }, 500);
     }
 
-    return createCorsResponse({ users: data });
+    // Get user emails from auth.users
+    //const userIds = Array.isArray(data) ? data.map(user => user.id) : [data.id];
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+    
+    if (authError) {
+      console.warn('Could not fetch auth users:', authError.message);
+    }
+
+    // Create a map of user IDs to emails
+    const emailMap = new Map();
+    if (authUsers?.users) {
+      authUsers.users.forEach(authUser => {
+        emailMap.set(authUser.id, authUser.email);
+        console.log('authUser', authUser);
+      });
+    }
+
+    // Transform the data to match the User interface
+    const transformUser = (user: any) => {
+      return {
+        id: user.id,
+        name: user.full_name || '',
+        email: emailMap.get(user.id) || '', // Get email from auth.users, fallback to ID
+        role: user.roles_catalog?.name || '',
+        accessZones: user.user_zone_access?.map((access: any) => access.zones?.name).filter(Boolean) || [],
+        faceEmbedding: user.faces?.[0]?.embedding || undefined,
+        profilePictureUrl: user.profile_picture_url || undefined,
+      };
+    };
+
+    const transformedData = Array.isArray(data) 
+      ? data.map(transformUser)
+      : transformUser(data);
+
+    return createCorsResponse({ users: transformedData });
   } catch (err) {
     return createCorsResponse(
       {
