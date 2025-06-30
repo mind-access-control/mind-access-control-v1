@@ -40,7 +40,7 @@ serve(async (req: Request) => {
         "Access-Control-Allow-Origin": "*", // Permite peticiones desde cualquier origen (ajustar en producción)
         "Access-Control-Allow-Methods": "POST, OPTIONS", // Métodos permitidos
         "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, x-requested-with",
+          "Content-Type, Authorization, x-requested-with,  x-request-id",
         "Access-Control-Max-Age": "86400",
       },
     });

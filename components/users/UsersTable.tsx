@@ -8,9 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useUserApi } from '@/hooks/user-api';
-import { edgeFunctions } from '@/lib/edge-functions';
-import { SortDirection, SortField, User } from '@/types';
+import { useUserActions } from '@/hooks/user.hooks';
+import { UserService } from '@/lib/api/services/user-service';
+import { UpdateUserRequest, User } from '@/lib/api/types';
+import { SortDirection, SortField } from '@/types';
 import { AlertCircle, ChevronDown, ChevronUp, Edit, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 
@@ -33,7 +34,7 @@ const UsersTable: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('name'); // Campo de ordenamiento por defecto
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // Dirección de ordenamiento por defecto
 
-  const { users, loadingUsers, errorUsers, setLoadingUsers, loadUsers, zonesData, loadingZones, errorZones } = useUserApi();
+  const { users, loadingUsers, errorUsers, setLoadingUsers, loadUsers, zonesData, loadingZones, errorZones } = useUserActions();
 
   // Derived States
   const sortedUsers = useMemo(() => {
@@ -94,23 +95,24 @@ const UsersTable: React.FC = () => {
     try {
       setLoadingUsers(true);
 
-      const result = await edgeFunctions.ef_users('update', {
+      const payload: UpdateUserRequest = {
+        userId: editingUserId || undefined,
         fullName: editingUser.name,
-        //email: editingUser.email,
         roleName: editingUser.role,
         statusName: editingUser.status || 'active',
         accessZoneNames: editingAccessZones,
-        userId: editingUserId,
-      });
+      };
+
+      const result = await UserService.updateUser(payload);
 
       if (result.message) {
         // Refresh the users list to get updated data
         await loadUsers();
         cancelEditing();
         setShowStatusMessage('User updated successfully!');
-      } else {
+      } /*else {
         setShowStatusMessage(`Failed to update user: ${result.error || 'Unknown error'}`);
-      }
+      }*/
     } catch (error: any) {
       console.error('Error updating user:', error);
       setShowStatusMessage(`Failed to update user: ${error.message}`);
@@ -135,9 +137,7 @@ const UsersTable: React.FC = () => {
     try {
       setLoadingUsers(true);
 
-      const result = await edgeFunctions.ef_users('delete', {
-        userId: userToDelete.id,
-      });
+      const result = await UserService.deleteUser({ userId: userToDelete.id });
 
       if (result.message) {
         // Refresh the users list to get updated data
@@ -145,9 +145,9 @@ const UsersTable: React.FC = () => {
         setDeleteModalOpen(false);
         setUserToDelete(null);
         setShowStatusMessage('User deleted successfully!');
-      } else {
+      } /*else {
         setShowStatusMessage(`Failed to delete user: ${result.error || 'Unknown error'}`);
-      }
+      }*/
     } catch (error: any) {
       console.error('Error deleting user:', error);
       setShowStatusMessage(`Failed to delete user: ${error.message}`);

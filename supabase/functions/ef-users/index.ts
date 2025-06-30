@@ -23,6 +23,37 @@ interface Zone {
   name: string;
 }
 
+interface UserListRequest {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: string;
+  status?: string;
+  zone?: string;
+  sortBy?: 'name' | 'email' | 'role' | 'status' | 'created_at';
+  sortOrder?: 'asc' | 'desc';
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+  filters: {
+    applied: Partial<UserListRequest>;
+    available: {
+      roles: any[];
+      statuses: any[];
+      zones: any[];
+    };
+  };
+}
+
 // Helper function to create Supabase client
 function createSupabaseClient() {
   return createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
@@ -41,37 +72,150 @@ function createCorsResponse(data: any, status: number = 200) {
   });
 }
 
-// GET: List all users or get by ID
+// Helper function to validate and parse query parameters
+function parseQueryParams(url: URL): UserListRequest {
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '10')));
+  const search = url.searchParams.get('search') || undefined;
+  const role = url.searchParams.get('role') || undefined;
+  const status = url.searchParams.get('status') || undefined;
+  const zone = url.searchParams.get('zone') || undefined;
+  const sortBy = url.searchParams.get('sortBy') || 'created_at';
+  const sortOrder = url.searchParams.get('sortOrder') || 'desc';
+
+  return {
+    page,
+    limit,
+    search,
+    role,
+    status,
+    zone,
+    sortBy: sortBy as 'name' | 'email' | 'role' | 'status' | 'created_at',
+    sortOrder: sortOrder as 'asc' | 'desc'
+  };
+}
+
+// Helper function to build the query with filters
+function buildUserQuery(supabase: any, params: UserListRequest) {
+  let query = supabase.from('users').select(`
+    id,
+    full_name,
+    profile_picture_url,
+    access_method,
+    created_at,
+    updated_at,
+    roles_catalog:roles_catalog(id, name),
+    user_statuses_catalog:user_statuses_catalog(id, name),
+    user_zone_access:user_zone_access(zones:zones(id, name)),
+    faces:faces(embedding)
+  `, { count: 'exact' });
+
+  // Apply search filter
+  if (params.search) {
+    query = query.ilike('full_name', `%${params.search}%`);
+  }
+
+  // Apply role filter
+  if (params.role) {
+    query = query.eq('roles_catalog.name', params.role);
+  }
+
+  // Apply status filter
+  if (params.status) {
+    query = query.eq('user_statuses_catalog.name', params.status);
+  }
+
+  // Apply zone filter
+  if (params.zone) {
+    query = query.contains('user_zone_access.zones.name', [params.zone]);
+  }
+
+  // Apply sorting
+  const sortField = params.sortBy === 'name' ? 'full_name' : 
+                   params.sortBy === 'email' ? 'id' : // We'll sort by email later
+                   params.sortBy === 'role' ? 'roles_catalog.name' :
+                   params.sortBy === 'status' ? 'user_statuses_catalog.name' :
+                   'created_at';
+  
+  query = query.order(sortField, { ascending: params.sortOrder === 'asc' });
+
+  // Apply pagination
+  const page = params.page || 1;
+  const limit = params.limit || 10;
+  const offset = (page - 1) * limit;
+  query = query.range(offset, offset + limit - 1);
+
+  return query;
+}
+
+// GET: List all users with pagination and filtering or get by ID
 async function handleGet(req: Request) {
   try {
     const url = new URL(req.url);
     const userId = url.searchParams.get('id');
     const supabase = createSupabaseClient();
 
-    let query = supabase.from('users').select(`
-            id,
-            full_name,
-            profile_picture_url,
-            access_method,
-            created_at,
-            updated_at,
-            roles_catalog:roles_catalog(id, name),
-            user_statuses_catalog:user_statuses_catalog(id, name),
-            user_zone_access:user_zone_access(zones:zones(id, name)),
-            faces:faces(embedding)
-          `);
-
+    // If userId is provided, get single user
     if (userId) {
-      query = query.eq('id', userId).single();
+      let query = supabase.from('users').select(`
+        id,
+        full_name,
+        profile_picture_url,
+        access_method,
+        created_at,
+        updated_at,
+        roles_catalog:roles_catalog(id, name),
+        user_statuses_catalog:user_statuses_catalog(id, name),
+        user_zone_access:user_zone_access(zones:zones(id, name)),
+        faces:faces(embedding)
+      `).eq('id', userId).single();
+
+      const { data, error } = await query;
+      if (error) {
+        return createCorsResponse({ error: error.message }, 500);
+      }
+
+      // Get user email from auth.users
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.warn('Could not fetch auth users:', authError.message);
+      }
+
+      // Create a map of user IDs to emails
+      const emailMap = new Map();
+      if (authUsers?.users) {
+        authUsers.users.forEach((authUser: any) => {
+          emailMap.set(authUser.id, authUser.email);
+        });
+      }
+
+      // Transform the data to match the User interface
+      const transformedUser = {
+        id: data.id,
+        name: data.full_name || '',
+        email: emailMap.get(data.id) || '',
+        role: data.roles_catalog?.name || '',
+        accessZones: data.user_zone_access?.map((access: any) => access.zones?.name).filter(Boolean) || [],
+        faceEmbedding: data.faces?.[0]?.embedding || undefined,
+        profilePictureUrl: data.profile_picture_url || undefined,
+      };
+
+      return createCorsResponse({ user: transformedUser });
     }
 
-    const { data, error } = await query;
+    // Parse query parameters for pagination and filtering
+    const params = parseQueryParams(url);
+
+    // Build the query with filters
+    const query = buildUserQuery(supabase, params);
+
+    const { data, error, count } = await query;
     if (error) {
       return createCorsResponse({ error: error.message }, 500);
     }
 
     // Get user emails from auth.users
-    //const userIds = Array.isArray(data) ? data.map(user => user.id) : [data.id];
     const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
     
     if (authError) {
@@ -81,9 +225,8 @@ async function handleGet(req: Request) {
     // Create a map of user IDs to emails
     const emailMap = new Map();
     if (authUsers?.users) {
-      authUsers.users.forEach(authUser => {
+      authUsers.users.forEach((authUser: any) => {
         emailMap.set(authUser.id, authUser.email);
-        console.log('authUser', authUser);
       });
     }
 
@@ -92,7 +235,7 @@ async function handleGet(req: Request) {
       return {
         id: user.id,
         name: user.full_name || '',
-        email: emailMap.get(user.id) || '', // Get email from auth.users, fallback to ID
+        email: emailMap.get(user.id) || '',
         role: user.roles_catalog?.name || '',
         accessZones: user.user_zone_access?.map((access: any) => access.zones?.name).filter(Boolean) || [],
         faceEmbedding: user.faces?.[0]?.embedding || undefined,
@@ -100,11 +243,43 @@ async function handleGet(req: Request) {
       };
     };
 
-    const transformedData = Array.isArray(data) 
-      ? data.map(transformUser)
-      : transformUser(data);
+    const transformedData = data.map(transformUser);
 
-    return createCorsResponse({ users: transformedData });
+    // Calculate pagination info
+    const total = count || 0;
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    const totalPages = Math.ceil(total / limit);
+    const hasNext = page < totalPages;
+    const hasPrev = page > 1;
+
+    // Get available filters
+    const { data: roles } = await supabase.from('roles_catalog').select('id, name');
+    const { data: statuses } = await supabase.from('user_statuses_catalog').select('id, name');
+    const { data: zones } = await supabase.from('zones').select('id, name');
+
+    // Create paginated response
+    const response: PaginatedResponse<any> = {
+      data: transformedData,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext,
+        hasPrev
+      },
+      filters: {
+        applied: params,
+        available: {
+          roles: roles || [],
+          statuses: statuses || [],
+          zones: zones || []
+        }
+      }
+    };
+
+    return createCorsResponse(response);
   } catch (err) {
     return createCorsResponse(
       {
@@ -404,7 +579,7 @@ serve(async (req: Request) => {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-requested-with',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-requested-with, x-request-id',
         'Access-Control-Max-Age': '86400',
       },
     });

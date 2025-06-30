@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useUserApi } from '@/hooks/user-api';
-import { edgeFunctions } from '@/lib/edge-functions';
+import { useUserActions } from '@/hooks/user.hooks';
 
+import { CreateUserRequest, UserService } from '@/lib/api';
 import { AlertCircle, Camera, Check, RotateCcw, Upload, X } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
 import { CameraCapture } from '../camera-capture';
@@ -21,7 +21,7 @@ const UsersForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('');
-  const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive'); // Default to 'Inactive'
+  const [selectedUserStatus, setSelectedUserStatus] = useState<string>('inactive'); // Default to 'Inactive'
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
   const [accessZonesOpen, setAccessZonesOpen] = useState(false);
   // --- Photo Upload & Face-API.js States ---
@@ -57,7 +57,7 @@ const UsersForm: React.FC = () => {
     isProcessingImage,
     faceApiModelsLoaded,
     loadUsers,
-  } = useUserApi();
+  } = useUserActions();
   //Handlers
   // Maneja el evento cuando un elemento arrastrable está sobre la zona de drop
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -188,17 +188,17 @@ const UsersForm: React.FC = () => {
 
     try {
       // Prepara los datos (payload) que se enviarán a la Edge Function.
-      const payload = {
+      const payload: CreateUserRequest = {
         fullName: fullName,
         email: email,
         roleName: selectedRole,
         statusName: selectedUserStatus,
         accessZoneNames: selectedAccessZones,
         faceEmbedding: Array.from(faceEmbedding!), // Convierte Float32Array a un Array<number> estándar para JSON.
-        profilePictureUrl: null, //imagePreview, // Envía la URL de la imagen (Base64) si existe.
+        //profilePictureUrl: null, //imagePreview, // Envía la URL de la imagen (Base64) si existe.
       };
 
-      const result = await edgeFunctions.registerNewUser(payload);
+      const result = await UserService.createUser(payload);
       // Muestra un mensaje de éxito con el ID del usuario si se devuelve.
       setShowStatusMessage(`User saved successfully! ID: ${result.userId || 'N/A'}`);
       console.log('User registration successful:', result);
@@ -227,23 +227,23 @@ const UsersForm: React.FC = () => {
     }
   };
 
-    // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
-    const handleCameraCapture = useCallback((imageData: string) => {
-      setImagePreview(imageData); // Muestra la previsualización en el formulario principal
-      // Convierte la cadena base64 a un objeto Blob
-      fetch(imageData)
-        .then((res) => res.blob())
-        .then((blob) => {
-          setCurrentImage(blob); // Establece el Blob como la imagen actual para procesamiento
-          setFaceEmbedding(null); // Reinicia el embedding
-          setFaceDetectionError(null); // Reinicia errores de detección
-          setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
-        })
-        .catch((error) => {
-          console.error('Error converting captured image to blob:', error);
-          setFaceDetectionError('Failed to process captured image from camera.');
-        });
-    }, []);
+  // Esta función es llamada por el componente CameraCapture cuando se confirma una foto
+  const handleCameraCapture = useCallback((imageData: string) => {
+    setImagePreview(imageData); // Muestra la previsualización en el formulario principal
+    // Convierte la cadena base64 a un objeto Blob
+    fetch(imageData)
+      .then((res) => res.blob())
+      .then((blob) => {
+        setCurrentImage(blob); // Establece el Blob como la imagen actual para procesamiento
+        setFaceEmbedding(null); // Reinicia el embedding
+        setFaceDetectionError(null); // Reinicia errores de detección
+        setCameraOpen(false); // Cierra el modal de la cámara automáticamente al capturar
+      })
+      .catch((error) => {
+        console.error('Error converting captured image to blob:', error);
+        setFaceDetectionError('Failed to process captured image from camera.');
+      });
+  }, []);
 
   return (
     <>
@@ -269,7 +269,8 @@ const UsersForm: React.FC = () => {
                 placeholder="Enter email address"
                 value={email}
                 onChange={handleEmailChange}
-                className={emailError ? 'border-red-500' : ''} />
+                className={emailError ? 'border-red-500' : ''}
+              />
               {emailError && (
                 <div className="flex items-center mt-1 text-red-500 text-sm">
                   <X className="w-4 h-4 mr-1" />
@@ -339,13 +340,14 @@ const UsersForm: React.FC = () => {
               >
                 <SelectTrigger id="userStatus" className="bg-slate-50 border-0 h-12">
                   <span>
-                    {loadingUserStatuses
-                      ? 'Loading statuses...'
-                      : errorUserStatuses
+                    {
+                      loadingUserStatuses
+                        ? 'Loading statuses...'
+                        : errorUserStatuses
                         ? `Error: ${errorUserStatuses}`
                         : selectedUserStatus // Muestra el estado seleccionado
-                          ? selectedUserStatus
-                          : 'Select status' // Placeholder si no hay nada seleccionado
+                        ? selectedUserStatus
+                        : 'Select status' // Placeholder si no hay nada seleccionado
                     }
                   </span>
                 </SelectTrigger>
@@ -393,10 +395,10 @@ const UsersForm: React.FC = () => {
                     {loadingZones
                       ? 'Loading zones...'
                       : errorZones
-                        ? `Error: ${errorZones}`
-                        : selectedAccessZones.length > 0
-                          ? `${selectedAccessZones.length} zone${selectedAccessZones.length > 1 ? 's' : ''} selected`
-                          : 'Select access zones'}
+                      ? `Error: ${errorZones}`
+                      : selectedAccessZones.length > 0
+                      ? `${selectedAccessZones.length} zone${selectedAccessZones.length > 1 ? 's' : ''} selected`
+                      : 'Select access zones'}
                   </span>
                   <span className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -410,7 +412,11 @@ const UsersForm: React.FC = () => {
                   ) : zonesData && zonesData.length > 0 ? (
                     zonesData.map((zone) => (
                       <div key={zone.id} className="flex items-center space-x-2">
-                        <Checkbox id={`zone-${zone.id}`} checked={selectedAccessZones.includes(zone.name)} onCheckedChange={() => toggleAccessZone(zone.name)} />
+                        <Checkbox
+                          id={`zone-${zone.id}`}
+                          checked={selectedAccessZones.includes(zone.name)}
+                          onCheckedChange={() => toggleAccessZone(zone.name)}
+                        />
                         <label
                           htmlFor={`zone-${zone.id}`}
                           className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
@@ -465,7 +471,7 @@ const UsersForm: React.FC = () => {
                         onClick={() => {
                           console.log('Choose File clicked');
                           fileInputRef.current?.click();
-                        } }
+                        }}
                       >
                         Choose File
                       </Button>
@@ -502,7 +508,7 @@ const UsersForm: React.FC = () => {
                     onClick={() => {
                       console.log('Replace Photo clicked');
                       fileInputRef.current?.click();
-                    } }
+                    }}
                   >
                     <RotateCcw className="w-4 h-4 mr-2" />
                     Replace Photo
@@ -572,14 +578,14 @@ const UsersForm: React.FC = () => {
           )}
         </CardContent>
       </Card>
-        {/* --- INTEGRACIÓN DEL COMPONENTE CameraCapture --- */}
+      {/* --- INTEGRACIÓN DEL COMPONENTE CameraCapture --- */}
       {/* Este componente gestiona toda la lógica de la cámara y su modal */}
       <CameraCapture
         open={isCameraOpen} // Le dice a CameraCapture si debe estar abierto o cerrado
         onClose={() => setCameraOpen(false)} // Callback para que CameraCapture cierre su propio modal
         onCapture={handleCameraCapture} // Callback para recibir la imagen capturada como base64
       />
-      </>
+    </>
   );
 };
 

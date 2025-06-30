@@ -1,12 +1,13 @@
 'use client';
 
-import { Role, UserStatus, Zone, User } from '@/types';
 import { useEffect, useState } from 'react';
 // --- Face-API.js ---
+import { CatalogService } from '@/lib/api/services/catalog-service';
+import { UserService } from '@/lib/api/services/user-service';
+import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
-import { edgeFunctions } from '@/lib/edge-functions';
 
-export function useUserApi() {
+export function useUserActions() {
   // --- New User Form States ---
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive'); // Default to 'Inactive'
@@ -28,7 +29,7 @@ export function useUserApi() {
   const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
   const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(null); // Errores de carga de los modelos de Face-API
   // --- User Management States ---
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [errorUsers, setErrorUsers] = useState<string | null>(null);
 
@@ -38,8 +39,8 @@ export function useUserApi() {
       setLoadingUsers(true);
       setErrorUsers(null);
 
-      const result = await edgeFunctions.ef_users('list', {});
-      setUsers(result.users || []);
+      const response = await UserService.getUsers();
+      setUsers(response.data || []);
     } catch (error: any) {
       console.error('Error loading users:', error);
       setErrorUsers(error.message || 'Failed to load users');
@@ -76,7 +77,7 @@ export function useUserApi() {
         setLoadingRoles(true);
         setErrorRoles(null);
 
-        const result = await edgeFunctions.getUserRoles();
+        const result = await CatalogService.getRoles();
         setRoles(result.roles || []);
         if (result.roles && result.roles.length > 0 && !selectedRole) {
           setSelectedRole(result.roles[0].name);
@@ -97,7 +98,7 @@ export function useUserApi() {
       try {
         setLoadingUserStatuses(true);
         setErrorUserStatuses(null);
-        const result = await edgeFunctions.getUserStatuses();
+        const result = await CatalogService.getUserStatuses();
         setUserStatuses(result.statuses || []);
         if (result.statuses && result.statuses.length > 0) {
           const inactiveStatus = result.statuses.find((status: { name: string }) => status.name === 'Inactive');
@@ -123,7 +124,7 @@ export function useUserApi() {
       try {
         setLoadingZones(true);
         setErrorZones(null);
-        const result = await edgeFunctions.getAccessZones();
+        const result = await CatalogService.getAccessZones();
         setZonesData(result.zones || []);
       } catch (error: any) {
         console.error('Error al obtener zonas de Edge Function:', error);

@@ -1,51 +1,7 @@
 // Import types from the types file
-import type { Column, Log, User } from './types';
+import type { Column, Log } from './types';
 
 // Mock Data Objects
-
-// 1. Initial Users Data
-export const initialUsers: User[] = [
-  {
-    id: '1',
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    role: 'Admin',
-    accessZones: ['Main Entrance', 'Server Room', 'Office Area'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=1',
-  },
-  {
-    id: '2',
-    name: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    role: 'User',
-    accessZones: ['Main Entrance', 'Office Area'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=2',
-  },
-  {
-    id: '3',
-    name: 'Robert Johnson',
-    email: 'robert.johnson@example.com',
-    role: 'User',
-    accessZones: ['Main Entrance', 'Parking Lot'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=3',
-  },
-  {
-    id: '4',
-    name: 'Maria Garcia',
-    email: 'maria.garcia@example.com',
-    role: 'Admin',
-    accessZones: ['Main Entrance', 'Server Room', 'Office Area', 'Parking Lot'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=4',
-  },
-  {
-    id: '5',
-    name: 'David Wilson',
-    email: 'david.wilson@example.com',
-    role: 'User',
-    accessZones: ['Main Entrance'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=5',
-  },
-];
 
 // 2. Access Logs Data
 export const accessLogs: Log[] = [
@@ -277,50 +233,6 @@ export const observedUsers = [
   },
 ];
 
-// 11. Mock Users (duplicate of initialUsers)
-export const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    role: 'Admin',
-    accessZones: ['Main Entrance', 'Server Room', 'Office Area'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=1',
-  },
-  {
-    id: '2',
-    name: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    role: 'User',
-    accessZones: ['Main Entrance', 'Office Area'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=2',
-  },
-  {
-    id: '3',
-    name: 'Robert Johnson',
-    email: 'robert.johnson@example.com',
-    role: 'User',
-    accessZones: ['Main Entrance', 'Parking Lot'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=3',
-  },
-  {
-    id: '4',
-    name: 'Maria Garcia',
-    email: 'maria.garcia@example.com',
-    role: 'Admin',
-    accessZones: ['Main Entrance', 'Server Room', 'Office Area', 'Parking Lot'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=4',
-  },
-  {
-    id: '5',
-    name: 'David Wilson',
-    email: 'david.wilson@example.com',
-    role: 'User',
-    accessZones: ['Main Entrance'],
-    profilePictureUrl: 'https://i.pravatar.cc/150?img=5',
-  },
-];
-
 // 12. UI Configuration Data
 export const tabs = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -371,7 +283,6 @@ export const defaultNewCamera = {
 
 // Export all mock data as a single object for easy importing
 export const mockData = {
-  initialUsers,
   accessLogs,
   csvTemplateContent,
   zones,
@@ -381,7 +292,6 @@ export const mockData = {
   suspiciousUsers,
   aiRecommendations,
   observedUsers,
-  mockUsers,
   tabs,
   columns,
   PIE_COLORS,

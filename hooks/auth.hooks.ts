@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { edgeFunctions } from '@/lib/edge-functions';
 import { AUTH, ERROR_MESSAGES } from '@/lib/constants';
 import type { User } from '@supabase/supabase-js';
+import { UserService } from '@/lib/api/services/user-service';
 
-export function useAuth() {
+export function userAuthActions() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +52,7 @@ export function useAuth() {
     const userId = data.user.id;
 
     try {
-      const roleResult = await edgeFunctions.getUserRoleById(userId);
+      const roleResult = await UserService.getUserRoleById(userId);
       const userRole = roleResult.role_name;
       console.log(`User ${email} (ID: ${userId}) has role: ${userRole}`); // Para depuración
 

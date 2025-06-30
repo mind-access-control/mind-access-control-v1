@@ -16,7 +16,7 @@ Contains utility functions for calling edge functions:
 - `callEdgeFunction()` - Generic function for authenticated requests
 - `edgeFunctions` - Object with specific function calls
 
-### 3. Updated `hooks/use-auth.ts`
+### 3. Updated `hooks/auth.hooks.ts`
 Now uses the new utilities for cleaner code.
 
 ## 🚀 **How to Use:**

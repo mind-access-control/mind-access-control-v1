@@ -56,7 +56,7 @@ import {
 } from 'lucide-react';
 
 // --- Custom Hooks & Components ---
-import { useAuth } from '@/hooks/use-auth';
+import { userAuthActions } from '@/hooks/auth.hooks';
 
 // --- Recharts (for AI-Enhanced Dashboard) ---
 import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
@@ -66,7 +66,7 @@ import ObservedUsersTab from '@/components/ObservedUsersTab';
 
 export default function AdminDashboard({ supabase, session, onLogout }: { supabase?: SupabaseClient; session?: Session; onLogout?: () => void }) {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { signOut } = useAuth(); // Asume que useAuth y signOut están correctamente implementados
+  const { signOut } = userAuthActions(); 
   const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
   const router = useRouter();
 

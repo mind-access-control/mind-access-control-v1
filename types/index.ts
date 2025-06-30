@@ -1,21 +1,5 @@
 // Type definitions for the Mind Access Control System
 
-// Basic entity types
-export type Role = { id: string; name: string };
-export type UserStatus = { id: string; name: string };
-export type Zone = { id: string; name: string };
-
-// User related types
-export type User = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  accessZones: string[];
-  faceEmbedding?: number[];
-  profilePictureUrl?: string;
-};
-
 // Logging and access types
 export type Log = {
   id: number;
