@@ -47,7 +47,7 @@ interface ObservedUserForFrontend {
 interface GetObservedUsersResponse {
   users: ObservedUserForFrontend[];
   totalCount: number; // Este seguirá siendo el conteo para la tabla filtrada/paginada
-  absoluteTotalCount: number; // NUEVO: Conteo total real sin aplicar filtros
+  absoluteTotalCount: number; // Conteo total real sin aplicar filtros
   pendingReviewCount: number;
   highRiskCount: number;
   activeTemporalCount: number;
@@ -99,16 +99,6 @@ serve(async (req: Request): Promise<Response> => {
     },
   );
 
-  const _supabase = createClient( // Renombrado a _supabase para evitar el warning
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    },
-  );
-
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
@@ -140,10 +130,51 @@ serve(async (req: Request): Promise<Response> => {
       ?.id;
     const expiredStatusId = statusCatalogData.find((s) => s.name === "expired")
       ?.id;
+    const activeStatusId = statusCatalogData.find((s) => s.name === "active")
+      ?.id; // ID para usuarios registrados
 
-    if (!activeTemporalStatusId || !blockedStatusId || !expiredStatusId) {
-      console.error("Essential status IDs not found in catalog.");
-      throw new Error("Missing essential status IDs for dashboard cards.");
+    // Verificación de IDs esenciales
+    if (
+      !activeTemporalStatusId || !blockedStatusId || !expiredStatusId ||
+      !activeStatusId
+    ) {
+      console.error(
+        "Essential status IDs not found in catalog (active_temporal, blocked, expired, active).",
+      );
+      throw new Error(
+        "Missing essential status IDs for dashboard cards or expiration logic.",
+      );
+    }
+
+    // --- LÓGICA PARA ACTUALIZAR ESTADO A 'EXPIRED' ---
+    const now = new Date();
+    // Encuentra usuarios 'active_temporal' cuya fecha de expiración ha pasado
+    const { data: usersToExpire, error: expireError } = await supabaseAdmin
+      .from("observed_users")
+      .select("id")
+      .eq("status_id", activeTemporalStatusId)
+      .lt("expires_at", now.toISOString()); // Comparar con la fecha y hora actual
+
+    if (expireError) {
+      console.error("Error fetching users to expire:", expireError);
+      // No lanzamos error fatal aquí, solo registramos y continuamos
+    } else if (usersToExpire && usersToExpire.length > 0) {
+      const userIdsToExpire = usersToExpire.map((u) => u.id);
+      console.log(
+        `Attempting to expire ${userIdsToExpire.length} users:`,
+        userIdsToExpire,
+      );
+      // Actualizar el estado de estos usuarios a 'expired'
+      const { error: updateError } = await supabaseAdmin
+        .from("observed_users")
+        .update({ status_id: expiredStatusId })
+        .in("id", userIdsToExpire);
+
+      if (updateError) {
+        console.error("Error updating users to expired status:", updateError);
+      } else {
+        console.log(`Successfully expired ${userIdsToExpire.length} users.`);
+      }
     }
 
     // --- Obtener TODO el catálogo de zonas para mapear IDs a nombres ---
@@ -169,6 +200,7 @@ serve(async (req: Request): Promise<Response> => {
       throw countError;
     }
 
+    // Conteo para "Pending Review": Usuarios con active_temporal y más de 5 accesos.
     const { count: pendingReviewCount, error: pendingReviewError } =
       await supabaseAdmin
         .from("observed_users")
@@ -181,12 +213,12 @@ serve(async (req: Request): Promise<Response> => {
       throw pendingReviewError;
     }
 
-    // Lógica de conteo para "High Risk": solo 'alert_triggered = true' y no 'blocked'
+    // Conteo para "High Risk": solo 'alert_triggered = true' y NO 'blocked' o 'active'
     const { count: highRiskCount, error: highRiskError } = await supabaseAdmin
       .from("observed_users")
       .select("*", { count: "exact", head: true })
       .eq("alert_triggered", true)
-      .neq("status_id", blockedStatusId); // Excluir usuarios bloqueados manualmente
+      .not("status_id", "in", `(${blockedStatusId},${activeStatusId})`); // Excluir usuarios bloqueados y activos/registrados
 
     if (highRiskError) {
       console.error("Error fetching high risk count:", highRiskError);
@@ -243,6 +275,7 @@ serve(async (req: Request): Promise<Response> => {
 
     // Aplicar filtro basado en filterType a AMBAS consultas (de datos y de conteo para la tabla)
     if (filterType === "pendingReview" && activeTemporalStatusId) {
+      // Filtro para "Pending Review": active_temporal y más de 5 accesos
       dataQuery = dataQuery.eq("status_id", activeTemporalStatusId).gt(
         "access_count",
         5,
@@ -251,14 +284,17 @@ serve(async (req: Request): Promise<Response> => {
         "status_id",
         activeTemporalStatusId,
       ).gt("access_count", 5);
-    } else if (filterType === "highRisk" && blockedStatusId) {
-      dataQuery = dataQuery.eq("alert_triggered", true).neq(
+    } else if (filterType === "highRisk" && blockedStatusId && activeStatusId) {
+      // Filtro para 'High Risk' en la tabla: solo 'alert_triggered = true' y NO 'blocked' o 'active'
+      dataQuery = dataQuery.eq("alert_triggered", true).not(
         "status_id",
-        blockedStatusId,
+        "in",
+        `(${blockedStatusId},${activeStatusId})`,
       );
-      countQueryForTable = countQueryForTable.eq("alert_triggered", true).neq(
+      countQueryForTable = countQueryForTable.eq("alert_triggered", true).not(
         "status_id",
-        blockedStatusId,
+        "in",
+        `(${blockedStatusId},${activeStatusId})`,
       );
     } else if (filterType === "activeTemporal" && activeTemporalStatusId) {
       dataQuery = dataQuery.eq("status_id", activeTemporalStatusId);
@@ -348,8 +384,6 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    // El conteo final para la tabla se basa en el filtro de búsqueda/tarjeta,
-    // pero el total absoluto siempre es totalCountFromDb.
     const finalTotalCountForTable = (filterType || searchTerm)
       ? filteredUsersCountForTable
       : totalCountFromDb;
@@ -358,7 +392,7 @@ serve(async (req: Request): Promise<Response> => {
       JSON.stringify({
         users: finalFilteredUsers,
         totalCount: finalTotalCountForTable, // Este es el conteo para la tabla (filtrado o total)
-        absoluteTotalCount: totalCountFromDb, // NUEVO: Este es siempre el conteo global
+        absoluteTotalCount: totalCountFromDb, // Este es siempre el conteo global
         pendingReviewCount: pendingReviewCount,
         highRiskCount: highRiskCount,
         activeTemporalCount: activeTemporalCount,
