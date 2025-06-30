@@ -79,12 +79,12 @@ import {
   AlertTriangle,
   Lightbulb,
   ArrowRight,
-  UserCircle2, // Mantener si se usa en otro lugar
+  UserCircle2,
 } from "lucide-react";
 
 // --- Custom Hooks & Components ---
 import { useAuth } from "@/hooks/use-auth";
-import { CameraCapture } from "@/components/camera-capture"; // Importar el componente CameraCapture
+import { CameraCapture } from "@/components/camera-capture";
 
 // --- Recharts (for AI-Enhanced Dashboard) ---
 import {
@@ -106,6 +106,7 @@ import * as faceapi from "face-api.js";
 
 // --- IMPORTAR NUEVOS COMPONENTES REFACTORIZADOS ---
 import ObservedUsersTab from "@/components/ObservedUsersTab";
+import DetailedObservedLogsTab from "@/components/DetailedObservedLogsTab";
 
 // --- Tipos de Datos (Asegúrate de que estos tipos concuerden con tu backend/Supabase) ---
 type Role = { id: string; name: string };
@@ -172,8 +173,8 @@ type Column = {
 };
 
 // --- Mock Data (Inicializados como arrays/objetos vacíos para evitar errores) ---
-const summaryData = {};
-const recentAccesses = [];
+const summaryData = {}; // Mantener como mock si no se usa directamente
+const recentAccesses = []; // Mantener como mock si no se usa directamente
 const initialUsers: User[] = [
   {
     id: 1,
@@ -297,8 +298,7 @@ const accessLogs: Log[] = [
     status: "Granted",
     method: "Face Recognition",
   },
-]; // Inicializado como array vacío, con tipo explícito Log[] // Inicializado como array vacío
-
+];
 const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL\nJohn Doe,john.doe@example.com,Admin,Security Officer,"Main Entrance,Server Room,Zone A",https://example.com/photos/john.jpg\nJane Smith,jane.smith@example.com,User,Software Engineer,"Main Entrance,Zone B",https://example.com/photos/jane.jpg\n`;
 
 export default function AdminDashboard({
@@ -309,20 +309,20 @@ export default function AdminDashboard({
   session: Session;
 }) {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const { signOut } = useAuth(); // Asume que useAuth y signOut están correctamente implementados
-  const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
+  const { signOut } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   // --- User Management States ---
-  const [users, setUsers] = useState<User[]>(initialUsers); // Usar initialUsers
+  const [users, setUsers] = useState<User[]>(initialUsers);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editingUser, setEditingUser] = useState<any>(null); // Considerar tipado más específico
+  const [editingUser, setEditingUser] = useState<any>(null);
   const [editingAccessZones, setEditingAccessZones] = useState<string[]>([]);
   const [editingAccessZonesOpen, setEditingAccessZonesOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<any>(null); // Considerar tipado más específico
+  const [userToDelete, setUserToDelete] = useState<any>(null);
 
   // --- New User Form States ---
   const [fullName, setFullName] = useState("");
@@ -330,42 +330,42 @@ export default function AdminDashboard({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>("");
   const [selectedUserStatus, setSelectedUserStatus] =
-    useState<string>("Inactive"); // Default to 'Inactive'
+    useState<string>("Inactive");
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
   const [accessZonesOpen, setAccessZonesOpen] = useState(false);
 
   // --- Photo Upload & Face-API.js States ---
-  const [imagePreview, setImagePreview] = useState<string | null>(null); // URL para mostrar la imagen seleccionada/capturada
-  const [currentImage, setCurrentImage] = useState<File | Blob | null>(null); // La imagen activa (File o Blob) para procesar
-  const [faceEmbedding, setFaceEmbedding] = useState<Float32Array | null>(null); // El vector 128D resultante de face-api.js
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [currentImage, setCurrentImage] = useState<File | Blob | null>(null);
+  const [faceEmbedding, setFaceEmbedding] = useState<Float32Array | null>(null);
   const [faceDetectionError, setFaceDetectionError] = useState<string | null>(
     null
-  ); // Errores específicos de detección facial
-  const [isProcessingImage, setIsProcessingImage] = useState(false); // Indica si face-api está trabajando
-  const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false); // Para el estado de carga de los modelos de Face-API
+  );
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState(false);
   const [faceApiModelsError, setFaceApiModelsError] = useState<string | null>(
     null
-  ); // Errores de carga de los modelos de Face-API
+  );
 
-  // --- Camera Capture Component State (isCameraOpen es para el prop 'open') ---
+  // --- Camera Capture Component State ---
   const [isCameraOpen, setCameraOpen] = useState(false);
 
   // --- Global UI Status / Feedback ---
   const [showStatusMessage, setShowStatusMessage] = useState<string | null>(
     null
-  ); // Mensajes de éxito/error al guardar/procesar
-  const [isSavingUser, setIsSavingUser] = useState(false); // Para el estado del botón Guardar Usuario
-  const [isDragging, setIsDragging] = useState(false); // Para la sección de drag & drop de fotos
+  );
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  // --- Dashboard Filtering/Sorting States (mantener tus existentes) ---
+  // --- Dashboard Filtering/Sorting States ---
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
-  // Nuevo estado para el ordenamiento de la tabla de usuarios
-  const [sortField, setSortField] = useState<SortField>("name"); // Campo de ordenamiento por defecto
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc"); // Dirección de ordenamiento por defecto
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  const [csvIsDragging, setCsvIsDragging] = useState(false);
+  // --- Access Logs Filtering/Sorting States (para la pestaña 'logs' de usuarios registrados) ---
+  const [generalSearchTerm, setGeneralSearchTerm] = useState(""); // Renombrado para evitar conflicto
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [selectedUser, setSelectedUser] = useState("all");
@@ -384,8 +384,9 @@ export default function AdminDashboard({
     useState<SortDirection>("asc");
   const [summarySearchTerm, setSummarySearchTerm] = useState("");
   const [summaryStatusFilter, setSummaryStatusFilter] = useState("all");
+
+  // --- Settings Tab States ---
   const [activeSettingsTab, setActiveSettingsTab] = useState("zones");
-  // Zonas iniciales (esto se carga desde Edge Function ahora, pero se mantiene como mock para Settings)
   const [zones, setZones] = useState([
     { id: 1, name: "Main Entrance" },
     { id: 2, name: "Zone A" },
@@ -416,22 +417,20 @@ export default function AdminDashboard({
   const [cameraToDelete, setCameraToDelete] = useState<any>(null);
   const [cameraDeleteModalOpen, setCameraDeleteModalOpen] = useState(false);
 
-  // Estados para la carga masiva CSV (faltantes)
+  // --- Bulk Upload States ---
   const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "processing" | "success" | "error"
   >("idle");
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
+  const [csvIsDragging, setCsvIsDragging] = useState(false);
 
-  // Search term para los Access Logs (faltante)
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // States for data fetched from Edge Functions
+  // --- States for data fetched from Edge Functions (NO DUPLICADOS) ---
   const [roles, setRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [errorRoles, setErrorRoles] = useState<string | null>(null);
-  const [zonesData, setZonesData] = useState<Zone[]>([]); // Renombrado a zonesData para evitar conflicto con 'zones' mock
+  const [zonesData, setZonesData] = useState<Zone[]>([]);
   const [loadingZones, setLoadingZones] = useState(true);
   const [errorZones, setErrorZones] = useState<string | null>(null);
   const [userStatuses, setUserStatuses] = useState<UserStatus[]>([]);
@@ -520,21 +519,13 @@ export default function AdminDashboard({
       confidence: 0.88,
     },
   ]);
-  const [recentLogs, setRecentLogs] = useState<any[]>([]); // Inicializado
-  const [trendData] = useState<any[]>([]); // Inicializado
-  const [failureCauseData] = useState<any[]>([]); // Inicializado
-  const [aiDetailsUser, setAIDetailsUser] = useState<any>(null); // Tipado más específico
-  const [aiDetailsLog, setAIDetailsLog] = useState<any>(null); // Tipado más específico
-  const [aiRecDetails, setAIRecDetails] = useState<any>(null); // Tipado más específico
-  // REMOVIDO: const [observedUsers] = useState<any[]>([]);
-  // REMOVIDO: const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>("id");
-  // REMOVIDO: const [observedSortDirection, setObservedSortDirection] = useState<"asc" | "desc">("asc");
-  const [logsSortField, setLogsSortField] = useState<LogSortField>("timestamp");
-  const [logsSortDirection, setLogsSortDirection] =
-    useState<SortDirection>("desc");
-  // REMOVIDO: const [observedUserDetails, setObservedUserDetails] = useState<null | (typeof observedUsers)[0]>(null);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [trendData] = useState<any[]>([]);
+  const [failureCauseData] = useState<any[]>([]);
+  const [aiDetailsUser, setAIDetailsUser] = useState<any>(null);
+  const [aiDetailsLog, setAIDetailsLog] = useState<any>(null);
+  const [aiRecDetails, setAIRecDetails] = useState<any>(null);
   const [dashboardTab, setDashboardTab] = useState("overview");
-  // REMOVIDO: const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({}); // Se movió a ObservedUsersTable
 
   // --- USE EFFECTS PARA CARGA DE DATOS INICIALES (Mismos que ya tienes) ---
   // useEffect para cargar los modelos de Face-API.js (mantener si se usa en user management)
@@ -733,7 +724,7 @@ export default function AdminDashboard({
     fetchUserStatuses();
   }, []);
 
-  // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA (Mantener en admin-dashboard si se usan en User Management) ---
+  // --- FUNCIONES DE MANEJO DE IMAGEN Y CÁMARA ---
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -822,7 +813,6 @@ export default function AdminDashboard({
       await supabase.auth.signOut();
       router.push("/");
     } catch (error) {
-      // FIX: Removed 'protobuf_autogen.pb'
       console.error("Error signing out:", error);
     }
   };
@@ -1121,8 +1111,10 @@ export default function AdminDashboard({
   // --- UseMemos para Datos Calculados ---
   const filteredLogs = useMemo(() => {
     return (accessLogs as any[]).filter((log) => {
-      const matchSearch = searchTerm
-        ? JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase())
+      const matchSearch = generalSearchTerm
+        ? JSON.stringify(log)
+            .toLowerCase()
+            .includes(generalSearchTerm.toLowerCase())
         : true;
       const matchUser =
         selectedUser === "all" ? true : log.user === selectedUser;
@@ -1151,7 +1143,7 @@ export default function AdminDashboard({
       );
     });
   }, [
-    searchTerm,
+    generalSearchTerm,
     selectedUser,
     selectedZone,
     selectedStatus,
@@ -1171,6 +1163,12 @@ export default function AdminDashboard({
       return 0;
     });
   }, [filteredLogs, logSortField, logSortDirection]);
+
+  // --- PAGINACIÓN PARA ACCESS LOGS (REINTRODUCIDA) ---
+  const logTotalPages = Math.ceil(sortedLogs.length / logItemsPerPage);
+  const logStartIndex = (logCurrentPage - 1) * logItemsPerPage;
+  const logEndIndex = logStartIndex + logItemsPerPage;
+  const paginatedLogs = sortedLogs.slice(logStartIndex, logEndIndex);
 
   const userSummaryData = useMemo((): SummaryEntry[] => {
     return Array.from(
@@ -1292,28 +1290,16 @@ export default function AdminDashboard({
   const endIndex = startIndex + itemsPerPage;
   const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
 
-  const logTotalPages = Math.ceil(sortedLogs.length / logItemsPerPage);
-  const logStartIndex = (logCurrentPage - 1) * logItemsPerPage;
-  const logEndIndex = logStartIndex + logItemsPerPage;
-  const paginatedLogs = sortedLogs.slice(logStartIndex, logEndIndex);
-
-  const sortedRecentLogs = useMemo(() => {
-    return (accessLogs as any[])
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )
-      .slice(0, 5);
-  }, [accessLogs]);
-
   // --- Reset Pagination on Filter Change ---
   useEffect(() => {
     setCurrentPage(1);
   }, [userSearchTerm, itemsPerPage]);
+
+  // Reset log pagination when filters change
   useEffect(() => {
     setLogCurrentPage(1);
   }, [
-    searchTerm,
+    generalSearchTerm,
     selectedUser,
     selectedZone,
     selectedStatus,
@@ -1391,7 +1377,7 @@ export default function AdminDashboard({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+        throw new Error(errorData.error || `Error HTTP: ${response.status}`);
       }
 
       const result = await response.json();
@@ -1953,7 +1939,7 @@ export default function AdminDashboard({
                 {[
                   { id: "overview", label: "Overview" },
                   { id: "observed", label: "Observed Users" },
-                  { id: "logs", label: "Detailed Logs" },
+                  { id: "detailed-logs", label: "Detailed Observed Logs" }, // CAMBIO: Etiqueta de la pestaña
                   { id: "analytics", label: "Analytics" },
                 ].map((tab) => (
                   <button
@@ -2034,17 +2020,8 @@ export default function AdminDashboard({
             {/* Observed Users Tab (AHORA ES UN COMPONENTE SEPARADO) */}
             {dashboardTab === "observed" && <ObservedUsersTab />}
 
-            {/* Detailed Logs Tab */}
-            {dashboardTab === "logs" && (
-              <AccessLogTable
-                logs={sortedRecentLogs}
-                onAIDetails={setAIDetailsLog}
-                logsSortField={logsSortField}
-                logsSortDirection={logsSortDirection}
-                setLogsSortField={setLogsSortField}
-                setLogsSortDirection={setLogsSortDirection}
-              />
-            )}
+            {/* Detailed Logs Tab (NUEVO COMPONENTE) */}
+            {dashboardTab === "detailed-logs" && <DetailedObservedLogsTab />}
 
             {/* Analytics Tab */}
             {dashboardTab === "analytics" && (
@@ -3087,8 +3064,8 @@ export default function AdminDashboard({
                     <Search className="w-4 h-4 text-gray-400" />
                     <Input
                       placeholder="Search logs..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      value={generalSearchTerm}
+                      onChange={(e) => setGeneralSearchTerm(e.target.value)}
                       className="w-64"
                     />
                   </div>
@@ -3265,7 +3242,7 @@ export default function AdminDashboard({
                             colSpan={8}
                             className="text-center py-8 text-gray-500"
                           >
-                            {searchTerm ||
+                            {generalSearchTerm ||
                             selectedUser !== "all" ||
                             selectedZone !== "all" ||
                             selectedStatus !== "all" ||
@@ -4351,52 +4328,6 @@ export default function AdminDashboard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* REMOVIDO: Observed User Details Modal (ya no se usa) */}
-      {/* <Dialog
-        open={!!observedUserDetails}
-        onOpenChange={() => setObservedUserDetails(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Observed User Details</DialogTitle>
-            <DialogDescription>
-              Temporary ID: <strong>{observedUserDetails?.id}</strong>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <div>
-              <strong>First Seen:</strong> {observedUserDetails?.firstSeen}
-            </div>
-            <div>
-              <strong>Last Seen:</strong> {observedUserDetails?.lastSeen}
-            </div>
-            <div>
-              <strong>Temp Accesses:</strong>{" "}
-              {observedUserDetails?.tempAccesses}
-            </div>
-            <div>
-              <strong>Accessed Zones:</strong>{" "}
-              {observedUserDetails?.accessedZones?.join(", ")}
-            </div>
-            <div>
-              <strong>Status:</strong> {observedUserDetails?.status}
-            </div>
-            <div>
-              <strong>AI Suggested Action:</strong>{" "}
-              {observedUserDetails?.aiAction}
-            </div>
-            <div className="mt-2 text-blue-700">
-              <strong>AI Insights:</strong> This user was detected by the system
-              but is not yet registered. Please review and take appropriate
-              action.
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setObservedUserDetails(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog> */}
     </div>
   );
 }
