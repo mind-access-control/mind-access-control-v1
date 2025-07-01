@@ -1,11 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 // --- Face-API.js ---
 import { CatalogService } from '@/lib/api/services/catalog-service';
 import { UserService } from '@/lib/api/services/user-service';
 import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
+
+// Create a simple event system for user updates
+const userUpdateCallbacks: (() => void)[] = [];
+
+const notifyUserUpdate = () => {
+  console.log(`Notifying ${userUpdateCallbacks.length} components about user update`);
+  userUpdateCallbacks.forEach((callback) => callback());
+};
 
 export function useUserActions() {
   // --- New User Form States ---
@@ -34,7 +42,7 @@ export function useUserActions() {
   const [errorUsers, setErrorUsers] = useState<string | null>(null);
 
   // Define loadUsers function outside useEffect so it can be returned
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
       setErrorUsers(null);
@@ -47,7 +55,29 @@ export function useUserActions() {
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, []);
+
+  // Enhanced loadUsers that notifies other components
+  const loadUsersAndNotify = useCallback(async () => {
+    await loadUsers();
+    notifyUserUpdate(); // Notify other components that users have been updated
+  }, [loadUsers]);
+
+  // Subscribe to user updates
+  useEffect(() => {
+    const handleUserUpdate = () => {
+      loadUsers();
+    };
+
+    userUpdateCallbacks.push(handleUserUpdate);
+
+    return () => {
+      const index = userUpdateCallbacks.indexOf(handleUserUpdate);
+      if (index > -1) {
+        userUpdateCallbacks.splice(index, 1);
+      }
+    };
+  }, [loadUsers]);
 
   // --- USE EFFECTS PARA CARGA DE DATOS INICIALES ---
   // useEffect para cargar los modelos de Face-API.js
@@ -197,9 +227,15 @@ export function useUserActions() {
   // useEffect to load users on component mount
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [loadUsers]);
 
   return {
+    // Form states
+    selectedRole,
+    setSelectedRole,
+    selectedUserStatus,
+    setSelectedUserStatus,
+    // Data states
     roles,
     loadingRoles,
     errorRoles,
@@ -209,6 +245,7 @@ export function useUserActions() {
     zonesData,
     loadingZones,
     errorZones,
+    // Face-API states
     currentImage,
     setCurrentImage,
     faceEmbedding,
@@ -217,12 +254,13 @@ export function useUserActions() {
     setFaceDetectionError,
     isProcessingImage,
     faceApiModelsLoaded,
+    faceApiModelsError,
+    // User management states
     users,
     loadingUsers,
     errorUsers,
     setLoadingUsers,
-    setErrorUsers,
-    setUsers,
     loadUsers,
+    loadUsersAndNotify,
   };
 }

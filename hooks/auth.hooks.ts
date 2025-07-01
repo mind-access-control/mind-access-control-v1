@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { AUTH, ERROR_MESSAGES } from '@/lib/constants';
-import type { User } from '@supabase/supabase-js';
 import { UserService } from '@/lib/api/services/user-service';
+import { AUTH, ERROR_MESSAGES } from '@/lib/constants';
+import { clearAuthData, supabase } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
 
 export function userAuthActions() {
   const [user, setUser] = useState<User | null>(null);
@@ -81,8 +81,46 @@ export function userAuthActions() {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    try {
+      // Check if there's an active session first
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('Error getting session:', sessionError);
+        // If we can't get the session, just clear auth data and return success
+        clearAuthData();
+        return { error: null };
+      }
+
+      if (!session) {
+        console.log('No active session found, clearing auth data...');
+        // Clear any remaining auth data
+        clearAuthData();
+        return { error: null };
+      }
+
+      // If we have a session, proceed with sign out
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.error('Sign out error:', error);
+        return { error };
+      }
+
+      return { error: null };
+    } catch (err) {
+      console.error('Unexpected error during sign out:', err);
+      // Even if there's an error, try to clear auth data
+      try {
+        clearAuthData();
+      } catch (clearError) {
+        console.error('Error clearing auth data:', clearError);
+      }
+      return { error: err instanceof Error ? err : new Error('Unknown error during sign out') };
+    }
   };
 
   return {

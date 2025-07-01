@@ -12,7 +12,7 @@ import { useUserActions } from '@/hooks/user.hooks';
 import { UserService } from '@/lib/api/services/user-service';
 import { UpdateUserRequest, User } from '@/lib/api/types';
 import { SortDirection, SortField } from '@/types';
-import { AlertCircle, ChevronDown, ChevronUp, Edit, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Edit, RotateCcw, Save, Search, Trash2, UserCheck, UserX, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 
 const UsersTable: React.FC = () => {
@@ -34,7 +34,7 @@ const UsersTable: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('name'); // Campo de ordenamiento por defecto
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // Dirección de ordenamiento por defecto
 
-  const { users, loadingUsers, errorUsers, setLoadingUsers, loadUsers, zonesData, loadingZones, errorZones } = useUserActions();
+  const { users, loadingUsers, errorUsers, setLoadingUsers, loadUsersAndNotify, zonesData, loadingZones, errorZones } = useUserActions();
 
   // Derived States
   const sortedUsers = useMemo(() => {
@@ -107,7 +107,7 @@ const UsersTable: React.FC = () => {
 
       if (result.message) {
         // Refresh the users list to get updated data
-        await loadUsers();
+        await loadUsersAndNotify();
         cancelEditing();
         setShowStatusMessage('User updated successfully!');
       } /*else {
@@ -141,7 +141,7 @@ const UsersTable: React.FC = () => {
 
       if (result.message) {
         // Refresh the users list to get updated data
-        await loadUsers();
+        await loadUsersAndNotify();
         setDeleteModalOpen(false);
         setUserToDelete(null);
         setShowStatusMessage('User deleted successfully!');
@@ -169,7 +169,7 @@ const UsersTable: React.FC = () => {
           <CardTitle className="flex items-center justify-between">
             <span>Existing Users</span>
             <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers} className="mr-2">
+              <Button variant="outline" size="sm" onClick={loadUsersAndNotify} disabled={loadingUsers} className="mr-2">
                 <RotateCcw className={`w-4 h-4 ${loadingUsers ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
@@ -191,7 +191,7 @@ const UsersTable: React.FC = () => {
               <AlertTitle className="text-red-800">Error Loading Users</AlertTitle>
               <AlertDescription className="text-red-700">
                 {errorUsers}
-                <Button variant="outline" size="sm" onClick={loadUsers} className="ml-2">
+                <Button variant="outline" size="sm" onClick={loadUsersAndNotify} className="ml-2">
                   Retry
                 </Button>
               </AlertDescription>
@@ -221,6 +221,7 @@ const UsersTable: React.FC = () => {
                       </div>
                     </TableHead>
                     <TableHead>Access Zones</TableHead>
+                    <TableHead className="text-center">Face</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -318,6 +319,49 @@ const UsersTable: React.FC = () => {
                             </>
                           )}
                         </TableCell>
+                        <TableCell className="text-center">
+                          {user.profilePictureUrl ? (
+                            <div className="flex items-center justify-center">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <img
+                                    src={user.profilePictureUrl}
+                                    alt={`${user.name}'s photo`}
+                                    className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 hover:border-teal-500 transition-colors cursor-pointer shadow-sm"
+                                    onError={(e) => {
+                                      // Fallback to icon if image fails to load
+                                      const target = e.target as HTMLImageElement;
+                                      target.style.display = 'none';
+                                      target.nextElementSibling?.classList.remove('hidden');
+                                    }}
+                                  />
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-2" align="center">
+                                  <div className="text-center">
+                                    <img src={user.profilePictureUrl} alt={`${user.name}'s photo`} className="w-32 h-32 rounded-lg object-cover shadow-lg" />
+                                    <p className="text-sm font-medium mt-2 text-gray-700">{user.name}</p>
+                                    <p className="text-xs text-gray-500">Profile Picture</p>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              <UserX className="w-4 h-4 text-gray-400 hidden" />
+                            </div>
+                          ) : user.faceEmbedding && user.faceEmbedding.length > 0 ? (
+                            <div className="flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-green-100 border-2 border-green-200 flex items-center justify-center">
+                                <UserCheck className="w-5 h-5 text-green-600" />
+                              </div>
+                              <span className="ml-2 text-xs text-green-600 hidden sm:inline">Registered</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
+                                <UserX className="w-5 h-5 text-gray-400" />
+                              </div>
+                              <span className="ml-2 text-xs text-gray-500 hidden sm:inline">Not registered</span>
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
                             {editingUserId === user.id ? (
@@ -345,7 +389,7 @@ const UsersTable: React.FC = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                         {userSearchTerm ? 'No users found matching your search.' : 'No users found.'}
                       </TableCell>
                     </TableRow>

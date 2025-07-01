@@ -61,12 +61,12 @@ import { userAuthActions } from '@/hooks/auth.hooks';
 // --- Recharts (for AI-Enhanced Dashboard) ---
 import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
-import UsersTab from './users/UsersTab';
 import ObservedUsersTab from '@/components/ObservedUsersTab';
+import UsersTab from './users/UsersTab';
 
 export default function AdminDashboard({ supabase, session, onLogout }: { supabase?: SupabaseClient; session?: Session; onLogout?: () => void }) {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { signOut } = userAuthActions(); 
+  const { signOut } = userAuthActions();
   const [isLoggingOut, setIsLoggingOut] = useState(false); // Estado para el logout
   const router = useRouter();
 
@@ -123,10 +123,31 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   // --- OTRAS FUNCIONES ---
   const handleLogout = async () => {
     try {
-      await supabase?.auth.signOut();
-      router.push('/');
+      setIsLoggingOut(true);
+      // Try using the auth hook's signOut function first
+      const { error } = await signOut();
+
+      if (error) {
+        console.error('Error from auth hook signOut:', error);
+
+        // Fallback: try direct supabase signOut
+        if (supabase) {
+          try {
+            const { error: directError } = await supabase.auth.signOut();
+            if (directError) {
+              console.error('Direct signOut also failed:', directError);
+              // Don't throw here, just log the error
+            }
+          } catch (directError) {
+            console.error('Exception during direct signOut:', directError);
+          }
+        }
+      }
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('Error during logout process:', error);
+    } finally {
+      setIsLoggingOut(false);
+      router.push('/');
     }
   };
 

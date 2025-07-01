@@ -544,6 +544,40 @@ async function handleDelete(req: Request) {
 
     const supabase = createSupabaseClient();
 
+    // Get user's profile picture URL before deletion
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('profile_picture_url')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.warn(`Could not fetch user data for storage cleanup: ${userError.message}`);
+    }
+
+    // Delete profile picture from storage if it exists
+    if (userData?.profile_picture_url) {
+      try {
+        // Extract filename from URL (e.g., "http://.../face-images/userId.jpeg" -> "userId.jpeg")
+        const urlParts = userData.profile_picture_url.split('/');
+        const filename = urlParts[urlParts.length - 1];
+        
+        console.log(`🗑️ Deleting profile picture: ${filename}`);
+        
+        const { error: storageError } = await supabase.storage
+          .from('face-images')
+          .remove([filename]);
+
+        if (storageError) {
+          console.warn(`Failed to delete profile picture from storage: ${storageError.message}`);
+        } else {
+          console.log(`✅ Profile picture deleted from storage: ${filename}`);
+        }
+      } catch (storageErr) {
+        console.warn(`Error during storage cleanup: ${storageErr}`);
+      }
+    }
+
     // Delete from faces
     await supabase.from('faces').delete().eq('user_id', userId);
 

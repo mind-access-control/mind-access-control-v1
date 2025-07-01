@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUserActions } from '@/hooks/user.hooks';
 
-import { CreateUserRequest, UserService } from '@/lib/api';
+import { CreateUserRequest, UploadService, UserService } from '@/lib/api';
 import { AlertCircle, Camera, Check, RotateCcw, Upload, X } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
 import { CameraCapture } from '../camera-capture';
@@ -56,7 +56,7 @@ const UsersForm: React.FC = () => {
     setFaceDetectionError,
     isProcessingImage,
     faceApiModelsLoaded,
-    loadUsers,
+    loadUsersAndNotify,
   } = useUserActions();
   //Handlers
   // Maneja el evento cuando un elemento arrastrable está sobre la zona de drop
@@ -184,10 +184,12 @@ const UsersForm: React.FC = () => {
 
     // Establece el estado de guardado para deshabilitar el botón y mostrar un indicador.
     setIsSavingUser(true);
-    setShowStatusMessage('Saving user...');
+    setShowStatusMessage('Uploading image and saving user...');
 
     try {
-      // Prepara los datos (payload) que se enviarán a la Edge Function.
+      // Step 1: Create user first (without profile picture)
+      setShowStatusMessage('Creating user...');
+
       const payload: CreateUserRequest = {
         fullName: fullName,
         email: email,
@@ -195,16 +197,33 @@ const UsersForm: React.FC = () => {
         statusName: selectedUserStatus,
         accessZoneNames: selectedAccessZones,
         faceEmbedding: Array.from(faceEmbedding!), // Convierte Float32Array a un Array<number> estándar para JSON.
-        //profilePictureUrl: null, //imagePreview, // Envía la URL de la imagen (Base64) si existe.
       };
 
       const result = await UserService.createUser(payload);
+      console.log('User registration successful:', result);
+
+      // Step 2: Upload image if we have one, using the created user ID
+      if (currentImage && imagePreview && result.userId) {
+        try {
+          setShowStatusMessage('Uploading profile picture...');
+
+          const uploadResult = await UploadService.uploadProfilePicture(
+            result.userId,
+            currentImage,
+            false // isObservedUser
+          );
+          console.log('Profile picture uploaded successfully:', uploadResult.imageUrl);
+        } catch (uploadError: any) {
+          console.error('Error uploading profile picture:', uploadError);
+          // Don't throw error here - user was created successfully
+        }
+      }
       // Muestra un mensaje de éxito con el ID del usuario si se devuelve.
       setShowStatusMessage(`User saved successfully! ID: ${result.userId || 'N/A'}`);
       console.log('User registration successful:', result);
 
       // Refresh the users list to show the new user
-      await loadUsers();
+      await loadUsersAndNotify();
 
       // Reinicia el formulario a sus valores iniciales después de un guardado exitoso.
       setFullName('');
@@ -247,7 +266,7 @@ const UsersForm: React.FC = () => {
 
   return (
     <>
-      // {/* Add New User Form - ENHANCED PHOTO UPLOAD */}
+      {/* Add New User Form - ENHANCED PHOTO UPLOAD */}
       <Card className="bg-white shadow-lg">
         <CardHeader>
           <CardTitle>Add New User</CardTitle>

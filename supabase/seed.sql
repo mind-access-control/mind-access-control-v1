@@ -16,15 +16,15 @@ INSERT INTO user_statuses_catalog (id, name) VALUES
     ('660e8400-e29b-41d4-a716-446655440005', 'active_temporal')
 ON CONFLICT (name) DO NOTHING;
 
--- Insert default zones
-INSERT INTO zones (id, name, description) VALUES 
-    ('770e8400-e29b-41d4-a716-446655440001', 'Main Entrance', 'Primary building entrance with security checkpoint'),
-    ('770e8400-e29b-41d4-a716-446655440002', 'Zone A', 'Restricted area A'),
-    ('770e8400-e29b-41d4-a716-446655440003', 'Zone B', 'Restricted area B'),
-    ('770e8400-e29b-41d4-a716-446655440004', 'Zone C', 'Restricted area C'),
-    ('770e8400-e29b-41d4-a716-446655440005', 'Zone D', 'Restricted area D'),
-    ('770e8400-e29b-41d4-a716-446655440006', 'Zone E', 'Restricted area E')
-ON CONFLICT (name) DO NOTHING;
+-- Insert default zones (note: zones table only has id, name, access_level - no description column)
+INSERT INTO zones (id, name, access_level) VALUES 
+    ('770e8400-e29b-41d4-a716-446655440001', 'Main Entrance', 1),
+    ('770e8400-e29b-41d4-a716-446655440002', 'Zone A', 2),
+    ('770e8400-e29b-41d4-a716-446655440003', 'Zone B', 3),
+    ('770e8400-e29b-41d4-a716-446655440004', 'Zone C', 4),
+    ('770e8400-e29b-41d4-a716-446655440005', 'Zone D', 5),
+    ('770e8400-e29b-41d4-a716-446655440006', 'Zone E', 6)
+ON CONFLICT (id) DO NOTHING;
 
 -- Create default admin user in auth.users (simplified version)
 DO $$
@@ -94,7 +94,7 @@ INSERT INTO users (
     'https://i.pravatar.cc/150?img=1',
     'facial',
     (SELECT id FROM roles_catalog WHERE lower(name) = lower('Admin')),
-    (SELECT id FROM user_statuses_catalog WHERE lower(name) = lower('Active'))
+    (SELECT id FROM user_statuses_catalog WHERE lower(name) = lower('active'))
 ) ON CONFLICT (id) DO UPDATE SET
     full_name = EXCLUDED.full_name,
     profile_picture_url = EXCLUDED.profile_picture_url,

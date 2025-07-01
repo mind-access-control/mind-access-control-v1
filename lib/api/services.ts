@@ -3,7 +3,4 @@
 // ============================================================================
 
 // Re-export all services from their individual files
-export {
-  UserService,
-  CatalogService,
-} from './services/index'; 
+export { CatalogService, UploadService, UserService } from './services/index';
