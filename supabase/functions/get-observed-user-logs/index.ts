@@ -10,6 +10,17 @@ interface ItemWithNameAndId {
   name: string;
 }
 
+interface ObservedLog {
+  id: string; // ID del log (de la tabla 'logs')
+  timestamp: string;
+  observedUserId: string; // ID del usuario observado (de 'observed_users')
+  faceImageUrl: string | null; // URL de la última foto del usuario observado (viene de observed_users)
+  zone: ItemWithNameAndId; // Objeto {id, name} de la tabla 'zones'
+  status: ItemWithNameAndId; // Objeto {id, name} - Inferido de 'decision'
+  aiAction: string | null; // Acción sugerida por la IA (inferido de 'match_status')
+  isRegistered: boolean; // NUEVO: Indicar si el usuario observado está registrado
+}
+
 // Interfaz para los datos crudos que vienen de la consulta inicial de logs (sin joins anidados)
 interface RawLogQueryResult {
   id: string;
@@ -20,22 +31,11 @@ interface RawLogQueryResult {
   requested_zone_id: string | null; // Puede ser null según tu esquema
 }
 
-// Interfaz para el resultado de la consulta de Supabase (alineada con la tabla 'observed_users' para obtener is_registered)
+// NUEVO: Interfaz para los datos de observed_users que necesitamos
 interface SupabaseObservedUserForLogQueryResult {
   id: string;
   face_image_url: string | null;
-  is_registered: boolean; // NUEVO: Añadir la columna is_registered
-}
-
-interface ObservedLog {
-  id: string; // ID del log (de la tabla 'logs')
-  timestamp: string;
-  observedUserId: string; // ID del usuario observado (de 'observed_users')
-  faceImageUrl: string | null; // URL de la última foto del usuario observado (viene de observed_users)
-  zone: ItemWithNameAndId; // Objeto {id, name} de la tabla 'zones'
-  status: ItemWithNameAndId; // Objeto {id, name} - Inferido de 'decision'
-  aiAction: string | null; // Acción sugerida por la IA (inferido de 'match_status')
-  isRegistered: boolean; // NUEVO: Indicar si el usuario observado está registrado
+  is_registered: boolean; // NUEVO: Asegúrate de que esta columna exista en tu DB
 }
 
 interface GetObservedLogsResponse {
@@ -110,6 +110,7 @@ serve(async (req) => {
 
     // Filtrar por searchTerm (solo por observed_user_id si es un UUID)
     if (searchTerm) {
+      // Si el searchTerm es un UUID válido, filtramos por observed_user_id (usando .eq)
       if (
         searchTerm.match(
           /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
@@ -117,6 +118,8 @@ serve(async (req) => {
       ) {
         logsQuery = logsQuery.eq("observed_user_id", searchTerm);
       }
+      // Si no es un UUID, no se aplica filtro de búsqueda en la DB para evitar errores.
+      // El filtrado por nombre de zona se realizará en el frontend.
     }
 
     // Aplicar filtros de fecha si están presentes
@@ -124,6 +127,7 @@ serve(async (req) => {
       logsQuery = logsQuery.gte("timestamp", startDate);
     }
     if (endDate) {
+      // Para incluir el día completo, sumamos un día al endDate
       const endOfDay = new Date(endDate);
       endOfDay.setDate(endOfDay.getDate() + 1);
       logsQuery = logsQuery.lt("timestamp", endOfDay.toISOString());
@@ -177,6 +181,7 @@ serve(async (req) => {
 
       if (zonesError) {
         console.error("Supabase zones query error:", zonesError);
+        // No fallamos la función entera, solo registramos el error y las zonas quedarán como N/A
       } else {
         zonesData.forEach((zone) =>
           zoneMap.set(zone.id, { id: zone.id, name: zone.name })
@@ -185,24 +190,27 @@ serve(async (req) => {
     }
 
     // 4. Consultar las URLs de las imágenes y el estado de registro de los usuarios observados
+    // CAMBIAMOS userImageMap A userDetailsMap para incluir is_registered
     const userDetailsMap = new Map<
       string,
       SupabaseObservedUserForLogQueryResult
-    >(); // Map<observed_user_id, { face_image_url, is_registered }>
+    >();
     if (uniqueObservedUserIds.length > 0) {
       const { data: usersData, error: usersError } = await supabase
         .from("observed_users")
-        .select("id, face_image_url, is_registered") // NUEVO: Seleccionar is_registered
+        .select("id, face_image_url, is_registered") // <-- ¡NUEVO: Seleccionar is_registered!
         .in("id", uniqueObservedUserIds);
 
       if (usersError) {
         console.error("Supabase observed_users query error:", usersError);
+        // No fallamos la función entera, solo registramos el error
       } else {
         usersData.forEach((user) => {
+          // Aseguramos que el usuario tiene las propiedades esperadas antes de mapear
           userDetailsMap.set(user.id, {
             id: user.id,
             face_image_url: user.face_image_url,
-            is_registered: user.is_registered, // Almacenar el estado de registro
+            is_registered: user.is_registered, // <-- Mapear is_registered
           });
         });
       }
@@ -213,22 +221,24 @@ serve(async (req) => {
       const zoneInfo = log.requested_zone_id
         ? zoneMap.get(log.requested_zone_id)
         : null;
+      // Usar userDetailsMap para obtener tanto la URL como el estado de registro
       const userDetails = userDetailsMap.get(log.observed_user_id);
 
       const faceImageUrl = userDetails?.face_image_url || null;
-      const isRegistered = userDetails?.is_registered || false; // Obtener is_registered, por defecto false
+      // Obtener isRegistered del userDetails, por defecto false si no se encuentra
+      const isRegistered = userDetails?.is_registered || false; // <-- NUEVO: Obtener el estado de registro
 
       const statusName = log.decision || "unknown";
       const aiActionName = log.match_status || "N/A";
 
-      // CONSOLE.LOG PARA DEPURAR LA URL DE LA IMAGEN Y ZONA
+      // CONSOLE.LOG PARA DEPURAR
       console.log(`Processing log ID: ${log.id}`);
       console.log(`  Observed User ID: ${log.observed_user_id}`);
       console.log(
         `  Face Image URL from Map: ${faceImageUrl || "null/undefined"}`,
       );
       console.log(`  Zone Name from Map: ${zoneInfo?.name || "N/A"}`);
-      console.log(`  Is Registered: ${isRegistered}`); // NUEVO: Log de is_registered
+      console.log(`  Is Registered: ${isRegistered}`); // <-- NUEVO: Depurar isRegistered
 
       return {
         id: log.id,
@@ -236,15 +246,15 @@ serve(async (req) => {
         observedUserId: log.observed_user_id,
         faceImageUrl: faceImageUrl,
         zone: {
-          id: zoneInfo?.id || "",
-          name: zoneInfo?.name || "N/A",
+          id: zoneInfo?.id || "", // Si zoneData es null, id será cadena vacía
+          name: zoneInfo?.name || "N/A", // Si zoneData es null, name será "N/A"
         },
         status: {
-          id: statusName.toLowerCase().replace(/\s/g, "_"),
+          id: statusName.toLowerCase().replace(/\s/g, "_"), // Crear un ID simple del nombre
           name: statusName,
         },
         aiAction: aiActionName,
-        isRegistered: isRegistered, // NUEVO: Mapear al frontend
+        isRegistered: isRegistered, // <-- ¡NUEVO: Incluir en el objeto de respuesta!
       };
     });
 

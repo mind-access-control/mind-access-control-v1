@@ -22,6 +22,7 @@ interface RegisterUserPayload {
   accessZoneNames: string[];
   faceEmbedding: number[]; // El array de 128 números flotantes
   profilePictureUrl?: string; // Opcional, si se envía la URL de la imagen
+  observedUserId?: string; // NUEVO: ID del usuario observado si viene de esa tabla
 }
 
 // Define un umbral de similitud para la detección de rostros duplicados.
@@ -40,7 +41,7 @@ serve(async (req: Request) => {
         "Access-Control-Allow-Origin": "*", // Permite peticiones desde cualquier origen (ajustar en producción)
         "Access-Control-Allow-Methods": "POST, OPTIONS", // Métodos permitidos
         "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, x-requested-with,  x-request-id",
+          "Content-Type, Authorization, x-requested-with, x-request-id",
         "Access-Control-Max-Age": "86400",
       },
     });
@@ -87,9 +88,8 @@ serve(async (req: Request) => {
     ) {
       throw new Error("faceEmbedding must be an array of 128 numbers.");
     }
-  } catch (error: unknown) { // Añade ': unknown' para ser explícito.
+  } catch (error: unknown) {
     // Manejo de errores de parsing o de campos faltantes.
-    // Ahora necesitas verificar el tipo de 'error' antes de acceder a 'error.message'.
     let errorMessage = "Invalid request body";
     if (error instanceof Error) {
       errorMessage = error.message;
@@ -98,7 +98,7 @@ serve(async (req: Request) => {
     }
     console.error("Error parsing request body or missing fields:", error);
     return new Response(
-      JSON.stringify({ error: errorMessage }), // Usa la variable errorMessage
+      JSON.stringify({ error: errorMessage }),
       {
         status: 400, // Bad Request
         headers: {
@@ -109,13 +109,12 @@ serve(async (req: Request) => {
     );
   }
 
-  let authUserId: string | undefined;
+  let authUserId: string | undefined; // ID del usuario en auth.users
 
   try {
     // --- NUEVA VALIDACIÓN: Verificar si el embedding facial ya existe ---
     console.log("Checking for duplicate facial embeddings...");
 
-    // Refactoricemos la consulta para que devuelva la distancia directamente y filtre.
     const { data: similarFaces, error: preciseFacesSearchError } =
       await supabase.rpc("match_face_embedding", {
         query_embedding: payload.faceEmbedding,
@@ -134,7 +133,6 @@ serve(async (req: Request) => {
     }
 
     if (similarFaces && similarFaces.length > 0) {
-      // Si similarFaces tiene resultados, significa que ya hay un embedding dentro del umbral.
       console.warn(
         `Duplicate facial embedding detected for user ID: ${
           similarFaces[0].user_id
@@ -161,16 +159,11 @@ serve(async (req: Request) => {
     // --- FIN DE LA VALIDACIÓN DE EMBEDDING DUPLICADO ---
 
     // 1. Crear usuario en la tabla privada de Supabase Auth (auth.users).
-    // Se envía solo el email y la contraseña. Los metadatos adicionales
-    // (full_name, role_name, status_name) se guardarán en la tabla pública 'users'.
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: payload.email,
       password: GENERIC_PASSWORD,
       options: {
-        data: {
-          // full_name, role_name, status_name NO se guardan aquí para mantener auth.users más limpio.
-          // Estos datos se guardarán en la tabla pública 'users'.
-        },
+        data: {}, // No guardar metadatos aquí, se guardan en la tabla pública 'users'
       },
     });
 
@@ -196,17 +189,14 @@ serve(async (req: Request) => {
     }
 
     if (!authData.user) {
-      // Esto es un caso raro si signUp fue exitoso pero no retornó user.
-      // Puede ocurrir si se requiere confirmación por email y no hay auto-confirmación.
       throw new Error(
         "Authentication user data not returned after signup. User might need email confirmation.",
       );
     }
-    authUserId = authData.user.id;
+    authUserId = authData.user.id; // Este es el UUID generado por Supabase Auth
     console.log(`Auth user created with ID: ${authUserId}`);
 
     // 2. Obtener UUIDs de los catálogos.
-    // Utilizaremos consultas directas a las tablas de catálogo.
     const { data: roleData, error: roleError } = await supabase
       .from("roles_catalog")
       .select("id")
@@ -220,7 +210,7 @@ serve(async (req: Request) => {
     const roleId = roleData.id;
 
     const { data: statusData, error: statusError } = await supabase
-      .from("user_statuses_catalog")
+      .from("user_statuses_catalog") // Asegúrate que esta es la tabla correcta para estados de usuario
       .select("id")
       .eq("name", payload.statusName)
       .single();
@@ -234,8 +224,8 @@ serve(async (req: Request) => {
     const statusId = statusData.id;
 
     const { data: zonesData, error: zonesError } = await supabase
-      .from("zones")
-      .select("id, name") // También necesitamos el nombre para verificar si todos se encontraron
+      .from("zones") // Asegúrate que esta es la tabla correcta para zonas
+      .select("id, name")
       .in("name", payload.accessZoneNames);
 
     if (zonesError) {
@@ -257,19 +247,22 @@ serve(async (req: Request) => {
     console.log("Resolved IDs:", { roleId, statusId, resolvedZoneIds });
 
     // 3. Guardar en la tabla pública de usuarios ('users').
-    // Esta tabla debe tener una FK a auth.users.id
-    const currentTimestamp = new Date().toISOString(); // Captura el timestamp una vez
+    // Se usa el UUID del usuario de autenticación como ID principal.
+    // Se añade observed_user_source_id si el usuario proviene de 'observed_users'.
+    const currentTimestamp = new Date().toISOString();
 
     const { error: publicUserError } = await supabase.from("users").insert([
       {
-        id: authUserId, // Usar el UUID del usuario de autenticación
+        id: authUserId, // UUID del usuario de autenticación
         full_name: payload.fullName,
-        role_id: roleId, // El UUID del rol
-        status_id: statusId, // El UUID del estado
-        access_method: "facial", // Siempre "facial" en minúscula
-        created_at: currentTimestamp, // Fecha de creación
-        updated_at: currentTimestamp, // Fecha de actualización (igual a la creación inicialmente)
-        profile_picture_url: payload.profilePictureUrl, // URL de la imagen si se envió
+        role_id: roleId,
+        status_id: statusId,
+        access_method: "facial", // Asumiendo que siempre es "facial" al registrar desde aquí
+        created_at: currentTimestamp,
+        updated_at: currentTimestamp,
+        profile_picture_url: payload.profilePictureUrl,
+        // NUEVO: Almacenar el ID del usuario observado si se proporcionó
+        observed_user_source_id: payload.observedUserId || null,
       },
     ]);
 
@@ -302,8 +295,8 @@ serve(async (req: Request) => {
     const { error: faceEmbeddingError } = await supabase.from("faces").insert([
       {
         user_id: authUserId, // UUID del usuario
-        embedding: payload.faceEmbedding, // El vector de 128 dimensiones (ya es un array de numbers)
-        created_at: new Date().toISOString(), // Fecha de creación del embedding
+        embedding: payload.faceEmbedding,
+        created_at: new Date().toISOString(),
       },
     ]);
 
@@ -314,6 +307,29 @@ serve(async (req: Request) => {
       );
     }
     console.log("Facial embedding saved.");
+
+    // --- NUEVO PASO: 6. Actualizar el registro en 'observed_users' si el ID fue proporcionado ---
+    if (payload.observedUserId) {
+      const { error: updateObservedError } = await supabase
+        .from("observed_users")
+        .update({ is_registered: true }) // Establecer la bandera a TRUE
+        .eq("id", payload.observedUserId); // Donde el ID coincida
+
+      if (updateObservedError) {
+        console.error(
+          `Error updating observed_user ${payload.observedUserId}:`,
+          updateObservedError,
+        );
+        // Este error no debería ser fatal para el registro del usuario, pero es importante loggearlo.
+        console.warn(
+          `Failed to mark observed user ${payload.observedUserId} as registered.`,
+        );
+      } else {
+        console.log(
+          `Observed user ${payload.observedUserId} marked as registered.`,
+        );
+      }
+    }
 
     // Si todo es exitoso, devolver una respuesta de éxito.
     return new Response(
@@ -340,7 +356,7 @@ serve(async (req: Request) => {
 
     // Si falló alguna inserción después de crear el usuario de autenticación,
     // podrías querer borrar ese usuario también para evitar "huérfanos".
-    // Esta es una consideración avanzada para transacciones robustas.
+    // Esto es importante para mantener la consistencia entre auth.users y public.users.
     if (authUserId) {
       console.warn(
         `Attempting to delete partially created auth user ${authUserId} due to subsequent error.`,

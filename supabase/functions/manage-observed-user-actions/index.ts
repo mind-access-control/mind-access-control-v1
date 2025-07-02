@@ -18,7 +18,7 @@ serve(async (req: Request): Promise<Response> => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers":
-          "authorization, x-client-info, apikey, content-type",
+          "authorization, x-client-info, apikey, content-type, x-request-id",
       },
     });
   }

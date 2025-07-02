@@ -22,10 +22,10 @@ CREATE OR REPLACE FUNCTION "public"."get_zone_names_by_ids"("zone_ids_array" "te
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
-RETURN QUERY
-SELECT z.id, z.name
-FROM public.zones z
-WHERE z.id::TEXT = ANY(zone_ids_array); -- Compara la representaci├│n de texto del UUID
+    RETURN QUERY
+    SELECT z.id, z.name
+    FROM public.zones z
+    WHERE z.id::TEXT = ANY(zone_ids_array); -- Compara la representaci├│n de texto del UUID
 END;
 $$;
 ALTER FUNCTION "public"."get_zone_names_by_ids"("zone_ids_array" "text"[]) OWNER TO "postgres";
@@ -33,24 +33,24 @@ ALTER FUNCTION "public"."get_zone_names_by_ids"("zone_ids_array" "text"[]) OWNER
 CREATE OR REPLACE FUNCTION "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) RETURNS TABLE("user_id" "uuid", "embedding" "public"."vector", "distance" double precision)
     LANGUAGE "plpgsql"
     AS $$
-BEGIN
-RETURN QUERY
-SELECT
-    f.user_id,
-    f.embedding,
-    f.embedding <-> query_embedding AS distance
-FROM
-    faces f -- Alias 'f' para la tabla faces
+    BEGIN
+        RETURN QUERY
+        SELECT
+            f.user_id,
+            f.embedding,
+            f.embedding <-> query_embedding AS distance
+        FROM
+            faces f -- Alias 'f' para la tabla faces
         JOIN
-    public.users u ON f.user_id = u.id -- Unir con la tabla public.users
-WHERE
-    f.embedding <-> query_embedding < match_threshold
-  AND u.deleted_at IS NULL -- ┬íNUEVA CONDICI├ôN! Solo considera usuarios NO eliminados l├│gicamente
-ORDER BY
-    distance
-    LIMIT
+            public.users u ON f.user_id = u.id -- Unir con la tabla public.users
+        WHERE
+            f.embedding <-> query_embedding < match_threshold
+            AND u.deleted_at IS NULL -- ┬íNUEVA CONDICI├ôN! Solo considera usuarios NO eliminados l├│gicamente
+        ORDER BY
+            distance
+        LIMIT
             match_count;
-END;
+    END;
     $$;
 ALTER FUNCTION "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) OWNER TO "postgres";
 
@@ -58,29 +58,29 @@ CREATE OR REPLACE FUNCTION "public"."match_observed_face_embedding"("query_embed
     LANGUAGE "plpgsql"
     AS $$
     #variable_conflict use_column
-BEGIN
-RETURN QUERY
-SELECT
-    o.id,
-    o.embedding,
-    o.first_seen_at,
-    o.last_seen_at,
-    o.access_count,
-    o.last_accessed_zones,
-    o.status_id,
-    o.alert_triggered,
-    o.expires_at,
-    o.potential_match_user_id,
-    o.face_image_url,
-    o.ai_action,
-    o.consecutive_denied_accesses, -- ┬íY aqu├¡!
-    (o.embedding <-> query_embedding) as distance
-FROM
-    public.observed_users o
-ORDER BY
-    o.embedding <-> query_embedding
-    LIMIT 1;
-END;
+    BEGIN
+      RETURN QUERY
+      SELECT
+        o.id,
+        o.embedding,
+        o.first_seen_at,
+        o.last_seen_at,
+        o.access_count,
+        o.last_accessed_zones,
+        o.status_id,
+        o.alert_triggered,
+        o.expires_at,
+        o.potential_match_user_id,
+        o.face_image_url,
+        o.ai_action,
+        o.consecutive_denied_accesses, -- ┬íY aqu├¡!
+        (o.embedding <-> query_embedding) as distance
+      FROM
+        public.observed_users o
+      ORDER BY
+        o.embedding <-> query_embedding
+      LIMIT 1;
+    END;
     $$;
 ALTER FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector") OWNER TO "postgres";
 
@@ -88,8 +88,8 @@ CREATE OR REPLACE FUNCTION "public"."match_observed_face_embedding"("query_embed
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
-RETURN QUERY
-SELECT
+  RETURN QUERY
+  SELECT
     ou.id,
     ou.embedding,
     ou.first_seen_at,
@@ -102,13 +102,13 @@ SELECT
     ou.potential_match_user_id,
     1 - (ou.embedding <=> query_embedding) AS similarity,
     (ou.embedding <=> query_embedding) AS distance
-FROM
+  FROM
     public.observed_users ou
-WHERE
+  WHERE
     (ou.embedding <=> query_embedding) < match_threshold
-ORDER BY
+  ORDER BY
     (ou.embedding <=> query_embedding)
-    LIMIT match_count;
+  LIMIT match_count;
 END;
 $$;
 ALTER FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) OWNER TO "postgres";
@@ -117,17 +117,17 @@ CREATE OR REPLACE FUNCTION "public"."match_user_face_embedding"("query_embedding
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
-RETURN QUERY
-SELECT
+  RETURN QUERY
+  SELECT
     f.id,
     f.user_id,
     (f.embedding <-> query_embedding) AS distance
-FROM
+  FROM
     public.faces f
-WHERE f.user_id IS NOT NULL
-ORDER BY
+  WHERE f.user_id IS NOT NULL
+  ORDER BY
     distance
-    LIMIT 1;
+  LIMIT 1;
 END;
 $$;
 ALTER FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector") OWNER TO "postgres";
@@ -136,19 +136,19 @@ CREATE OR REPLACE FUNCTION "public"."match_user_face_embedding"("query_embedding
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
-RETURN QUERY
-SELECT
+  RETURN QUERY
+  SELECT
     f.user_id AS id,
     f.embedding,
     (f.embedding <=> query_embedding) AS distance
-FROM
+  FROM
     public.faces f
-WHERE
+  WHERE
     (f.embedding <=> query_embedding) < match_threshold
-  AND f.user_id IS NOT NULL
-ORDER BY
+    AND f.user_id IS NOT NULL
+  ORDER BY
     (f.embedding <=> query_embedding)
-    LIMIT match_count;
+  LIMIT match_count;
 END;
 $$;
 ALTER FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) OWNER TO "postgres";
@@ -249,19 +249,19 @@ CREATE TABLE IF NOT EXISTS "public"."zones" (
 ALTER TABLE "public"."zones" OWNER TO "postgres";
 
 CREATE OR REPLACE VIEW "public"."user_full_details_view" AS
-SELECT "u"."id",
-       "u"."full_name",
-       "u"."alert_triggered",
-       "u"."consecutive_denied_accesses",
-       "jsonb_build_object"('id', "rc"."id", 'name', "rc"."name") AS "role_details",
-       "jsonb_build_object"('id', "usc"."id", 'name', "usc"."name") AS "status_details",
-       COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "z"."id", 'name', "z"."name")) AS "jsonb_agg"
-                  FROM ("public"."user_zone_access" "uza"
-                      JOIN "public"."zones" "z" ON (("uza"."zone_id" = "z"."id")))
-                  WHERE ("uza"."user_id" = "u"."id")), '[]'::"jsonb") AS "zones_accessed_details"
-FROM (("public"."users" "u"
-    LEFT JOIN "public"."roles_catalog" "rc" ON (("u"."role_id" = "rc"."id")))
-    LEFT JOIN "public"."user_statuses_catalog" "usc" ON (("u"."status_id" = "usc"."id")));
+ SELECT "u"."id",
+    "u"."full_name",
+    "u"."alert_triggered",
+    "u"."consecutive_denied_accesses",
+    "jsonb_build_object"('id', "rc"."id", 'name', "rc"."name") AS "role_details",
+    "jsonb_build_object"('id', "usc"."id", 'name', "usc"."name") AS "status_details",
+    COALESCE(( SELECT "jsonb_agg"("jsonb_build_object"('id', "z"."id", 'name', "z"."name")) AS "jsonb_agg"
+           FROM ("public"."user_zone_access" "uza"
+             JOIN "public"."zones" "z" ON (("uza"."zone_id" = "z"."id")))
+          WHERE ("uza"."user_id" = "u"."id")), '[]'::"jsonb") AS "zones_accessed_details"
+   FROM (("public"."users" "u"
+     LEFT JOIN "public"."roles_catalog" "rc" ON (("u"."role_id" = "rc"."id")))
+     LEFT JOIN "public"."user_statuses_catalog" "usc" ON (("u"."status_id" = "usc"."id")));
 
 ALTER VIEW "public"."user_full_details_view" OWNER TO "postgres";
 

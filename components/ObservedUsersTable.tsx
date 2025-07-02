@@ -34,13 +34,16 @@ import {
   SortDirection,
 } from "@/types/common";
 
+// IMPORTAR EL NUEVO COMPONENTE DE MODAL
+import RegisterUserModal from "./RegisterUserModal";
+
 // Define the props this component will receive
 interface ObservedUsersTableProps {
   observedUsers: ObservedUser[];
   sortField: ObservedUserSortField;
   sortDirection: SortDirection;
   onSortChange: (field: ObservedUserSortField) => void;
-  onRegister: (user: ObservedUser) => void;
+  // onRegister: (user: ObservedUser) => void; // Esta prop ya no es necesaria, la modal la manejará
   onExtend: (user: ObservedUser) => void;
   onBlock: (user: ObservedUser) => void;
   searchTerm: string;
@@ -59,7 +62,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
   sortField,
   sortDirection,
   onSortChange,
-  onRegister,
+  // onRegister, // Eliminar de las props desestructuradas
   onExtend,
   onBlock,
   searchTerm,
@@ -77,6 +80,12 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
   const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
   const [selectedImageAlt, setSelectedImageAlt] = useState<string>("");
 
+  // NUEVOS ESTADOS PARA LA MODAL DE REGISTRO
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [userToRegister, setUserToRegister] = useState<ObservedUser | null>(
+    null
+  );
+
   // Define table columns
   const columns = [
     { key: "photoUrl", label: "Face", sortable: false },
@@ -92,7 +101,6 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
 
   // Function to handle image load errors
   const handleImageError = (userId: string, photoUrl: string | null) => {
-    // Si la URL ya tiene un cache buster, eliminémoslo para evitar claves duplicadas
     const cleanPhotoUrl = photoUrl ? photoUrl.split("?")[0] : "no-image-url";
     setImageErrors((prev) => ({ ...prev, [cleanPhotoUrl]: true }));
     console.warn(
@@ -102,10 +110,21 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
 
   // Función para abrir la modal de imagen
   const handleImageClick = (imageUrl: string, altText: string) => {
-    // Cuando se hace clic, la URL ya debería tener el cache buster
     setSelectedImageSrc(imageUrl);
     setSelectedImageAlt(altText);
     setShowImageModal(true);
+  };
+
+  // NUEVA FUNCIÓN para manejar el clic en el botón Register
+  const handleRegisterClick = (user: ObservedUser) => {
+    setUserToRegister(user); // Guarda el usuario a registrar en el estado
+    setIsRegisterModalOpen(true); // Abre la modal
+  };
+
+  // Callback cuando un usuario se ha registrado desde la modal
+  const handleUserRegistered = () => {
+    onRefresh(); // Refresca la lista de usuarios observados para que el recién registrado desaparezca o se actualice
+    // Puedes añadir un mensaje de éxito aquí si lo deseas
   };
 
   const startIndex = (currentPage - 1) * itemsPerPage + 1;
@@ -175,13 +194,10 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
           </thead>
           <tbody>
             {observedUsers.map((u: ObservedUser) => {
-              // GENERAR LA URL CON EL CACHE BUSTER AQUÍ
-              // Esto asegurará que cada vez que los datos se recarguen, la URL de la imagen sea 'nueva'
               const imageUrlWithCacheBuster = u.faceImage
-                ? `${u.faceImage}?t=${new Date(u.lastSeen).getTime()}` // Usamos u.lastSeen para el timestamp
+                ? `${u.faceImage}?t=${new Date(u.lastSeen).getTime()}`
                 : null;
 
-              // Clave para el seguimiento de errores de imagen, sin el cache buster
               const imageErrorKey = u.faceImage
                 ? u.faceImage.split("?")[0]
                 : "no-image-url";
@@ -192,7 +208,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
                   className="border-b hover:bg-blue-50 transition"
                 >
                   <TableCell className="py-2 px-2">
-                    {imageUrlWithCacheBuster && !imageErrors[imageErrorKey] ? ( // Usar imageErrorKey para el seguimiento
+                    {imageUrlWithCacheBuster && !imageErrors[imageErrorKey] ? (
                       <div
                         className="relative w-8 h-8 cursor-pointer"
                         onClick={() =>
@@ -203,10 +219,10 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
                         }
                       >
                         <img
-                          src={imageUrlWithCacheBuster} // Usar la URL con el cache buster
+                          src={imageUrlWithCacheBuster}
                           alt={u.id}
                           className="w-8 h-8 rounded-full object-cover"
-                          onError={() => handleImageError(u.id, u.faceImage)} // Pasar la URL original para la clave de error
+                          onError={() => handleImageError(u.id, u.faceImage)}
                         />
                       </div>
                     ) : (
@@ -262,7 +278,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onRegister(u)}
+                        onClick={() => handleRegisterClick(u)} // LLAMAR A LA NUEVA FUNCIÓN
                       >
                         Register
                       </Button>
@@ -397,6 +413,14 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
           </div>
         </div>
       )}
+
+      {/* INTEGRAR LA NUEVA MODAL DE REGISTRO */}
+      <RegisterUserModal
+        isOpen={isRegisterModalOpen}
+        onClose={() => setIsRegisterModalOpen(false)}
+        observedUser={userToRegister}
+        onUserRegistered={handleUserRegistered}
+      />
     </div>
   );
 };
