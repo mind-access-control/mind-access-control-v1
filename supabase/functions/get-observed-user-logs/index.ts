@@ -18,6 +18,7 @@ interface ObservedLog {
   zone: ItemWithNameAndId; // Objeto {id, name} de la tabla 'zones'
   status: ItemWithNameAndId; // Objeto {id, name} - Inferido de 'decision'
   aiAction: string | null; // Acción sugerida por la IA (inferido de 'match_status')
+  isRegistered: boolean; // NUEVO: Indicar si el usuario observado está registrado
 }
 
 // Interfaz para los datos crudos que vienen de la consulta inicial de logs (sin joins anidados)
@@ -28,6 +29,13 @@ interface RawLogQueryResult {
   decision: string;
   match_status: string | null;
   requested_zone_id: string | null; // Puede ser null según tu esquema
+}
+
+// NUEVO: Interfaz para los datos de observed_users que necesitamos
+interface SupabaseObservedUserForLogQueryResult {
+  id: string;
+  face_image_url: string | null;
+  is_registered: boolean; // NUEVO: Asegúrate de que esta columna exista en tu DB
 }
 
 interface GetObservedLogsResponse {
@@ -181,22 +189,29 @@ serve(async (req) => {
       }
     }
 
-    // 4. Consultar las URLs de las imágenes de los usuarios observados
-    const userImageMap = new Map<string, string>(); // Map<observed_user_id, face_image_url>
+    // 4. Consultar las URLs de las imágenes y el estado de registro de los usuarios observados
+    // CAMBIAMOS userImageMap A userDetailsMap para incluir is_registered
+    const userDetailsMap = new Map<
+      string,
+      SupabaseObservedUserForLogQueryResult
+    >();
     if (uniqueObservedUserIds.length > 0) {
       const { data: usersData, error: usersError } = await supabase
         .from("observed_users")
-        .select("id, face_image_url")
+        .select("id, face_image_url, is_registered") // <-- ¡NUEVO: Seleccionar is_registered!
         .in("id", uniqueObservedUserIds);
 
       if (usersError) {
         console.error("Supabase observed_users query error:", usersError);
-        // No fallamos la función entera, solo registramos el error y las imágenes quedarán como null
+        // No fallamos la función entera, solo registramos el error
       } else {
         usersData.forEach((user) => {
-          if (user.face_image_url) {
-            userImageMap.set(user.id, user.face_image_url);
-          }
+          // Aseguramos que el usuario tiene las propiedades esperadas antes de mapear
+          userDetailsMap.set(user.id, {
+            id: user.id,
+            face_image_url: user.face_image_url,
+            is_registered: user.is_registered, // <-- Mapear is_registered
+          });
         });
       }
     }
@@ -206,18 +221,24 @@ serve(async (req) => {
       const zoneInfo = log.requested_zone_id
         ? zoneMap.get(log.requested_zone_id)
         : null;
-      const faceImageUrl = userImageMap.get(log.observed_user_id) || null;
+      // Usar userDetailsMap para obtener tanto la URL como el estado de registro
+      const userDetails = userDetailsMap.get(log.observed_user_id);
+
+      const faceImageUrl = userDetails?.face_image_url || null;
+      // Obtener isRegistered del userDetails, por defecto false si no se encuentra
+      const isRegistered = userDetails?.is_registered || false; // <-- NUEVO: Obtener el estado de registro
 
       const statusName = log.decision || "unknown";
       const aiActionName = log.match_status || "N/A";
 
-      // CONSOLE.LOG PARA DEPURAR LA URL DE LA IMAGEN Y ZONA
+      // CONSOLE.LOG PARA DEPURAR
       console.log(`Processing log ID: ${log.id}`);
       console.log(`  Observed User ID: ${log.observed_user_id}`);
       console.log(
         `  Face Image URL from Map: ${faceImageUrl || "null/undefined"}`,
       );
       console.log(`  Zone Name from Map: ${zoneInfo?.name || "N/A"}`);
+      console.log(`  Is Registered: ${isRegistered}`); // <-- NUEVO: Depurar isRegistered
 
       return {
         id: log.id,
@@ -233,6 +254,7 @@ serve(async (req) => {
           name: statusName,
         },
         aiAction: aiActionName,
+        isRegistered: isRegistered, // <-- ¡NUEVO: Incluir en el objeto de respuesta!
       };
     });
 

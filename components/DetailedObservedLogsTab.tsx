@@ -26,24 +26,34 @@ import {
   ChevronUp,
   ChevronDown,
   UserCircle2,
+  CheckCircle,
+  Loader2,
 } from "lucide-react";
 
+// Assuming this interface will be defined in a shared file like '@/types/common'
 interface ItemWithNameAndId {
   id: string;
   name: string;
 }
 
 interface ObservedLog {
-  id: string;
+  id: string; // Log ID
   timestamp: string;
-  observedUserId: string;
-  faceImageUrl: string | null;
-  zone: ItemWithNameAndId;
-  status: ItemWithNameAndId;
-  aiAction: string | null;
+  observedUserId: string; // Observed user ID
+  faceImageUrl: string | null; // URL of the last photo of the observed user
+  zone: ItemWithNameAndId; // {id, name} object
+  status: ItemWithNameAndId; // {id, name} object
+  aiAction: string | null; // AI suggested action
+  isRegistered: boolean; // Indicates if the observed user is registered
 }
 
-type ObservedLogSortField = "timestamp" | "observedUserId" | "zone" | "status";
+// Type for table sort fields, now including 'isRegistered'
+type ObservedLogSortField =
+  | "timestamp"
+  | "observedUserId"
+  | "zone"
+  | "status"
+  | "isRegistered";
 type SortDirection = "asc" | "desc";
 
 const DetailedObservedLogsTab: React.FC = () => {
@@ -59,6 +69,8 @@ const DetailedObservedLogsTab: React.FC = () => {
 
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
+
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
@@ -77,7 +89,8 @@ const DetailedObservedLogsTab: React.FC = () => {
   };
 
   const fetchObservedLogs = useCallback(async () => {
-    setLoading(true);
+    // No set loading to true here to avoid table jump on sort,
+    // only the refresh button will show loading state.
     setError(null);
     try {
       const edgeFunctionUrl =
@@ -87,7 +100,7 @@ const DetailedObservedLogsTab: React.FC = () => {
       url.searchParams.append("searchTerm", searchTerm);
       url.searchParams.append("page", currentPage.toString());
       url.searchParams.append("pageSize", itemsPerPage.toString());
-      url.searchParams.append("sortField", "timestamp");
+      url.searchParams.append("sortField", sortField); // Use the state's sortField
       url.searchParams.append("sortDirection", sortDirection);
 
       if (startDate) {
@@ -124,33 +137,27 @@ const DetailedObservedLogsTab: React.FC = () => {
 
       let processedLogs = result.logs;
 
-      const isUUID =
-        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-          searchTerm
-        );
-      if (searchTerm && !isUUID) {
-        processedLogs = processedLogs.filter((log) =>
-          log.zone.name.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      }
+      // Frontend sorting logic is restored here
+      processedLogs.sort((a, b) => {
+        let comparison = 0;
+        if (sortField === "timestamp") {
+          comparison =
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        } else if (sortField === "observedUserId") {
+          comparison = a.observedUserId.localeCompare(b.observedUserId);
+        } else if (sortField === "zone") {
+          comparison = a.zone.name.localeCompare(b.zone.name);
+        } else if (sortField === "status") {
+          comparison = a.status.name.localeCompare(b.status.name);
+        } else if (sortField === "isRegistered") {
+          // Sort by boolean: false before true for 'asc'
+          // or true before false for 'desc' (unregistered first)
+          if (a.isRegistered && !b.isRegistered) comparison = 1;
+          if (!a.isRegistered && b.isRegistered) comparison = -1;
+        }
 
-      if (sortField === "zone") {
-        processedLogs.sort((a, b) => {
-          const nameA = a.zone.name.toLowerCase();
-          const nameB = b.zone.name.toLowerCase();
-          if (nameA < nameB) return sortDirection === "asc" ? -1 : 1;
-          if (nameA > nameB) return sortDirection === "asc" ? 1 : -1;
-          return 0;
-        });
-      } else if (sortField === "status") {
-        processedLogs.sort((a, b) => {
-          const statusA = a.status.name.toLowerCase();
-          const statusB = b.status.name.toLowerCase();
-          if (statusA < statusB) return sortDirection === "asc" ? -1 : 1;
-          if (statusA > statusB) return sortDirection === "asc" ? 1 : -1;
-          return 0;
-        });
-      }
+        return sortDirection === "asc" ? comparison : -comparison;
+      });
 
       setLogs(processedLogs);
       setTotalLogsCount(result.totalCount);
@@ -170,25 +177,26 @@ const DetailedObservedLogsTab: React.FC = () => {
     searchTerm,
     currentPage,
     itemsPerPage,
-    sortField,
-    sortDirection,
+    sortField, // Now correctly used in URL params AND for frontend sorting
+    sortDirection, // Now correctly used in URL params AND for frontend sorting
     startDate,
     endDate,
+    refreshTrigger,
   ]);
 
   useEffect(() => {
+    setLoading(true); // Initial load or explicit refresh
     fetchObservedLogs();
   }, [fetchObservedLogs]);
 
-  // NUEVO useEffect para ajustar la página actual
   useEffect(() => {
     const newTotalPages = Math.ceil(totalLogsCount / itemsPerPage);
     if (currentPage > newTotalPages && newTotalPages > 0) {
       setCurrentPage(newTotalPages);
     } else if (currentPage > newTotalPages && newTotalPages === 0) {
-      setCurrentPage(1); // Si no hay logs, vuelve a la página 1
+      setCurrentPage(1);
     }
-  }, [totalLogsCount, itemsPerPage, currentPage]); // Dependencias: cuando cambian el total o los items por página
+  }, [totalLogsCount, itemsPerPage, currentPage]);
 
   const handleRefresh = useCallback(() => {
     setSearchTerm("");
@@ -197,6 +205,8 @@ const DetailedObservedLogsTab: React.FC = () => {
     setSortDirection("desc");
     setStartDate(null);
     setEndDate(null);
+    setRefreshTrigger((prev) => prev + 1);
+    setLoading(true); // Explicitly set loading to true for refresh button
   }, []);
 
   const handleSortChange = useCallback(
@@ -207,7 +217,8 @@ const DetailedObservedLogsTab: React.FC = () => {
         setSortField(field);
         setSortDirection("asc");
       }
-      setCurrentPage(1); // Resetear a la página 1 al cambiar el ordenamiento
+      setCurrentPage(1);
+      // Removed setLoading(true) here to prevent "Loading logs..." on sort
     },
     [sortField, sortDirection]
   );
@@ -271,7 +282,7 @@ const DetailedObservedLogsTab: React.FC = () => {
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setCurrentPage(1); // Resetear a la página 1 al cambiar el término de búsqueda
+                setCurrentPage(1);
               }}
             />
           </div>
@@ -286,7 +297,7 @@ const DetailedObservedLogsTab: React.FC = () => {
               value={startDate || ""}
               onChange={(e) => {
                 setStartDate(e.target.value);
-                setCurrentPage(1); // Resetear a la página 1 al cambiar la fecha
+                setCurrentPage(1);
               }}
               title="Start Date"
             />
@@ -300,7 +311,7 @@ const DetailedObservedLogsTab: React.FC = () => {
               value={endDate || ""}
               onChange={(e) => {
                 setEndDate(e.target.value);
-                setCurrentPage(1); // Resetear a la página 1 al cambiar la fecha
+                setCurrentPage(1);
               }}
               title="End Date"
             />
@@ -309,147 +320,191 @@ const DetailedObservedLogsTab: React.FC = () => {
             onClick={handleRefresh}
             className="p-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition duration-200 shadow-md"
             title="Refresh logs data"
+            disabled={loading}
           >
-            <RefreshCcw className="w-5 h-5" />
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <RefreshCcw className="w-5 h-5" />
+            )}
           </Button>
         </div>
 
-        {loading && (
-          <div className="text-gray-700 text-center py-4">Loading logs...</div>
-        )}
         {error && (
-          <div className="bg-red-100 text-red-700 p-4 rounded-lg text-center">
+          <div className="bg-red-100 text-red-700 p-4 rounded-lg text-center mb-4">
             Error: {error}
           </div>
         )}
 
-        {!loading && !error && (
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <Table className="min-w-full divide-y divide-gray-200">
-              <TableHeader className="bg-gray-50">
-                <TableRow>
-                  <TableHead
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSortChange("timestamp")}
-                  >
+        <div className="overflow-y-auto rounded-lg border border-gray-200 max-h-[60vh] relative">
+          <Table className="min-w-full divide-y divide-gray-200 table-fixed">
+            <TableHeader className="bg-gray-50 sticky top-0 z-10">
+              <TableRow>
+                <TableHead
+                  className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSortChange("timestamp")}
+                >
+                  <div className="flex items-center gap-1">
                     Timestamp {getSortIcon("timestamp")}
-                  </TableHead>
-                  <TableHead
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSortChange("observedUserId")}
-                  >
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="w-[25%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSortChange("observedUserId")}
+                >
+                  <div className="flex items-center gap-1">
                     Observed User ID {getSortIcon("observedUserId")}
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Photo
-                  </TableHead>
-                  <TableHead
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSortChange("zone")}
-                  >
+                  </div>
+                </TableHead>
+                <TableHead className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Photo
+                </TableHead>
+                <TableHead
+                  className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSortChange("zone")}
+                >
+                  <div className="flex items-center gap-1">
                     Zone {getSortIcon("zone")}
-                  </TableHead>
-                  <TableHead
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSortChange("status")}
-                  >
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSortChange("isRegistered")}
+                >
+                  <div className="flex items-center gap-1">
+                    Registered {getSortIcon("isRegistered")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="w-[19%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSortChange("status")}
+                >
+                  <div className="flex items-center gap-1">
                     Status {getSortIcon("status")}
-                  </TableHead>
+                  </div>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="bg-white divide-y divide-gray-200">
+              {/* Conditionally render loading message inside table if loading, otherwise render logs */}
+              {loading && !error ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-center py-8 text-gray-500"
+                  >
+                    Loading logs...
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody className="bg-white divide-y divide-gray-200">
-                {logs.length > 0 ? (
-                  logs.map((log) => (
-                    <TableRow key={log.id} className="hover:bg-gray-50">
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </TableCell>
-                      <TableCell
-                        className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"
-                        title={log.observedUserId}
+              ) : logs.length > 0 ? (
+                logs.map((log) => (
+                  <TableRow key={log.id} className="hover:bg-gray-50">
+                    <TableCell className="w-[18%] px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                      {new Date(log.timestamp).toLocaleString()}
+                    </TableCell>
+                    <TableCell
+                      className="w-[25%] px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"
+                      title={log.observedUserId}
+                    >
+                      <span className="truncate">{log.observedUserId}</span>
+                    </TableCell>
+                    <TableCell className="w-[10%] px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <Button
+                        onClick={() =>
+                          handleImageClick(log.faceImageUrl, log.observedUserId)
+                        }
+                        className="p-2 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 transition duration-200"
+                        title="View Face Image"
                       >
-                        {log.observedUserId}
-                      </TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Button
-                          onClick={() =>
-                            handleImageClick(
-                              log.faceImageUrl,
-                              log.observedUserId
-                            )
-                          }
-                          className="p-2 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 transition duration-200"
-                          title="View Face Image"
-                        >
-                          {log.faceImageUrl ? (
-                            <img
-                              src={log.faceImageUrl}
-                              alt={`Face of ${log.observedUserId}`}
-                              className="w-6 h-6 rounded-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.src = "";
-                                e.currentTarget.style.display = "none";
-                                const parent = e.currentTarget.parentElement;
-                                if (parent) {
-                                  const icon = document.createElement("div");
-                                  icon.className =
-                                    "w-6 h-6 flex items-center justify-center";
-                                  icon.innerHTML =
-                                    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-circle-2"><path d="M18 20a6 6 0 0 0-12 0"/><circle cx="12" cy="10" r="4"/><path d="M12 21.5a9.5 9.5 0 1 0 0-19 9.5 9.5 0 0 0 0 19Z"/></svg>';
-                                  parent.appendChild(icon);
-                                }
-                              }}
-                            />
-                          ) : (
-                            <UserCircle2 className="w-6 h-6" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {log.faceImageUrl ? (
+                          <img
+                            src={log.faceImageUrl}
+                            alt={`Face of ${log.observedUserId}`}
+                            className="w-6 h-6 rounded-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = "";
+                              e.currentTarget.style.display = "none";
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) {
+                                const icon = document.createElement("div");
+                                icon.className =
+                                  "w-6 h-6 flex items-center justify-center";
+                                icon.innerHTML =
+                                  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-circle-2"><path d="M18 20a6 6 0 0 0-12 0"/><circle cx="12" cy="10" r="4"/><path d="M12 21.5a9.5 9.5 0 1 0 0-19 9.5 9.5 0 0 0 0 19Z"/></svg>';
+                                parent.appendChild(icon);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <UserCircle2 className="w-6 h-6" />
+                        )}
+                      </Button>
+                    </TableCell>
+                    <TableCell className="w-[18%] px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <Badge
+                        variant="outline"
+                        className="bg-blue-50 text-blue-700"
+                      >
+                        {log.zone.name}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="w-[10%] px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {log.isRegistered ? (
                         <Badge
-                          variant="outline"
-                          className="bg-blue-50 text-blue-700"
+                          variant="default"
+                          className="bg-green-500 text-white px-2 py-1 rounded-full text-xs"
                         >
-                          {log.zone.name}
+                          Registered
                         </Badge>
-                      </TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      ) : (
                         <Badge
-                          variant={getStatusBadgeVariant(log.status.name)}
-                          className={
-                            log.status.name.toLowerCase() === "granted" ||
-                            log.status.name.toLowerCase() === "successful" ||
-                            log.status.name.toLowerCase() === "success"
-                              ? "bg-green-100 text-green-800"
-                              : log.status.name.toLowerCase() === "denied" ||
-                                log.status.name.toLowerCase() === "failed" ||
-                                log.status.name.toLowerCase() === "failure"
-                              ? "bg-red-100 text-red-800"
-                              : log.status.name.toLowerCase() === "pending"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : ""
-                          }
+                          variant="secondary"
+                          className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs"
                         >
-                          {log.status.name.replace(/_/g, " ")}
+                          Unregistered
                         </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
+                      )}
+                    </TableCell>
+                    <TableCell className="w-[19%] px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <Badge
+                        variant={getStatusBadgeVariant(log.status.name)}
+                        className={
+                          log.status.name.toLowerCase() === "granted" ||
+                          log.status.name.toLowerCase() === "successful" ||
+                          log.status.name.toLowerCase() === "success"
+                            ? "bg-green-100 text-green-800"
+                            : log.status.name.toLowerCase() === "denied" ||
+                              log.status.name.toLowerCase() === "failed" ||
+                              log.status.name.toLowerCase() === "failure"
+                            ? "bg-red-100 text-red-800"
+                            : log.status.name.toLowerCase() === "pending"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : ""
+                        }
+                      >
+                        {log.status.name.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                // Only show "No logs found" if not loading and no error
+                !loading &&
+                !error && (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className="text-center py-8 text-gray-500"
                     >
                       No observed user logs found matching your criteria.
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                )
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
         <div className="flex justify-between items-center mt-6">
           <span className="text-sm text-gray-700">
@@ -460,7 +515,7 @@ const DetailedObservedLogsTab: React.FC = () => {
               value={itemsPerPage.toString()}
               onValueChange={(value) => {
                 setItemsPerPage(Number(value));
-                setCurrentPage(1); // Resetear a la página 1 al cambiar items por página
+                setCurrentPage(1);
               }}
             >
               <SelectTrigger className="w-[80px]">
