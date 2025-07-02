@@ -19,14 +19,14 @@ serve(async (req: Request): Promise<Response> => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers":
-          "authorization, x-client-info, apikey, content-type",
+          "authorization, x-client-info, apikey, content-type, x-request-id",
       },
     });
   }
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     {
       global: {
         headers: { Authorization: req.headers.get("Authorization")! },
@@ -110,13 +110,26 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    const imageUrl = publicUrlData.publicUrl;
+    // Fix the URL for local development - replace kong:8000 with localhost:54321
+    let imageUrl = publicUrlData.publicUrl;
+    if (imageUrl.includes('kong:8000')) {
+      imageUrl = imageUrl.replace('kong:8000', '127.0.0.1:54321');
+    }
+    
+    // Alternative: Construct URL manually for local development
+    if (!imageUrl || imageUrl.includes('kong:8000')) {
+      const baseUrl = Deno.env.get("SUPABASE_URL") ?? "http://127.0.0.1:54321";
+      imageUrl = `${baseUrl}/storage/v1/object/public/${bucketName}/${filePath}`;
+    }
+    
+    console.log('🔍 Generated image URL:', imageUrl);
 
     // 3. Actualizar la URL en la tabla de la base de datos (observed_users o users)
     const tableToUpdate = isObservedUser ? "observed_users" : "users";
+    const columnToUpdate = isObservedUser ? "face_image_url" : "profile_picture_url";
     const { error: updateDbError } = await supabase
       .from(tableToUpdate)
-      .update({ face_image_url: imageUrl })
+      .update({ [columnToUpdate]: imageUrl })
       .eq("id", userId);
 
     if (updateDbError) {

@@ -58,7 +58,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*", // Permite cualquier origen. En producción, deberías restringirlo a tu dominio.
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-request-id",
 };
 
 // --- Manejador de Solicitudes HTTP ---

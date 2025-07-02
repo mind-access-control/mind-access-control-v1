@@ -38,7 +38,7 @@ serve(async (req: Request) => {
         "Access-Control-Allow-Origin": "*", // Permite peticiones desde cualquier origen (ajustar en producción)
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS", // Métodos permitidos
         "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, x-requested-with", // Cabeceras permitidas
+          "Content-Type, Authorization, x-requested-with, x-request-id", // Cabeceras permitidas
         "Access-Control-Max-Age": "86400", // Cachea la respuesta OPTIONS por 24 horas
       },
     });

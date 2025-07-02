@@ -1,14 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import Webcam from "react-webcam";
 import * as faceapi from "face-api.js";
-import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
-
-// Configuración de Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "YOUR_SUPABASE_URL";
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "@/lib/supabase"; // Import the existing Supabase client
 
 interface Zone {
   id: string;

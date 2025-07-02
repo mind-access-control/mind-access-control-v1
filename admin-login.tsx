@@ -1,23 +1,23 @@
-"use client";
+'use client';
 
-import type React from "react";
+import type React from 'react';
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import Link from "next/link";
-import { useAuth } from "@/hooks/use-auth";
-import { ConnectionTest } from "@/components/connection-test";
-import { Eye, EyeOff } from "lucide-react";
-import AdminDashboard from "@/components/admin-dashboard";
+import AdminDashboard from '@/components/admin-dashboard';
+import { ConnectionTest } from '@/components/connection-test';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { userAuthActions } from '@/hooks/auth.hooks';
+import { Eye, EyeOff } from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn } = userAuthActions();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -34,14 +34,8 @@ export default function AdminLogin() {
 
       if (error) {
         // Manejar el error de rol específico
-        if (
-          error.message.includes(
-            "Access Denied: Only administrators are allowed to log in."
-          )
-        ) {
-          setError(
-            "Access Denied: You do not have administrator privileges. Please contact support."
-          );
+        if (error.message.includes('Access Denied: Only administrators are allowed to log in.')) {
+          setError('Access Denied: You do not have administrator privileges. Please contact support.');
         } else {
           // Otros errores de autenticación (ej. credenciales incorrectas)
           setError(error.message);
@@ -49,17 +43,17 @@ export default function AdminLogin() {
       } else if (data && data.user) {
         // Asegurarse de que 'data' no sea null
         setSuccess(`Welcome back, ${data.user.email}! Login successful.`);
-        console.log("Login successful:", data.user);
+        console.log('Login successful:', data.user);
         // Redirigir al dashboard
         setTimeout(() => {
           setIsLoggedIn(true);
         }, 1500);
       } else {
         // En caso de que no haya error pero tampoco data.user (inesperado)
-        setError("Login failed. Please try again.");
+        setError('Login failed. Please try again.');
       }
     } catch (err) {
-      setError("An unexpected error occurred");
+      setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -67,8 +61,8 @@ export default function AdminLogin() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    setEmail("");
-    setPassword("");
+    setEmail('');
+    setPassword('');
     setError(null);
     setSuccess(null);
   };
@@ -89,9 +83,7 @@ export default function AdminLogin() {
           </div>
 
           {/* Main Title */}
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome to Access Control System
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Access Control System</h1>
 
           {/* Subtitle */}
           <p className="text-sm text-gray-600">By Admin Group</p>
@@ -101,10 +93,7 @@ export default function AdminLogin() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
             <div className="space-y-2">
-              <Label
-                htmlFor="email"
-                className="text-sm font-medium text-gray-700"
-              >
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
                 Email Address
               </Label>
               <Input
@@ -120,16 +109,13 @@ export default function AdminLogin() {
 
             {/* Password Field */}
             <div className="space-y-2">
-              <Label
-                htmlFor="password"
-                className="text-sm font-medium text-gray-700"
-              >
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
                 Password
               </Label>
               <div className="relative">
                 <Input
                   id="password"
-                  type={showPassword ? "text" : "password"}
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-slate-50 border-0 rounded-lg h-12 px-4 pr-12 text-gray-900 placeholder-gray-500 focus:bg-slate-100 focus:ring-2 focus:ring-teal-500 focus:ring-offset-0"
@@ -146,23 +132,12 @@ export default function AdminLogin() {
               </div>
             </div>
 
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
-                {success}
-              </div>
-            )}
+            {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</div>}
+            {success && <div className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">{success}</div>}
 
             {/* Forgot Password Link */}
             <div className="text-right">
-              <Link
-                href="/forgot-password"
-                className="text-sm text-teal-600 hover:text-teal-700 transition-colors"
-              >
+              <Link href="/forgot-password" className="text-sm text-teal-600 hover:text-teal-700 transition-colors">
                 Forgot your password?
               </Link>
             </div>
@@ -173,7 +148,7 @@ export default function AdminLogin() {
               disabled={isLoading}
               className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium h-12 rounded-lg transition-colors focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50"
             >
-              {isLoading ? "Signing in..." : "Log in"}
+              {isLoading ? 'Signing in...' : 'Log in'}
             </Button>
           </form>
         </CardContent>
@@ -182,11 +157,8 @@ export default function AdminLogin() {
       {/* Additional Text Below Form */}
       <div className="mt-6 text-center">
         <p className="text-sm text-indigo-200">
-          Not an admin?{" "}
-          <Link
-            href="/contact-support"
-            className="text-teal-300 hover:text-teal-200 underline transition-colors"
-          >
+          Not an admin?{' '}
+          <Link href="/contact-support" className="text-teal-300 hover:text-teal-200 underline transition-colors">
             Contact Support
           </Link>
         </p>
@@ -194,9 +166,7 @@ export default function AdminLogin() {
 
       {/* Page Footer */}
       <footer className="mt-auto pt-8 pb-4 text-center">
-        <p className="text-xs text-indigo-300 mb-2">
-          Powered by Facial Recognition System | 2025
-        </p>
+        <p className="text-xs text-indigo-300 mb-2">Powered by Facial Recognition System | 2025</p>
         {/* Optional logo placeholders */}
         <div className="flex justify-center space-x-4 opacity-60">
           <div className="w-6 h-6 bg-indigo-400 rounded-full"></div>

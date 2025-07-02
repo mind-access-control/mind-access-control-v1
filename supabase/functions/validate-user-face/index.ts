@@ -150,6 +150,7 @@ const USER_MATCH_THRESHOLD_DISTANCE = 0.5;
 const OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE = 0.35;
 const DENIED_ATTEMPTS_THRESHOLD = 3; // Umbral de intentos denegados para activar la alerta.
 
+// ... (uploadImageToStorageAndDb y generateAISuggestion funciones no cambian) ...
 async function uploadImageToStorageAndDb(
   userId: string,
   imageData: string,
@@ -305,7 +306,7 @@ serve(async (req: Request): Promise<Response> => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers":
-          "authorization, x-client-info, apikey, content-type",
+          "authorization, x-client-info, apikey, content-type, x-request-id",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       },
     });
@@ -680,31 +681,7 @@ serve(async (req: Request): Promise<Response> => {
           JSON.stringify(matchedObservedUser),
         );
 
-        // ESTE ES EL BLOQUE QUE ES REDUNDANTE AHORA
-        const { data: registeredUserCheck, error: registeredCheckError } =
-          await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("observed_user_source_id", matchedObservedUser.id)
-            .maybeSingle();
-
-        if (registeredCheckError) {
-          console.error(
-            `Error checking if observed user ${matchedObservedUser.id} is registered:`,
-            registeredCheckError,
-          );
-        }
-
-        if (registeredUserCheck) {
-          console.log(
-            `DEBUG: Observed user ${matchedObservedUser.id} is already registered as user ${registeredUserCheck.id}. Skipping observed user processing and proceeding to new observed user creation flow.`,
-          );
-          // No hacemos nada más en este bloque, lo que hará que el flujo
-          // continúe hacia la sección de "3. Si no se encontró ningún match..."
-          // Esto evita que se actualice un usuario observado que ya fue registrado.
-        } else if (
-          observedActualDistance <= OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE
-        ) {
+        if (observedActualDistance <= OBSERVED_USER_UPDATE_THRESHOLD_DISTANCE) {
           console.log(
             `🔄 PROCESAMIENTO: Usuario observado existente encontrado, actualizando registro: ${matchedObservedUser.id}`,
           );

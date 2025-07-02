@@ -2,19 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // Importa useRouter y usePathname
-import { createClient, Session } from "@supabase/supabase-js"; // Importa createClient y Session de Supabase
+import { Session } from "@supabase/supabase-js"; // Importa Session de Supabase
 
 import AdminLogin from "../admin-login"; // Ruta correcta de tu componente de login
 import AdminDashboard from "../components/admin-dashboard"; // Ruta correcta de tu AdminDashboard
 import FacialValidationScreen from "../components/FacialValidationScreen"; // Ruta correcta de tu componente de validación facial
-
-// --- Configuración del Cliente Supabase para el Frontend ---
-// Asegúrate de que estas variables de entorno estén configuradas
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "YOUR_SUPABASE_URL";
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+import { supabase } from "@/lib/supabase"; // Importar el cliente Supabase existente
 
 // Este es el componente principal que se renderiza al acceder a la ruta raíz (/)
 export default function Page() {
