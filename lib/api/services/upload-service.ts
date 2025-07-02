@@ -1,5 +1,5 @@
 import { UploadClient } from '../clients/upload-client';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 export interface UploadImageRequest {
   userId: string;
@@ -14,12 +14,6 @@ export interface UploadImageResponse {
 
 // Create a singleton instance of UploadClient
 const uploadClient = new UploadClient();
-
-// Create Supabase client for signed URL generation
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export class UploadService {
   /**
@@ -43,17 +37,13 @@ export class UploadService {
       // Extract file path from the stored URL
       const urlParts = imageUrl.split('/');
       const fileName = urlParts[urlParts.length - 1];
-      
       // Generate signed URL
-      const { data, error } = await supabase.storage
-        .from('face-images')
-        .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days expiry
-      
+      const { data, error } = await supabase.storage.from('face-images').createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days expiry
       if (error || !data?.signedUrl) {
         console.error('Error generating signed URL:', error);
         return imageUrl; // Fallback to original URL
       }
-      
+
       return data.signedUrl;
     } catch (error) {
       console.error('Error generating signed URL:', error);
