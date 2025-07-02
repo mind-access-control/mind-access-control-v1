@@ -289,6 +289,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
         setFullName(observedUser.id); // Usamos el ID temporal como nombre inicial
         // Si el observedUser tiene faceImageUrl, precargarlo
         if (observedUser.faceImage) {
+          // assuming observedUser.faceImage is the URL
           fetch(observedUser.faceImage)
             .then((res) => res.blob())
             .then((blob) => {
@@ -405,7 +406,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newEmail = e.target.value;
+    const newEmail = e.target.value.trim();
     setEmail(newEmail);
     if (newEmail && !validateEmail(newEmail)) {
       setEmailError("Invalid email format");
@@ -425,7 +426,8 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
   const handleRegisterUser = async () => {
     console.log("Register User clicked in modal");
 
-    const isEmailValid = validateEmail(email);
+    const trimmedEmail = email.trim();
+    const isEmailValid = validateEmail(trimmedEmail);
 
     const missingFields = [];
     if (!fullName) missingFields.push("Full Name");
@@ -458,12 +460,13 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
     try {
       const payload = {
         fullName: fullName,
-        email: email,
+        email: trimmedEmail,
         roleName: selectedRole,
         statusName: selectedUserStatus,
         accessZoneNames: selectedAccessZones,
         faceEmbedding: Array.from(faceEmbedding!),
-        profilePictureUrl: null, // Se manejará en la Edge Function
+        // AHORA: Enviar la URL de la imagen del usuario observado si existe
+        profilePictureUrl: observedUser?.faceImage || null,
         // Añadir observedUserId si existe, para vincular el log
         observedUserId: observedUser?.id || null,
       };
