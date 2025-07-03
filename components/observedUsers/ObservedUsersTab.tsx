@@ -1,23 +1,12 @@
-"use client";
+'use client';
 
-import React, {
-  useState,
-  useMemo,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
-import { AlertTriangle, Eye, UserCircle2 } from "lucide-react";
-import ObservedUsersOverviewCards from "@/components/ObservedUsersOverviewCards";
-import ObservedUsersTable from "@/components/ObservedUsersTable";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { AlertTriangle, Eye, UserCircle2 } from 'lucide-react';
+import ObservedUsersOverviewCards from '@/components/observedUsers/ObservedUsersOverviewCards';
+import ObservedUsersTable from '@/components/observedUsers/ObservedUsersTable';
 
 // IMPORTAR LAS INTERFACES DESDE EL ARCHIVO COMPARTIDO
-import {
-  ObservedUser,
-  ItemWithNameAndId,
-  ObservedUserSortField,
-  SortDirection,
-} from "@/types/common";
+import { ObservedUser, ItemWithNameAndId, ObservedUserSortField, SortDirection } from '@/types/common';
 
 // Interfaz para la respuesta completa de la Edge Function (alineada con get-observed-users EF)
 interface GetObservedUsersResponse {
@@ -33,23 +22,20 @@ interface GetObservedUsersResponse {
 const ObservedUsersTab: React.FC = () => {
   const [observedUsers, setObservedUsers] = useState<ObservedUser[]>([]);
   const [totalObservedUsersCount, setTotalObservedUsersCount] = useState(0); // Conteo para la tabla/paginación
-  const [absoluteObservedUsersCount, setAbsoluteObservedUsersCount] =
-    useState(0); // NUEVO: Conteo total real
+  const [absoluteObservedUsersCount, setAbsoluteObservedUsersCount] = useState(0); // NUEVO: Conteo total real
 
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [highRiskCount, setHighRiskCount] = useState(0);
   const [activeTemporalCount, setActiveTemporalCount] = useState(0);
   const [expiredCount, setExpiredCount] = useState(0);
 
-  const [observedSortField, setObservedSortField] =
-    useState<ObservedUserSortField>("firstSeen");
-  const [observedSortDirection, setObservedSortDirection] =
-    useState<SortDirection>("desc");
+  const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>('firstSeen');
+  const [observedSortDirection, setObservedSortDirection] = useState<SortDirection>('desc');
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [filterType, setFilterType] = useState<string>("");
+  const [filterType, setFilterType] = useState<string>('');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,34 +51,28 @@ const ObservedUsersTab: React.FC = () => {
     setError(null);
 
     try {
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-observed-users";
+      const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-observed-users';
 
       const url = new URL(edgeFunctionUrl);
-      url.searchParams.append("searchTerm", searchTerm);
-      url.searchParams.append("page", currentPage.toString());
-      url.searchParams.append("pageSize", itemsPerPage.toString());
-      url.searchParams.append("sortField", observedSortField);
-      url.searchParams.append("sortDirection", observedSortDirection);
+      url.searchParams.append('searchTerm', searchTerm);
+      url.searchParams.append('page', currentPage.toString());
+      url.searchParams.append('pageSize', itemsPerPage.toString());
+      url.searchParams.append('sortField', observedSortField);
+      url.searchParams.append('sortDirection', observedSortDirection);
       if (filterType) {
-        url.searchParams.append("filterType", filterType);
+        url.searchParams.append('filterType', filterType);
       }
 
       const response = await fetch(url.toString(), {
-        method: "GET",
+        method: 'GET',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
-        const errorData: { error?: string; message?: string } =
-          await response.json();
-        throw new Error(
-          errorData.error ||
-            errorData.message ||
-            `HTTP Error: ${response.status}`
-        );
+        const errorData: { error?: string; message?: string } = await response.json();
+        throw new Error(errorData.error || errorData.message || `HTTP Error: ${response.status}`);
       }
 
       const result: GetObservedUsersResponse = await response.json();
@@ -105,26 +85,18 @@ const ObservedUsersTab: React.FC = () => {
       setActiveTemporalCount(result.activeTemporalCount);
       setExpiredCount(result.expiredCount);
     } catch (err: unknown) {
-      let errorMessage =
-        "An unknown error occurred while fetching observed users.";
+      let errorMessage = 'An unknown error occurred while fetching observed users.';
       if (err instanceof Error) {
         errorMessage = err.message;
-      } else if (typeof err === "string") {
+      } else if (typeof err === 'string') {
         errorMessage = err;
       }
-      console.error("Error fetching observed users:", err);
+      console.error('Error fetching observed users:', err);
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [
-    searchTerm,
-    currentPage,
-    itemsPerPage,
-    observedSortField,
-    observedSortDirection,
-    filterType,
-  ]);
+  }, [searchTerm, currentPage, itemsPerPage, observedSortField, observedSortDirection, filterType]);
 
   useEffect(() => {
     if (debounceTimeoutRef.current) {
@@ -158,39 +130,29 @@ const ObservedUsersTab: React.FC = () => {
   const handleSearchChange = useCallback((term: string) => {
     setSearchTerm(term);
     setCurrentPage(1);
-    setFilterType("");
+    setFilterType('');
   }, []);
 
   const handleRefresh = useCallback(() => {
     setCurrentPage(1);
-    setSearchTerm("");
-    setFilterType("");
+    setSearchTerm('');
+    setFilterType('');
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
-  const handleCardClick = useCallback(
-    (
-      type:
-        | "total"
-        | "pendingReview"
-        | "highRisk"
-        | "activeTemporal"
-        | "expired"
-    ) => {
-      setCurrentPage(1);
-      setSearchTerm("");
+  const handleCardClick = useCallback((type: 'total' | 'pendingReview' | 'highRisk' | 'activeTemporal' | 'expired') => {
+    setCurrentPage(1);
+    setSearchTerm('');
 
-      if (type === "total") {
-        setFilterType("");
-      } else {
-        setFilterType(type);
-      }
-    },
-    []
-  );
+    if (type === 'total') {
+      setFilterType('');
+    } else {
+      setFilterType(type);
+    }
+  }, []);
 
   const sendObservedUserAction = useCallback(
-    async (userId: string, actionType: "block" | "extend" | "register") => {
+    async (userId: string, actionType: 'block' | 'extend' | 'register') => {
       if (actionMessageTimeoutRef.current) {
         clearTimeout(actionMessageTimeoutRef.current);
         actionMessageTimeoutRef.current = null;
@@ -198,13 +160,12 @@ const ObservedUsersTab: React.FC = () => {
       setActionMessage(null);
 
       try {
-        const edgeFunctionUrl =
-          "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/manage-observed-user-actions";
+        const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/manage-observed-user-actions';
 
         const response = await fetch(edgeFunctionUrl, {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             observedUserId: userId,
@@ -228,7 +189,7 @@ const ObservedUsersTab: React.FC = () => {
         let errorMessage = `Failed to perform ${actionType} action.`;
         if (err instanceof Error) {
           errorMessage = err.message;
-        } else if (typeof err === "string") {
+        } else if (typeof err === 'string') {
           errorMessage = err;
         }
         console.error(`Error performing ${actionType} action:`, err);
@@ -255,7 +216,7 @@ const ObservedUsersTab: React.FC = () => {
   const handleExtendObservedUserAccess = useCallback(
     (user: ObservedUser) => {
       console.log(`Action: Extend access for user ${user.id}`);
-      sendObservedUserAction(user.id, "extend");
+      sendObservedUserAction(user.id, 'extend');
     },
     [sendObservedUserAction]
   );
@@ -263,7 +224,7 @@ const ObservedUsersTab: React.FC = () => {
   const handleBlockObservedUser = useCallback(
     (user: ObservedUser) => {
       console.log(`Action: Block user ${user.id}`);
-      sendObservedUserAction(user.id, "block");
+      sendObservedUserAction(user.id, 'block');
     },
     [sendObservedUserAction]
   );
@@ -271,12 +232,10 @@ const ObservedUsersTab: React.FC = () => {
   const handleObservedSortChange = useCallback(
     (field: ObservedUserSortField) => {
       if (observedSortField === field) {
-        setObservedSortDirection(
-          observedSortDirection === "asc" ? "desc" : "asc"
-        );
+        setObservedSortDirection(observedSortDirection === 'asc' ? 'desc' : 'asc');
       } else {
         setObservedSortField(field);
-        setObservedSortDirection("asc");
+        setObservedSortDirection('asc');
       }
       setCurrentPage(1);
     },
@@ -295,10 +254,7 @@ const ObservedUsersTab: React.FC = () => {
     <div className="space-y-8">
       <div>
         <h2 className="text-3xl font-bold text-white mb-2">Observed Users</h2>
-        <p className="text-indigo-200">
-          Monitor and manage users detected by the system but not yet
-          registered.
-        </p>
+        <p className="text-indigo-200">Monitor and manage users detected by the system but not yet registered.</p>
       </div>
 
       <ObservedUsersOverviewCards
@@ -312,26 +268,14 @@ const ObservedUsersTab: React.FC = () => {
 
       {actionMessage && (
         <div
-          className={`p-3 rounded-md text-center font-medium ${
-            actionMessage.startsWith("Error:")
-              ? "bg-red-100 text-red-700"
-              : "bg-green-100 text-green-700"
-          }`}
+          className={`p-3 rounded-md text-center font-medium ${actionMessage.startsWith('Error:') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}
         >
           {actionMessage}
         </div>
       )}
 
-      {loading && (
-        <div className="text-white text-center py-4">
-          Loading observed users...
-        </div>
-      )}
-      {error && (
-        <div className="bg-red-500 text-white p-4 rounded-lg text-center">
-          Error: {error}
-        </div>
-      )}
+      {loading && <div className="text-white text-center py-4">Loading observed users...</div>}
+      {error && <div className="bg-red-500 text-white p-4 rounded-lg text-center">Error: {error}</div>}
 
       {!loading && !error && (
         <ObservedUsersTable
@@ -353,11 +297,7 @@ const ObservedUsersTab: React.FC = () => {
           onRefresh={handleRefresh}
         />
       )}
-      {!loading && !error && observedUsers.length === 0 && (
-        <div className="text-white text-center py-4">
-          No observed users found matching your criteria.
-        </div>
-      )}
+      {!loading && !error && observedUsers.length === 0 && <div className="text-white text-center py-4">No observed users found matching your criteria.</div>}
     </div>
   );
 };
