@@ -87,7 +87,7 @@ export abstract class BaseApiClient {
     // Response interceptor for logging
     if (this.config.enableLogging) {
       this.responseInterceptors.push((context) => {
-        console.log(`[API] ${context.status} ${context.requestId} - ${context.duration}ms`);
+        //console.log(`[API] ${context.status} ${context.requestId} - ${context.duration}ms`);
         return context;
       });
     }

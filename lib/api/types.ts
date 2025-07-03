@@ -139,11 +139,7 @@ export interface UserStatus {
 export interface Zone {
   id: string;
   name: string;
-  description?: string;
-  accessLevel: 'public' | 'restricted' | 'private';
-  parentZoneId?: string;
-  createdAt: string;
-  updatedAt: string;
+  access_level?: number;
 }
 // ============================================================================
 // AUTHENTICATION TYPES

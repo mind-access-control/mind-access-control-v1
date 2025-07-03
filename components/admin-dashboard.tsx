@@ -9,13 +9,10 @@ import type { LogSortField, SortDirection, SummaryEntry, SummarySortField } from
 // --- Mock Data Import ---
 import {
   accessLogs,
-  defaultNewCamera,
   aiRecommendations as mockAiRecommendations,
-  cameras as mockCameras,
   kpiData as mockKpiData,
   riskScore as mockRiskScore,
   suspiciousUsers as mockSuspiciousUsers,
-  zones as mockZones,
   PIE_COLORS,
   tabs,
 } from '@/mock-data';
@@ -29,7 +26,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // --- Lucide React Icons ---
 import {
@@ -38,18 +34,14 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
-  Edit,
   Lightbulb,
   LogOut,
-  Save,
   Search,
   Shield,
   SlidersHorizontal,
-  Trash2,
   TrendingUp,
   UserCircle2,
   Users,
-  X,
   Zap,
 } from 'lucide-react';
 
@@ -63,6 +55,7 @@ import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as
 import ObservedUsersTab from '@/components/observedUsers/ObservedUsersTab';
 import DetailedObservedLogsTab from '@/components/observedUsersLogs/DetailedObservedLogsTab';
 import UsersTab from './users/UsersTab';
+import SettingsTab from './settings/SettingsTab';
 
 export default function AdminDashboard({ supabase, session, onLogout }: { supabase?: SupabaseClient; session?: Session; onLogout?: () => void }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -91,21 +84,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const [summarySortDirection, setSummarySortDirection] = useState<SortDirection>('asc');
   const [summarySearchTerm, setSummarySearchTerm] = useState('');
   const [summaryStatusFilter, setSummaryStatusFilter] = useState('all');
-
-  // --- Settings Tab States ---
-  const [activeSettingsTab, setActiveSettingsTab] = useState('zones');
-  const [zones, setZones] = useState(mockZones);
-  const [cameras, setCameras] = useState(mockCameras);
-  const [newZoneName, setNewZoneName] = useState('');
-  const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
-  const [editingZoneName, setEditingZoneName] = useState('');
-  const [zoneToDelete, setZoneToDelete] = useState<any>(null);
-  const [zoneDeleteModalOpen, setZoneDeleteModalOpen] = useState(false);
-  const [newCamera, setNewCamera] = useState(defaultNewCamera);
-  const [editingCameraId, setEditingCameraId] = useState<number | null>(null);
-  const [editingCamera, setEditingCamera] = useState<any>(null);
-  const [cameraToDelete, setCameraToDelete] = useState<any>(null);
-  const [cameraDeleteModalOpen, setCameraDeleteModalOpen] = useState(false);
 
   // --- AI-ENHANCED DASHBOARD STATE & DATA (Inicializados como arrays/objetos vacíos) ---
   const [riskScore] = useState(mockRiskScore);
@@ -168,84 +146,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
     }
   };
 
-  const handleAddZone = () => {
-    if (newZoneName.trim()) {
-      setZones((prev) => [...prev, { id: prev.length + 1, name: newZoneName.trim() }]);
-      setNewZoneName('');
-    }
-  };
-
-  const startEditingZone = (zone: any) => {
-    setEditingZoneId(zone.id);
-    setEditingZoneName(zone.name);
-  };
-
-  const cancelEditingZone = () => {
-    setEditingZoneId(null);
-    setEditingZoneName('');
-  };
-
-  const saveEditingZone = () => {
-    setZones((prev) => prev.map((zone) => (zone.id === editingZoneId ? { ...zone, name: editingZoneName.trim() } : zone)));
-    cancelEditingZone();
-  };
-
-  const openZoneDeleteModal = (zone: any) => {
-    setZoneToDelete(zone);
-    setZoneDeleteModalOpen(true);
-  };
-
-  const confirmZoneDelete = () => {
-    setZones((prev) => prev.filter((zone) => zone.id !== zoneToDelete.id));
-    setCameras((prev) => prev.map((cam) => (cam.zone === zoneToDelete.name ? { ...cam, zone: '' } : cam)));
-    setZoneDeleteModalOpen(false);
-    setZoneToDelete(null);
-  };
-
-  const cancelZoneDelete = () => {
-    setZoneDeleteModalOpen(false);
-    setZoneToDelete(null);
-  };
-
-  const handleAddCamera = () => {
-    if (newCamera.name.trim() && newCamera.zone) {
-      setCameras((prev) => [...prev, { id: prev.length + 1, ...newCamera }]);
-      setNewCamera({ name: '', zone: '', location: '' });
-    }
-  };
-
-  const startEditingCamera = (camera: any) => {
-    setEditingCameraId(camera.id);
-    setEditingCamera({ ...camera });
-  };
-
-  const cancelEditingCamera = () => {
-    setEditingCameraId(null);
-    setEditingCamera(null);
-  };
-
-  const saveEditingCamera = () => {
-    setCameras((prev) => prev.map((camera) => (camera.id === editingCameraId ? { ...editingCamera } : camera)));
-    cancelEditingCamera();
-  };
-
-  const openCameraDeleteModal = (camera: any) => {
-    setCameraToDelete(camera);
-    setCameraDeleteModalOpen(true);
-  };
-
-  const confirmCameraDelete = () => {
-    setCameras((prev) => prev.filter((camera) => camera.id !== cameraToDelete.id));
-    setCameraDeleteModalOpen(false);
-    setCameraToDelete(null);
-  };
-
-  const cancelCameraDelete = () => {
-    setCameraDeleteModalOpen(false);
-    setCameraToDelete(null);
-  };
-
-  // --- UseMemos para Datos Calculados ---
   const filteredLogs = useMemo(() => {
     return (accessLogs as any[]).filter((log) => {
       const matchSearch = generalSearchTerm ? JSON.stringify(log).toLowerCase().includes(generalSearchTerm.toLowerCase()) : true;
@@ -967,330 +867,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
         )}
 
         {/* Settings Tab */}
-        {activeTab === 'settings' && (
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-3xl font-bold text-white mb-2">Settings</h2>
-              <p className="text-indigo-200">System configuration and management</p>
-            </div>
-
-            <Card className="bg-white shadow-lg">
-              <CardHeader>
-                <CardTitle>System Configuration</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <Tabs defaultValue="zones" value={activeSettingsTab} onValueChange={setActiveSettingsTab}>
-                  <TabsList className="mb-4">
-                    <TabsTrigger value="zones">Zone Management</TabsTrigger>
-                    <TabsTrigger value="cameras">Camera Management</TabsTrigger>
-                  </TabsList>
-
-                  {/* Zone Management Tab */}
-                  <TabsContent value="zones" className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4">Zone Management</h3>
-                      <p className="text-gray-600 mb-4">
-                        Define and manage access zones for your facility. Each zone can have multiple cameras assigned to it.
-                      </p>
-                    </div>
-
-                    {/* Add New Zone Form */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Add New Zone</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex gap-4">
-                          <div className="flex-1">
-                            <Label htmlFor="zoneName">Zone Name</Label>
-                            <Input
-                              id="zoneName"
-                              placeholder="Enter zone name"
-                              value={newZoneName}
-                              onChange={(e) => setNewZoneName(e.target.value)}
-                              className="bg-slate-50"
-                            />
-                          </div>
-                          <div className="flex items-end">
-                            <Button onClick={handleAddZone} className="bg-teal-600 hover:bg-teal-700" disabled={!newZoneName.trim()}>
-                              Add Zone
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Existing Zones Table */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Existing Zones</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Zone Name</TableHead>
-                              <TableHead className="w-[200px]">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {zones.length > 0 ? (
-                              zones.map((zone) => (
-                                <TableRow key={zone.id}>
-                                  <TableCell>
-                                    {editingZoneId === zone.id ? (
-                                      <Input value={editingZoneName} onChange={(e) => setEditingZoneName(e.target.value)} className="h-8" />
-                                    ) : (
-                                      zone.name
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex space-x-2">
-                                      {editingZoneId === zone.id ? (
-                                        <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={saveEditingZone}
-                                            className="text-green-600 hover:text-green-700"
-                                            disabled={!editingZoneName.trim()}
-                                          >
-                                            <Save className="w-4 h-4" />
-                                          </Button>
-                                          <Button size="sm" variant="outline" onClick={cancelEditingZone} className="text-gray-600 hover:text-gray-700">
-                                            <X className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Button size="sm" variant="outline" onClick={() => startEditingZone(zone)}>
-                                            <Edit className="w-4 h-4" />
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => openZoneDeleteModal(zone)}
-                                            className="text-red-600 hover:text-red-700"
-                                          >
-                                            <Trash2 className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center py-8 text-gray-500">
-                                  No zones defined. Add your first zone above.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  {/* Camera Management Tab */}
-                  <TabsContent value="cameras" className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4">Camera Management</h3>
-                      <p className="text-gray-600 mb-4">Manage cameras and assign them to specific access zones. Each camera can be assigned to one zone.</p>
-                    </div>
-
-                    {/* Add New Camera Form */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Add New Camera</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                          <div>
-                            <Label htmlFor="cameraName">Camera Name</Label>
-                            <Input
-                              id="cameraName"
-                              placeholder="Enter camera name"
-                              value={newCamera.name}
-                              onChange={(e) =>
-                                setNewCamera({
-                                  ...newCamera,
-                                  name: e.target.value,
-                                })
-                              }
-                              className="bg-slate-50"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="cameraZone">Zone</Label>
-                            <Select value={newCamera.zone} onValueChange={(value) => setNewCamera({ ...newCamera, zone: value })}>
-                              <SelectTrigger id="cameraZone" className="bg-slate-50">
-                                <SelectValue placeholder="Select zone" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {zones.map((zone) => (
-                                  <SelectItem key={zone.id} value={zone.name}>
-                                    {zone.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label htmlFor="cameraLocation">Location (Optional)</Label>
-                            <Input
-                              id="cameraLocation"
-                              placeholder="Describe camera location"
-                              value={newCamera.location}
-                              onChange={(e) =>
-                                setNewCamera({
-                                  ...newCamera,
-                                  location: e.target.value,
-                                })
-                              }
-                              className="bg-slate-50"
-                            />
-                          </div>
-                        </div>
-                        <Button onClick={handleAddCamera} className="bg-teal-600 hover:bg-teal-700" disabled={!newCamera.name.trim() || !newCamera.zone}>
-                          Add Camera
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    {/* Existing Cameras Table */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Existing Cameras</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Camera Name</TableHead>
-                              <TableHead>Zone</TableHead>
-                              <TableHead>Location</TableHead>
-                              <TableHead className="w-[200px]">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {cameras.length > 0 ? (
-                              cameras.map((camera) => (
-                                <TableRow key={camera.id}>
-                                  <TableCell>
-                                    {editingCameraId === camera.id ? (
-                                      <Input
-                                        value={editingCamera.name}
-                                        onChange={(e) =>
-                                          setEditingCamera({
-                                            ...editingCamera,
-                                            name: e.target.value,
-                                          })
-                                        }
-                                        className="h-8"
-                                      />
-                                    ) : (
-                                      camera.name
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {editingCameraId === camera.id ? (
-                                      <Select
-                                        value={editingCamera.zone}
-                                        onValueChange={(value) =>
-                                          setEditingCamera({
-                                            ...editingCamera,
-                                            zone: value,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger className="h-8">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {zones.map((zone) => (
-                                            <SelectItem key={zone.id} value={zone.name}>
-                                              {zone.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    ) : (
-                                      <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                                        {camera.zone || 'Unassigned'}
-                                      </Badge>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {editingCameraId === camera.id ? (
-                                      <Input
-                                        value={editingCamera.location}
-                                        onChange={(e) =>
-                                          setEditingCamera({
-                                            ...editingCamera,
-                                            location: e.target.value,
-                                          })
-                                        }
-                                        className="h-8"
-                                      />
-                                    ) : (
-                                      camera.location || '-'
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex space-x-2">
-                                      {editingCameraId === camera.id ? (
-                                        <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={saveEditingCamera}
-                                            className="text-green-600 hover:text-green-700"
-                                            disabled={!editingCamera.name.trim() || !editingCamera.zone}
-                                          >
-                                            <Save className="w-4 h-4" />
-                                          </Button>
-                                          <Button size="sm" variant="outline" onClick={cancelEditingCamera} className="text-gray-600 hover:text-gray-700">
-                                            <X className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Button size="sm" variant="outline" onClick={() => startEditingCamera(camera)}>
-                                            <Edit className="w-4 h-4" />
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => openCameraDeleteModal(camera)}
-                                            className="text-red-600 hover:text-red-700"
-                                          >
-                                            <Trash2 className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={4} className="text-center py-8 text-gray-500">
-                                  No cameras defined. Add your first camera above.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        {activeTab === 'settings' && <SettingsTab />}
       </div>
 
       {/* --- OTROS MODALES --- */}
@@ -1498,49 +1075,6 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
           <DialogFooter>
             <Button variant="outline" onClick={() => setSummaryModalOpen(false)}>
               Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Zone Delete Confirmation Modal */}
-      <Dialog open={zoneDeleteModalOpen} onOpenChange={setZoneDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the zone <strong>{zoneToDelete?.name}</strong>? This action cannot be undone.
-              {cameras.some((camera) => camera.zone === zoneToDelete?.name) && (
-                <div className="mt-2 text-red-600">Warning: This zone has cameras assigned to it. Deleting this zone will unassign these cameras.</div>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={cancelZoneDelete}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmZoneDelete} className="bg-red-600 hover:bg-red-700">
-              Confirm Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Camera Delete Confirmation Modal */}
-      <Dialog open={cameraDeleteModalOpen} onOpenChange={setCameraDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the camera <strong>{cameraToDelete?.name}</strong>? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={cancelCameraDelete}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmCameraDelete} className="bg-red-600 hover:bg-red-700">
-              Confirm Delete
             </Button>
           </DialogFooter>
         </DialogContent>

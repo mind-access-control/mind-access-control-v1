@@ -10,6 +10,7 @@ export const EDGE_FUNCTIONS = {
   VALIDATE_USER_FACE: '/functions/v1/validate-user-face',
   EF_USERS: '/functions/v1/ef-users',
   UPLOAD_FACE_IMAGE: '/functions/v1/upload-face-image',
+  EF_ZONES: '/functions/v1/ef-zones',
 } as const;
 
 // Base URLs for different environments
