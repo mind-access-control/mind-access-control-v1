@@ -20,10 +20,11 @@ export function useZoneActions() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await ZoneService.getZones();
-      setZones(response.data || []);   
+      const fetchedZones = await ZoneService.getZones();
+      setZones(Array.isArray(fetchedZones) ? fetchedZones : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch zones');
+      setZones([]);
     } finally {
       setIsLoading(false);
     }

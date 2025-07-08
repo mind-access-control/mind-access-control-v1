@@ -12,7 +12,7 @@ import { useZoneActions } from '@/hooks/zone.hooks';
 import { Zone } from '@/lib/api/types';
 
 const ZonesTab: React.FC = () => {
-  const { zones, isLoading, error, clearError } = useZoneActions();
+  const { zones, isLoading, error, clearError, loadZonesAndNotify } = useZoneActions();
   const [cameras] = useState(mockCameras); // Keep cameras for now, could be moved to a separate hook later
   const [zoneToDelete, setZoneToDelete] = useState<Zone | null>(null);
   const [zoneDeleteModalOpen, setZoneDeleteModalOpen] = useState(false);
@@ -55,7 +55,7 @@ const ZonesTab: React.FC = () => {
         {/* Add New Zone Form */}
         <ZoneForm />
         {/* Existing Zones Table */}
-        <ZoneTable />
+        <ZoneTable zones={zones} onZoneUpdated={loadZonesAndNotify} />
       </TabsContent>
 
       {/* Zone Delete Confirmation Modal */}

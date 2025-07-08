@@ -6,6 +6,7 @@ import { CatalogService } from '@/lib/api/services/catalog-service';
 import { UserService } from '@/lib/api/services/user-service';
 import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
+import { ZoneService } from '@/lib/api/services/zone-service';
 
 // Create a simple event system for user updates
 const userUpdateCallbacks: (() => void)[] = [];
@@ -48,7 +49,8 @@ export function useUserActions() {
       setErrorUsers(null);
 
       const response = await UserService.getUsers();
-      setUsers(response.data || []);
+      const users = Array.isArray(response) ? response : (response.data || []);
+      setUsers(users);
     } catch (error: any) {
       console.error('Error loading users:', error);
       setErrorUsers(error.message || 'Failed to load users');
@@ -154,8 +156,9 @@ export function useUserActions() {
       try {
         setLoadingZones(true);
         setErrorZones(null);
-        const result = await CatalogService.getAccessZones();
-        setZonesData(result.zones || []);
+        const response = await ZoneService.getZones();
+        const zones = Array.isArray(response) ? response : (response.data || []);
+        setZonesData(zones);
       } catch (error: any) {
         console.error('Error al obtener zonas de Edge Function:', error);
         setErrorZones(error.message || 'Fallo al cargar las zonas.');
@@ -227,7 +230,7 @@ export function useUserActions() {
   // useEffect to load users on component mount
   useEffect(() => {
     loadUsers();
-  }, [loadUsers]);
+  }, []);
 
   return {
     // Form states

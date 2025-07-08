@@ -3,11 +3,13 @@ import { Zone } from '../types';
 
 export interface CreateZoneRequest {
   name: string;
+  category?: string;
   access_level?: number;
 }
 
 export interface UpdateZoneRequest {
   name?: string;
+  category?: string;
   access_level?: number;
 }
 
@@ -30,7 +32,18 @@ export class ZoneService {
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to fetch zones');
     }
-    return response.data;
+    
+    // Extract the zones array from the response
+    let zonesData: Zone[] = [];
+    if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+      zonesData = response.data.data as Zone[];
+    } else if (Array.isArray(response.data)) {
+      zonesData = response.data as Zone[];
+    } else {
+      throw new Error('Invalid response structure');
+    }
+    
+    return zonesData;
   }
 
   /**
@@ -103,11 +116,27 @@ export class ZoneService {
   }
 
   /**
+   * Validate category
+   */
+  static validateCategory(category?: string): string | null {
+    if (category !== undefined && (typeof category !== 'string' || category.trim().length === 0)) {
+      return 'Category must be a non-empty string';
+    }
+    if (category && category.length > 50) {
+      return 'Category must be 50 characters or less';
+    }
+    return null;
+  }
+
+  /**
    * Validate create zone request
    */
   static validateCreateRequest(request: CreateZoneRequest): string | null {
     const nameError = this.validateZoneName(request.name);
     if (nameError) return nameError;
+
+    const categoryError = this.validateCategory(request.category);
+    if (categoryError) return categoryError;
 
     const accessLevelError = this.validateAccessLevel(request.access_level);
     if (accessLevelError) return accessLevelError;
@@ -122,6 +151,11 @@ export class ZoneService {
     if (request.name !== undefined) {
       const nameError = this.validateZoneName(request.name);
       if (nameError) return nameError;
+    }
+
+    if (request.category !== undefined) {
+      const categoryError = this.validateCategory(request.category);
+      if (categoryError) return categoryError;
     }
 
     if (request.access_level !== undefined) {

@@ -107,10 +107,10 @@ function buildUserQuery(supabase: ReturnType<typeof createSupabaseClient>, param
     access_method,
     created_at,
     updated_at,
-    roles_catalog:roles_catalog(id, name),
-    user_statuses_catalog:user_statuses_catalog(id, name),
-    user_zone_access:user_zone_access(zones:zones(id, name)),
-    faces:faces(embedding)
+    roles_catalog!inner(id, name),
+    user_statuses_catalog!inner(id, name),
+    user_zone_access!left(zones!inner(id, name)),
+    faces!left(embedding)
   `,
     { count: 'exact' }
   );
@@ -177,14 +177,13 @@ async function handleGet(req: Request) {
         access_method,
         created_at,
         updated_at,
-        roles_catalog:roles_catalog(id, name),
-        user_statuses_catalog:user_statuses_catalog(id, name),
-        user_zone_access:user_zone_access(zones:zones(id, name)),
-        faces:faces(embedding)
+        roles_catalog!inner(id, name),
+        user_statuses_catalog!inner(id, name),
+        user_zone_access!left(zones!inner(id, name)),
+        faces!left(embedding)
       `
         )
-        .eq('id', userId)
-        .single();
+        .eq('id', userId);
 
       const { data, error } = await query;
       if (error) {
@@ -208,21 +207,24 @@ async function handleGet(req: Request) {
         });
       }
 
+      // Process the data (similar to the list logic but for single user)
+      const userData = data[0]; // Get the first (and only) user
+      if (!userData) {
+        return createCorsResponse({ error: 'User not found' }, 404);
+      }
+
+      // Extract zone names from the joined data
+      const zoneNames = userData.user_zone_access?.map((access: { zones: { name: string } }) => access.zones.name) || [];
+
       // Transform the data to match the User interface
       const transformedUser = {
-        id: data.id,
-        name: data.full_name || '',
-        email: emailMap.get(data.id) || '',
-        role: Array.isArray(data.roles_catalog)
-          ? (data.roles_catalog[0] as { name?: string })?.name || ''
-          : ((data.roles_catalog ?? {}) as { name?: string })?.name || '',
-        accessZones: Array.isArray(data.user_zone_access)
-          ? (data.user_zone_access as { zones?: { name?: string }[] }[])
-              .flatMap((access) => (Array.isArray(access.zones) ? access.zones.map((zone) => zone.name) : []))
-              .filter(Boolean)
-          : [],
-        faceEmbedding: data.faces?.[0]?.embedding || undefined,
-        profilePictureUrl: data.profile_picture_url || undefined,
+        id: userData.id,
+        name: userData.full_name || '',
+        email: emailMap.get(userData.id) || '',
+        role: userData.roles_catalog?.name || '',
+        accessZones: zoneNames,
+        faceEmbedding: userData.faces?.[0]?.embedding || undefined,
+        profilePictureUrl: userData.profile_picture_url || undefined,
       };
 
       return createCorsResponse({ user: transformedUser });
@@ -256,33 +258,63 @@ async function handleGet(req: Request) {
       });
     }
 
-    // Transform the data to match the User interface
-    const transformUser = (user: {
+    // Process the data to group zone access by user
+    const userMap = new Map<string, {
       id: string;
       full_name?: string;
       profile_picture_url?: string;
-      roles_catalog?: { id?: string; name?: string }[];
-      user_zone_access?: { zones?: { id?: string; name?: string }[] }[];
-      faces?: { embedding?: number[] }[];
-    }) => {
+      roles_catalog?: { id?: string; name?: string };
+      user_zone_access: { zones: { id: string; name: string } }[];
+      faces: { embedding?: number[] }[];
+    }>();
+
+    // Group the data by user ID
+    data.forEach((row: any) => {
+      const userId = row.id;
+
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          id: userId,
+          full_name: row.full_name,
+          profile_picture_url: row.profile_picture_url,
+          roles_catalog: row.roles_catalog,
+          user_zone_access: [],
+          faces: []
+        });
+      }
+
+      const user = userMap.get(userId)!;
+
+      // Add zone access if it exists
+      if (row.user_zone_access && row.user_zone_access.length > 0) {
+        user.user_zone_access.push(...row.user_zone_access);
+      }
+
+      // Add face embedding if it exists
+      if (row.faces && row.faces.length > 0) {
+        user.faces.push(...row.faces);
+      }
+    });
+
+    // Transform the data to match the User interface
+    const transformUser = (user: ReturnType<typeof userMap.get>) => {
+      if (!user) return null;
+
+      // Extract unique zone names
+      const zoneNames = [...new Set(user.user_zone_access.map(access => access.zones.name))];
+
       return {
         id: user.id,
         name: user.full_name || '',
         email: emailMap.get(user.id) || '',
-        role: Array.isArray(user.roles_catalog)
-          ? (user.roles_catalog[0] as { name?: string })?.name || ''
-          : ((user.roles_catalog ?? {}) as { name?: string })?.name || '',
-        accessZones: Array.isArray(user.user_zone_access)
-          ? (user.user_zone_access as { zones?: { id?: string; name?: string }[] }[])
-              .flatMap((access) => (Array.isArray(access.zones) ? access.zones.map((zone) => zone.name) : []))
-              .filter(Boolean)
-          : [],
+        role: user.roles_catalog?.name || '',
+        accessZones: zoneNames,
         faceEmbedding: user.faces?.[0]?.embedding || undefined,
         profilePictureUrl: user.profile_picture_url || undefined,
       };
     };
 
-    const transformedData = data.map(transformUser);
+    const transformedData = Array.from(userMap.values()).map(transformUser).filter(Boolean);
 
     // Calculate pagination info
     const total = count || 0;

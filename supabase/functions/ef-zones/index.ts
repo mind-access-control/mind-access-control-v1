@@ -9,16 +9,19 @@ interface Zone {
   id: string;
   name: string;
   access_level?: number;
+  category?: string;
 }
 
 interface CreateZoneRequest {
   name: string;
   access_level?: number;
+  category?: string;
 }
 
 interface UpdateZoneRequest {
   name?: string;
   access_level?: number;
+  category?: string;
 }
 
 interface ZoneResponse {
@@ -72,6 +75,16 @@ function validateZoneName(name: string): string | null {
 function validateAccessLevel(accessLevel?: number): string | null {
   if (accessLevel !== undefined && (typeof accessLevel !== 'number' || accessLevel < 0)) {
     return 'Access level must be a non-negative number';
+  }
+  return null;
+}
+
+function validateCategory(category?: string): string | null {
+  if (category !== undefined && (typeof category !== 'string' || category.trim().length === 0)) {
+    return 'Category must be a non-empty string';
+  }
+  if (category && category.length > 50) {
+    return 'Category must be 50 characters or less';
   }
   return null;
 }
@@ -150,7 +163,7 @@ async function handleGet(req: Request, supabase: any, zoneId?: string | null): P
       // Get specific zone by ID
       const { data, error } = await supabase
         .from("zones")
-        .select("id, name, access_level")
+        .select("id, name, access_level, category")
         .eq("id", zoneId)
         .single();
 
@@ -173,7 +186,7 @@ async function handleGet(req: Request, supabase: any, zoneId?: string | null): P
       // Get all zones
       const { data, error } = await supabase
         .from("zones")
-        .select("id, name, access_level")
+        .select("id, name, access_level, category")
         .order("name", { ascending: true });
 
       if (error) {
@@ -213,6 +226,14 @@ async function handlePost(req: Request, supabase: any): Promise<Response> {
       );
     }
 
+    const categoryError = validateCategory(payload.category);
+    if (categoryError) {
+      return createCorsResponse(
+        { error: categoryError },
+        400
+      );
+    }
+
     // Check if zone name already exists
     const { data: existingZone, error: checkError } = await supabase
       .from("zones")
@@ -237,8 +258,9 @@ async function handlePost(req: Request, supabase: any): Promise<Response> {
       .insert([{
         name: payload.name.trim(),
         access_level: payload.access_level || null,
+        category: payload.category || 'General',
       }])
-      .select("id, name, access_level")
+      .select("id, name, access_level, category")
       .single();
 
     if (error) {
@@ -290,6 +312,16 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
       }
     }
 
+    if (payload.category !== undefined) {
+      const categoryError = validateCategory(payload.category);
+      if (categoryError) {
+        return createCorsResponse(
+          { error: categoryError },
+          400
+        );
+      }
+    }
+
     // Check if zone exists
     const { data: existingZone, error: checkError } = await supabase
       .from("zones")
@@ -336,13 +368,16 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
     if (payload.access_level !== undefined) {
       updatePayload.access_level = payload.access_level;
     }
+    if (payload.category !== undefined) {
+      updatePayload.category = payload.category.trim();
+    }
 
     // Update zone
     const { data, error } = await supabase
       .from("zones")
       .update(updatePayload)
       .eq("id", zoneId)
-      .select("id, name, access_level")
+      .select("id, name, access_level, category")
       .single();
 
     if (error) {

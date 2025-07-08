@@ -1,12 +1,10 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 
 import { CreateUserRequest, UploadService, UserService } from '@/lib/api';
@@ -21,9 +19,9 @@ const UsersForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('');
-  const [selectedUserStatus, setSelectedUserStatus] = useState<string>('inactive'); // Default to 'Inactive'
+  const defaultStatus = 'active'; // Default to 'Active'
+  const [selectedUserStatus, setSelectedUserStatus] = useState<string>(defaultStatus);
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
-  const [accessZonesOpen, setAccessZonesOpen] = useState(false);
   // --- Photo Upload & Face-API.js States ---
   const [imagePreview, setImagePreview] = useState<string | null>(null); // URL para mostrar la imagen seleccionada/capturada
   // --- Camera Capture Component State (isCameraOpen es para el prop 'open') ---
@@ -230,7 +228,7 @@ const UsersForm: React.FC = () => {
       setEmail('');
       setEmailError(null);
       setSelectedRole('');
-      setSelectedUserStatus('inactive'); // Restablece a 'Inactive' por defecto.
+      setSelectedUserStatus(defaultStatus);
       setSelectedAccessZones([]);
       clearImage(); // Limpia la imagen y los estados relacionados (embedding, error de detección).
       setFaceEmbedding(null);
@@ -398,71 +396,23 @@ const UsersForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Access Zones Multi-select */}
-          <div>
-            <Label htmlFor="accessZones">Access Zones</Label>
-            <Popover open={accessZonesOpen} onOpenChange={setAccessZonesOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={accessZonesOpen}
-                  className="w-full justify-between bg-slate-50 border-0 h-12 text-left font-normal"
-                  disabled={loadingZones || !!errorZones}
-                >
-                  <span>
-                    {loadingZones
-                      ? 'Loading zones...'
-                      : errorZones
-                      ? `Error: ${errorZones}`
-                      : selectedAccessZones.length > 0
-                      ? `${selectedAccessZones.length} zone${selectedAccessZones.length > 1 ? 's' : ''} selected`
-                      : 'Select access zones'}
-                  </span>
-                  <span className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0" align="start">
-                <div className="p-2 space-y-2 max-h-[300px] overflow-auto">
-                  {errorZones ? (
-                    <div className="text-red-500 p-2">Error: {errorZones}</div>
-                  ) : loadingZones ? (
-                    <div className="text-gray-500 p-2">Loading zones...</div>
-                  ) : zonesData && zonesData.length > 0 ? (
-                    zonesData.map((zone) => (
-                      <div key={zone.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`zone-${zone.id}`}
-                          checked={selectedAccessZones.includes(zone.name)}
-                          onCheckedChange={() => toggleAccessZone(zone.name)}
-                        />
-                        <label
-                          htmlFor={`zone-${zone.id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {zone.name}
-                        </label>
-                      </div>
-                    ))
-                  ) : (
-                    !loadingZones && !errorZones && <div className="p-2 text-gray-500">No zones available</div>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-            {selectedAccessZones.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {selectedAccessZones.map((zoneName) => (
-                  <Badge key={zoneName} variant="secondary" className="bg-slate-100">
-                    {zoneName}
-                    <button className="ml-1 hover:text-red-500" onClick={() => toggleAccessZone(zoneName)}>
-                      ×
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Enhanced Zone Selection with Categories */}
+          <ZoneSelector
+            zones={zonesData}
+            selectedZones={selectedAccessZones}
+            onZoneToggle={toggleAccessZone}
+            onSelectAll={(zoneNames) => {
+              // Add all zones that aren't already selected
+              zoneNames.forEach(zoneName => {
+                if (!selectedAccessZones.includes(zoneName)) {
+                  setSelectedAccessZones(prev => [...prev, zoneName]);
+                }
+              });
+            }}
+            loading={loadingZones}
+            error={errorZones}
+            placeholder="Select access zones"
+          />
 
           {/* Enhanced Photo Upload Section with Drag & Drop */}
           <div className="space-y-4">
