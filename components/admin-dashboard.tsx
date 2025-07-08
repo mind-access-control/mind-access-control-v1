@@ -9,7 +9,7 @@ import {
   kpiData as mockKpiData,
   riskScore as mockRiskScore,
   suspiciousUsers as mockSuspiciousUsers,
-  PIE_COLORS,
+  PIE_COLORS, // Aunque PIE_COLORS no se usará aquí, lo mantengo por si lo usas en otro lugar
   tabs,
 } from '@/mock-data';
 
@@ -26,7 +26,8 @@ import { AlertCircle, AlertTriangle, ArrowRight, Lightbulb, LogOut, Shield, Tren
 import { userAuthActions } from '@/hooks/auth.hooks';
 
 // --- Recharts (for AI-Enhanced Dashboard) ---
-import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+// No necesitamos importar Recharts aquí si los gráficos están en componentes separados
+// import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
 // --- IMPORTAR NUEVOS COMPONENTES REFACTORIZADOS ---
 import ObservedUsersTab from '@/components/observedUsers/ObservedUsersTab';
@@ -34,6 +35,8 @@ import DetailedObservedLogsTab from '@/components/observedUsersLogs/DetailedObse
 import AccessLogsTab from './accessLogs/AccessLogsTab';
 import SettingsTab from './settings/SettingsTab';
 import UsersTab from './users/UsersTab';
+// ¡CAMBIO CLAVE! Importar el nuevo componente AnalyticsTab
+import AnalyticsTab from '@/components/analytics/AnalyticsTab';
 
 export default function AdminDashboard({ supabase, session, onLogout }: { supabase?: SupabaseClient; session?: Session; onLogout?: () => void }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -46,8 +49,9 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const [kpiData] = useState(mockKpiData);
   const [suspiciousUsers, setSuspiciousUsers] = useState(mockSuspiciousUsers);
   const [aiRecommendations, setAIRecommendations] = useState(mockAiRecommendations);
-  const [trendData] = useState<any[]>([]);
-  const [failureCauseData] = useState<any[]>([]);
+  // Eliminamos trendData y failureCauseData de aquí, ahora los maneja AnalyticsTab
+  // const [trendData] = useState<any[]>([]);
+  // const [failureCauseData] = useState<any[]>([]);
   const [aiDetailsUser, setAIDetailsUser] = useState<any>(null);
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null);
   const [aiRecDetails, setAIRecDetails] = useState<any>(null);
@@ -57,19 +61,16 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-      // Try using the auth hook's signOut function first
       const { error } = await signOut();
 
       if (error) {
         console.error('Error from auth hook signOut:', error);
 
-        // Fallback: try direct supabase signOut
         if (supabase) {
           try {
             const { error: directError } = await supabase.auth.signOut();
             if (directError) {
               console.error('Direct signOut also failed:', directError);
-              // Don't throw here, just log the error
             }
           } catch (directError) {
             console.error('Exception during direct signOut:', directError);
@@ -85,6 +86,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
   };
 
   // --- COMPONENTES AUXILIARES DE UI (Implementaciones básicas) ---
+  // Mantenemos estas funciones aquí ya que son usadas por el dashboard 'overview'
   function RiskScoreCard({ score, status }: { score: number; status: 'low' | 'moderate' | 'high' }) {
     const statusColor = status === 'low' ? 'text-green-500' : status === 'moderate' ? 'text-yellow-500' : 'text-red-500';
     const bgColor = status === 'low' ? 'bg-green-50' : status === 'moderate' ? 'bg-yellow-50' : 'bg-red-50';
@@ -189,81 +191,9 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
     );
   }
 
-  function SecurityTrendsChart({ data }: { data: any[] }) {
-    const chartData =
-      data.length > 0
-        ? data
-        : [
-            { name: 'Mon', success: 4000, failed: 2400 },
-            { name: 'Tue', success: 3000, failed: 1398 },
-            { name: 'Wed', success: 2000, failed: 9800 },
-            { name: 'Thu', success: 2780, failed: 3908 },
-            { name: 'Fri', success: 1890, failed: 4800 },
-            { name: 'Sat', success: 2390, failed: 3800 },
-            { name: 'Sun', success: 3490, failed: 4300 },
-          ];
-
-    return (
-      <Card className="bg-white rounded-xl shadow-lg p-4">
-        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-green-500" /> Security Trends (Weekly)
-        </div>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0e0e0" />
-            <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: '#e0e0e0' }} />
-            <YAxis tickLine={false} axisLine={{ stroke: '#e0e0e0' }} />
-            <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} />
-            <Legend />
-            <Line type="monotone" dataKey="success" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-            <Line type="monotone" dataKey="failed" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-          </LineChart>
-        </ResponsiveContainer>
-        <p className="text-xs text-gray-500 text-center mt-2">Daily successful vs. failed access attempts.</p>
-      </Card>
-    );
-  }
-
-  function FailureCauseChart({ data }: { data: any[] }) {
-    const chartData =
-      data.length > 0
-        ? data
-        : [
-            { name: 'Incorrect Face', value: 400 },
-            { name: 'Access Denied', value: 300 },
-            { name: 'Invalid Zone', value: 300 },
-            { name: 'System Error', value: 200 },
-          ];
-
-    return (
-      <Card className="bg-white rounded-xl shadow-lg p-4">
-        <div className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-orange-500" /> Top Failure Causes
-        </div>
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              outerRadius={80}
-              fill="#8884d8"
-              dataKey="value"
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-              ))}
-            </Pie>
-            <RechartsTooltip />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-        <p className="text-xs text-gray-500 text-center mt-2">Distribution of common reasons for failed access.</p>
-      </Card>
-    );
-  }
+  // Eliminamos SecurityTrendsChart y FailureCauseChart de aquí
+  // function SecurityTrendsChart({ data }: { data: any[] }) { ... }
+  // function FailureCauseChart({ data }: { data: any[] }) { ... }
 
   function AIDetailsModal({ open, onClose, details }: { open: boolean; onClose: () => void; details: any }) {
     return (
@@ -346,7 +276,7 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
                 {[
                   { id: 'overview', label: 'Overview' },
                   { id: 'observed', label: 'Observed Users' },
-                  { id: 'detailed-logs', label: 'Detailed Observed Logs' }, // CAMBIO: Etiqueta de la pestaña
+                  { id: 'detailed-logs', label: 'Detailed Observed Logs' },
                   { id: 'analytics', label: 'Analytics' },
                 ].map((tab) => (
                   <button
@@ -393,19 +323,14 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
               </>
             )}
 
-            {/* Observed Users Tab (AHORA ES UN COMPONENTE SEPARADO) */}
+            {/* Observed Users Tab */}
             {dashboardTab === 'observed' && <ObservedUsersTab />}
 
-            {/* Detailed Logs Tab (NUEVO COMPONENTE) */}
+            {/* Detailed Logs Tab */}
             {dashboardTab === 'detailed-logs' && <DetailedObservedLogsTab />}
 
-            {/* Analytics Tab */}
-            {dashboardTab === 'analytics' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SecurityTrendsChart data={trendData} />
-                <FailureCauseChart data={failureCauseData} />
-              </div>
-            )}
+            {/* Analytics Tab - ¡CAMBIO CLAVE! Usar el nuevo componente */}
+            {dashboardTab === 'analytics' && <AnalyticsTab />}
 
             {/* AI Details Modals (keep these always available) */}
             <AIDetailsModal open={!!aiDetailsUser} onClose={() => setAIDetailsUser(null)} details={aiDetailsUser} />
@@ -414,10 +339,10 @@ export default function AdminDashboard({ supabase, session, onLogout }: { supaba
           </div>
         )}
 
-        {/* User Management Tab - ENHANCED */}
+        {/* User Management Tab */}
         {activeTab === 'users' && <UsersTab />}
 
-        {/* Access Logs Tab - ENHANCED WITH SORTING AND PAGINATION */}
+        {/* Access Logs Tab */}
         {activeTab === 'logs' && <AccessLogsTab />}
 
         {/* Settings Tab */}
