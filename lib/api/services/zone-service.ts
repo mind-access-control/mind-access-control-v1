@@ -1,5 +1,6 @@
 import { ZoneClient } from '../clients/zone-client';
 import { Zone } from '../types';
+import { extractArrayData, extractObjectData } from '../utils';
 
 export interface CreateZoneRequest {
   name: string;
@@ -29,21 +30,10 @@ export class ZoneService {
    */
   static async getZones(): Promise<Zone[]> {
     const response = await zoneClient.getZones();
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to fetch zones');
     }
-    
-    // Extract the zones array from the response
-    let zonesData: Zone[] = [];
-    if (response.data && typeof response.data === 'object' && 'data' in response.data) {
-      zonesData = response.data.data as Zone[];
-    } else if (Array.isArray(response.data)) {
-      zonesData = response.data as Zone[];
-    } else {
-      throw new Error('Invalid response structure');
-    }
-    
-    return zonesData;
+    return extractArrayData<Zone>(response);
   }
 
   /**
@@ -51,10 +41,10 @@ export class ZoneService {
    */
   static async getZone(id: string): Promise<Zone> {
     const response = await zoneClient.getZone(id);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to fetch zone');
     }
-    return response.data;
+    return extractObjectData<Zone>(response);
   }
 
   /**
@@ -62,10 +52,10 @@ export class ZoneService {
    */
   static async createZone(request: CreateZoneRequest): Promise<Zone> {
     const response = await zoneClient.createZone(request);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to create zone');
     }
-    return response.data;
+    return extractObjectData<Zone>(response);
   }
 
   /**
@@ -73,10 +63,10 @@ export class ZoneService {
    */
   static async updateZone(id: string, request: UpdateZoneRequest): Promise<Zone> {
     const response = await zoneClient.updateZone(id, request);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to update zone');
     }
-    return response.data;
+    return extractObjectData<Zone>(response);
   }
 
   /**

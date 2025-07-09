@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 // --- Face-API.js ---
 import { CatalogService } from '@/lib/api/services/catalog-service';
 import { UserService } from '@/lib/api/services/user-service';
+import { ZoneService } from '@/lib/api/services/zone-service';
 import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
-import { ZoneService } from '@/lib/api/services/zone-service';
 
 // Create a simple event system for user updates
 const userUpdateCallbacks: (() => void)[] = [];
@@ -48,9 +48,8 @@ export function useUserActions() {
       setLoadingUsers(true);
       setErrorUsers(null);
 
-      const response = await UserService.getUsers();
-      const users = Array.isArray(response) ? response : (response.data || []);
-      setUsers(users);
+      const result = await UserService.getUsers();
+      setUsers(result.data || []);
     } catch (error: any) {
       console.error('Error loading users:', error);
       setErrorUsers(error.message || 'Failed to load users');
@@ -93,7 +92,6 @@ export function useUserActions() {
         await faceapi.nets.faceLandmark68Net.load(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.load(MODEL_URL);
         setFaceApiModelsLoaded(true);
-        console.log('Face-API.js models loaded successfully!');
       } catch (error: any) {
         console.error('Error loading Face-API.js models:', error);
         setFaceApiModelsError(`Failed to load face detection models: ${error.message}`);
@@ -110,9 +108,9 @@ export function useUserActions() {
         setErrorRoles(null);
 
         const result = await CatalogService.getRoles();
-        setRoles(result.roles || []);
-        if (result.roles && result.roles.length > 0 && !selectedRole) {
-          setSelectedRole(result.roles[0].name);
+        setRoles(result || []);
+        if (result && result.length > 0 && !selectedRole) {
+          setSelectedRole(result[0].name);
         }
       } catch (error: any) {
         console.error('Error al obtener roles de Edge Function:', error);
@@ -131,13 +129,13 @@ export function useUserActions() {
         setLoadingUserStatuses(true);
         setErrorUserStatuses(null);
         const result = await CatalogService.getUserStatuses();
-        setUserStatuses(result.statuses || []);
-        if (result.statuses && result.statuses.length > 0) {
-          const inactiveStatus = result.statuses.find((status: { name: string }) => status.name === 'Inactive');
+        setUserStatuses(result || []);
+        if (result && result.length > 0) {
+          const inactiveStatus = result.find((status: { name: string }) => status.name === 'Inactive');
           if (inactiveStatus) {
             setSelectedUserStatus(inactiveStatus.name);
           } else if (!selectedUserStatus) {
-            setSelectedUserStatus(result.statuses[0].name); // Fallback al primero si no existe Inactive y no hay selección previa
+            setSelectedUserStatus(result[0].name); // Fallback al primero si no existe Inactive y no hay selección previa
           }
         }
       } catch (error: any) {
@@ -156,9 +154,8 @@ export function useUserActions() {
       try {
         setLoadingZones(true);
         setErrorZones(null);
-        const response = await ZoneService.getZones();
-        const zones = Array.isArray(response) ? response : (response.data || []);
-        setZonesData(zones);
+        const result = await ZoneService.getZones();
+        setZonesData(result || []);
       } catch (error: any) {
         console.error('Error al obtener zonas de Edge Function:', error);
         setErrorZones(error.message || 'Fallo al cargar las zonas.');

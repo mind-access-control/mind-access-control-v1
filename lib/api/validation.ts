@@ -1,3 +1,4 @@
+import { EMAIL_REGEX } from '../constants';
 import { ValidationError as ValidationErrorType } from './types';
 
 // ============================================================================
@@ -32,13 +33,8 @@ export interface ValidationRule<T> {
 // VALIDATION FUNCTIONS
 // ============================================================================
 
-export function validateField<T>(
-  value: any,
-  field: keyof T,
-  rules: ValidationRule<T>[],
-  data: T
-): { value: any; errors: ValidationErrorType[] } {
-  const rule = rules.find(r => r.field === field);
+export function validateField<T>(value: any, field: keyof T, rules: ValidationRule<T>[], data: T): { value: any; errors: ValidationErrorType[] } {
+  const rule = rules.find((r) => r.field === field);
   if (!rule) return { value, errors: [] };
 
   const errors: ValidationErrorType[] = [];
@@ -209,8 +205,7 @@ function validateType(value: any, type: string, field: keyof any): ValidationErr
 }
 
 function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  return EMAIL_REGEX.test(email);
 }
 
 function isValidUUID(uuid: string): boolean {
@@ -258,7 +253,7 @@ export const userValidationRules: ValidationRule<any>[] = [
       if (!Array.isArray(value) || value.length === 0) {
         return 'At least one access zone must be selected';
       }
-      if (!value.every(zone => typeof zone === 'string' && zone.length > 0)) {
+      if (!value.every((zone) => typeof zone === 'string' && zone.length > 0)) {
         return 'All access zones must be valid strings';
       }
       return null;
@@ -272,7 +267,7 @@ export const userValidationRules: ValidationRule<any>[] = [
         if (!Array.isArray(value) || value.length !== 128) {
           return 'Face embedding must be an array of exactly 128 numbers';
         }
-        if (!value.every(num => typeof num === 'number' && !isNaN(num))) {
+        if (!value.every((num) => typeof num === 'number' && !isNaN(num))) {
           return 'Face embedding must contain only valid numbers';
         }
       }
@@ -305,7 +300,7 @@ export const faceValidationRules: ValidationRule<any>[] = [
       if (!Array.isArray(value) || value.length !== 128) {
         return 'Face embedding must be an array of exactly 128 numbers';
       }
-      if (!value.every(num => typeof num === 'number' && !isNaN(num))) {
+      if (!value.every((num) => typeof num === 'number' && !isNaN(num))) {
         return 'Face embedding must contain only valid numbers';
       }
       return null;
@@ -336,13 +331,8 @@ export function validateUser(data: any): { data: any; errors: ValidationErrorTyp
   const validatedData: any = {};
 
   for (const rule of userValidationRules) {
-    const { value, errors: fieldErrors } = validateField(
-      data[rule.field],
-      rule.field,
-      [rule],
-      data
-    );
-    
+    const { value, errors: fieldErrors } = validateField(data[rule.field], rule.field, [rule], data);
+
     if (fieldErrors.length > 0) {
       errors.push(...fieldErrors);
     } else {
@@ -358,13 +348,8 @@ export function validateFaceRequest(data: any): { data: any; errors: ValidationE
   const validatedData: any = {};
 
   for (const rule of faceValidationRules) {
-    const { value, errors: fieldErrors } = validateField(
-      data[rule.field],
-      rule.field,
-      [rule],
-      data
-    );
-    
+    const { value, errors: fieldErrors } = validateField(data[rule.field], rule.field, [rule], data);
+
     if (fieldErrors.length > 0) {
       errors.push(...fieldErrors);
     } else {
@@ -386,16 +371,16 @@ export function sanitizeInput(input: string): string {
 export function validatePagination(params: any): { page: number; limit: number } {
   const page = Math.max(1, parseInt(params.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(params.limit) || 10));
-  
+
   return { page, limit };
 }
 
 export function validateSorting(sortBy: string, sortOrder: string): { sortBy: string; sortOrder: 'asc' | 'desc' } {
   const validSortFields = ['name', 'email', 'role', 'status', 'created_at'];
   const validSortOrders = ['asc', 'desc'];
-  
+
   const validatedSortBy = validSortFields.includes(sortBy) ? sortBy : 'created_at';
   const validatedSortOrder = validSortOrders.includes(sortOrder) ? sortOrder : 'desc';
-  
+
   return { sortBy: validatedSortBy, sortOrder: validatedSortOrder as 'asc' | 'desc' };
-} 
+}

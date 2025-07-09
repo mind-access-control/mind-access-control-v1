@@ -142,6 +142,19 @@ export interface Zone {
   category: string;
   access_level?: number;
 }
+
+// ============================================================================
+// CAMERA MANAGEMENT TYPES
+// ============================================================================
+
+export interface Camera {
+  id: string;
+  name: string;
+  zone_id: string;
+  location?: string;
+  zone?: { id: string; name: string; category?: string } | null;
+}
+
 // ============================================================================
 // AUTHENTICATION TYPES
 // ============================================================================

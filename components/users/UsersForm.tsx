@@ -8,6 +8,7 @@ import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 
 import { CreateUserRequest, UploadService, UserService } from '@/lib/api';
+import { EMAIL_REGEX } from '@/lib/constants';
 import { AlertCircle, Camera, Check, RotateCcw, Upload, X } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
 import { CameraCapture } from '../camera-capture';
@@ -127,10 +128,7 @@ const UsersForm: React.FC = () => {
     setSelectedAccessZones((prev) => (prev.includes(zoneName) ? prev.filter((name) => name !== zoneName) : [...prev, zoneName]));
   };
   const validateEmail = (email: string) => {
-    // Expresión regular simple para validar el formato de email
-    const re =
-      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-    return re.test(String(email).toLowerCase());
+    return EMAIL_REGEX.test(String(email).toLowerCase());
   };
 
   // Función corregida: Limpia la imagen seleccionada/capturada y sus estados relacionados
@@ -403,9 +401,9 @@ const UsersForm: React.FC = () => {
             onZoneToggle={toggleAccessZone}
             onSelectAll={(zoneNames) => {
               // Add all zones that aren't already selected
-              zoneNames.forEach(zoneName => {
+              zoneNames.forEach((zoneName) => {
                 if (!selectedAccessZones.includes(zoneName)) {
-                  setSelectedAccessZones(prev => [...prev, zoneName]);
+                  setSelectedAccessZones((prev) => [...prev, zoneName]);
                 }
               });
             }}
