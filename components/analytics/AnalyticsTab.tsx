@@ -20,11 +20,13 @@ type LogData = {
   timestamp: string;
   decision: 'access_granted' | 'access_denied' | 'error' | 'unknown';
   reason: string | null;
+  match_status: string | null;
 };
 
-// ¡CAMBIO CLAVE! Nuevo tipo para los datos de tendencia diarios
+// Tipo para los datos de tendencia diarios
 type DailyTrendEntry = {
-  name: string;
+  name: string; // Será el nombre corto del día (Mon, Tue, etc.)
+  dateKey: string; // Será la fecha completa UTC (YYYY-MM-DD) para orden y referencia
   success: number;
   failed: number;
 };
@@ -35,30 +37,73 @@ const AnalyticsTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [trendData, setTrendData] = useState<DailyTrendEntry[]>([]); // Usar el nuevo tipo aquí
+  const [trendData, setTrendData] = useState<DailyTrendEntry[]>([]);
   const [failureCauseData, setFailureCauseData] = useState<{ name: string; value: number }[]>([]);
 
-  // Función para calcular la fecha de hace 7 días y la fecha actual en formato YYYY-MM-DD
+  // Función para calcular la fecha de hace 7 días y la fecha actual en formato YYYY-MM-DD (UTC)
   const getDatesForLastWeek = useCallback(() => {
-    const today = new Date();
-    const lastWeek = new Date();
-    lastWeek.setDate(today.getDate() - 6); // Últimos 7 días incluyendo hoy
+    const today = new Date(); // Fecha actual en zona horaria local
+    // Convertir a UTC medianoche del día actual local, para asegurar un rango de 7 días UTC completos.
+    const todayUTC = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    todayUTC.setUTCHours(0, 0, 0, 0); // Establecer la hora a medianoche UTC
 
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
+    const lastWeekUTC = new Date(todayUTC);
+    lastWeekUTC.setUTCDate(todayUTC.getUTCDate() - 6); // Últimos 7 días incluyendo hoy, en UTC
+
+    const formatDateUTC = (date: Date) => {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
 
-    setDateFrom(formatDate(lastWeek));
-    setDateTo(formatDate(today));
+    setDateFrom(formatDateUTC(lastWeekUTC));
+    setDateTo(formatDateUTC(todayUTC));
   }, []);
 
   // Efecto para establecer las fechas por defecto al montar el componente
   useEffect(() => {
     getDatesForLastWeek();
   }, [getDatesForLastWeek]);
+
+  // Helper para categorizar las razones de fallo
+  const categorizeFailureReason = useCallback((log: LogData): string => {
+    const reason = log.reason?.toLowerCase() || '';
+    const decision = log.decision;
+    const matchStatus = log.match_status?.toLowerCase() || '';
+
+    if (decision === 'access_granted') return 'Success';
+
+    if (reason.includes('access denied for zone')) {
+      return 'Access Denied (Zone)';
+    }
+    if (reason.includes('access denied for status')) {
+      return 'Access Denied (Status/Role)';
+    }
+    if (reason.includes('face not recognized') || reason.includes('no face detected') || matchStatus.includes('no_match')) {
+      return 'Face Recognition Failure';
+    }
+    if (reason.includes('unknown_match')) {
+      return 'Unknown User Match';
+    }
+    if (reason.includes('system error')) {
+      return 'System Error';
+    }
+    if (decision === 'error') {
+      return 'Processing Error';
+    }
+    if (decision === 'unknown') {
+      return 'Unknown Decision';
+    }
+
+    if (log.reason) {
+      const genericReason = log.reason.split(':')[0].trim();
+      if (genericReason.length > 0 && genericReason.length < 50) {
+        return genericReason;
+      }
+    }
+    return 'Other Denials';
+  }, []);
 
   // Función para obtener y procesar los datos de los logs
   const fetchAndProcessLogs = useCallback(async () => {
@@ -68,17 +113,19 @@ const AnalyticsTab: React.FC = () => {
     setFailureCauseData([]);
 
     if (!dateFrom || !dateTo) {
-      console.log('DEBUG: Dates not set, skipping fetch.');
+      console.log('DEBUG: fetchAndProcessLogs skipped, dates not set.');
       setLoading(false);
       return;
     }
 
+    console.log(`DEBUG: Fetching logs for range: ${dateFrom} to ${dateTo}`); // Log para confirmar el rango de fechas
+
     try {
       const { data: logs, error: logsError } = await supabase
         .from('logs')
-        .select(`timestamp, decision, reason`)
-        .gte('timestamp', `${dateFrom}T00:00:00.000Z`) // Incluir el inicio del día
-        .lte('timestamp', `${dateTo}T23:59:59.999Z`) // Incluir el final del día
+        .select(`timestamp, decision, reason, match_status`)
+        .gte('timestamp', `${dateFrom}T00:00:00.000Z`)
+        .lte('timestamp', `${dateTo}T23:59:59.999Z`)
         .order('timestamp', { ascending: true });
 
       if (logsError) throw logsError;
@@ -86,83 +133,73 @@ const AnalyticsTab: React.FC = () => {
       console.log('DEBUG: Raw logs fetched:', logs);
 
       // --- Procesar datos para Security Trends Chart ---
-      // ¡CAMBIO CLAVE! Usar el nuevo tipo DailyTrendEntry para el Record
-      const dailyData: Record<string, DailyTrendEntry> = {};
-      const datesInRange: Date[] = [];
-      let currentDate = new Date(dateFrom);
-      const endDate = new Date(dateTo);
+      const dailyDataMap: Record<string, { success: number; failed: number }> = {};
+      const datesForChart: DailyTrendEntry[] = [];
 
-      while (currentDate <= endDate) {
-        const dayName = currentDate.toLocaleString('en-US', { weekday: 'short' });
-        const dateKey = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
-        dailyData[dateKey] = { success: 0, failed: 0, name: dayName }; // Ahora 'name' es una propiedad conocida
-        datesInRange.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
+      let currentDateIter = new Date(dateFrom + 'T00:00:00.000Z'); // Crear fecha en UTC para iterar
+      const endDateIter = new Date(dateTo + 'T00:00:00.000Z');
+
+      while (currentDateIter <= endDateIter) {
+        const dateKey = currentDateIter.toISOString().split('T')[0]; // YYYY-MM-DD (UTC)
+        const dayName = new Date(currentDateIter).toLocaleString('en-US', { weekday: 'short', timeZone: 'UTC' });
+        dailyDataMap[dateKey] = { success: 0, failed: 0 };
+        datesForChart.push({ name: dayName, dateKey: dateKey, success: 0, failed: 0 });
+        currentDateIter.setUTCDate(currentDateIter.getUTCDate() + 1); // Avanzar un día en UTC
       }
 
       logs.forEach((log) => {
         const logDate = new Date(log.timestamp);
-        const dateKey = logDate.toISOString().split('T')[0];
-        const dayName = logDate.toLocaleString('en-US', { weekday: 'short' });
+        const dateKey = logDate.toISOString().split('T')[0]; // YYYY-MM-DD (UTC)
 
-        if (dailyData[dateKey]) {
+        if (dailyDataMap[dateKey]) {
           if (log.decision === 'access_granted') {
-            dailyData[dateKey].success++;
+            dailyDataMap[dateKey].success++;
           } else if (log.decision === 'access_denied' || log.decision === 'error') {
-            dailyData[dateKey].failed++;
-          }
-        } else {
-          // Esto puede ocurrir si un log está fuera del rango de fechas inicial,
-          // o si hay un día sin logs y no fue inicializado correctamente.
-          // En este caso, lo inicializamos.
-          dailyData[dateKey] = { success: 0, failed: 0, name: dayName };
-          if (log.decision === 'access_granted') {
-            dailyData[dateKey].success++;
-          } else if (log.decision === 'access_denied' || log.decision === 'error') {
-            dailyData[dateKey].failed++;
+            dailyDataMap[dateKey].failed++;
           }
         }
       });
 
-      // Asegurarse de que el orden sea correcto y que todos los días estén presentes
-      const finalTrendData = datesInRange.map((date) => {
-        const dateKey = date.toISOString().split('T')[0];
-        const dayName = date.toLocaleString('en-US', { weekday: 'short' });
-        return {
-          name: dayName,
-          success: dailyData[dateKey]?.success || 0,
-          failed: dailyData[dateKey]?.failed || 0,
-        };
-      });
+      const finalTrendData = datesForChart.map((entry) => ({
+        name: entry.name,
+        dateKey: entry.dateKey,
+        success: dailyDataMap[entry.dateKey]?.success || 0,
+        failed: dailyDataMap[entry.dateKey]?.failed || 0,
+      }));
       setTrendData(finalTrendData);
-      console.log('DEBUG: Trend Data:', finalTrendData);
+      console.log('DEBUG: Trend Data (final):', JSON.stringify(finalTrendData));
 
       // --- Procesar datos para Failure Cause Chart ---
       const failureCauses: { [key: string]: number } = {};
       logs.forEach((log) => {
-        if ((log.decision === 'access_denied' || log.decision === 'error') && log.reason) {
-          const reason = log.reason.split(':')[0].trim(); // Tomar solo la primera parte de la razón
-          failureCauses[reason] = (failureCauses[reason] || 0) + 1;
+        if (log.decision === 'access_denied' || log.decision === 'error') {
+          const categorizedReason = categorizeFailureReason(log);
+          failureCauses[categorizedReason] = (failureCauses[categorizedReason] || 0) + 1;
+          // console.log(`DEBUG: Failed Log - Timestamp: ${log.timestamp}, Decision: ${log.decision}, Reason: "${log.reason}", Match Status: "${log.match_status}" -> Categorized As: "${categorizedReason}"`); // Descomentar para depuración detallada
         }
       });
 
       const finalFailureCauseData = Object.entries(failureCauses)
         .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value); // Ordenar de mayor a menor
+        .sort((a, b) => b.value - a.value);
       setFailureCauseData(finalFailureCauseData);
-      console.log('DEBUG: Failure Cause Data:', finalFailureCauseData);
+      console.log('DEBUG: Failure Cause Data (final):', JSON.stringify(finalFailureCauseData));
     } catch (err: any) {
       console.error('Error fetching or processing analytics logs:', err);
       setError(err.message || 'Failed to load analytics data.');
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, supabase]);
+  }, [dateFrom, dateTo, supabase, categorizeFailureReason]);
 
   // Efecto para volver a cargar los datos cuando cambian las fechas
   useEffect(() => {
-    fetchAndProcessLogs();
-  }, [fetchAndProcessLogs]);
+    if (dateFrom && dateTo) {
+      fetchAndProcessLogs();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchAndProcessLogs, dateFrom, dateTo]);
 
   return (
     <div className="space-y-8">
@@ -186,11 +223,13 @@ const AnalyticsTab: React.FC = () => {
               <Input id="dateTo" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-slate-50" />
             </div>
             <div className="flex items-end gap-2">
-              <Button onClick={fetchAndProcessLogs} disabled={loading} className="bg-blue-500 hover:bg-blue-600 text-white">
+              {/* ¡CAMBIO CLAVE! Eliminar el botón "Apply Filters" */}
+              {/* <Button onClick={fetchAndProcessLogs} disabled={loading} className="bg-blue-500 hover:bg-blue-600 text-white">
                 <RefreshCcw className="w-4 h-4 mr-2" />
                 Apply Filters
-              </Button>
+              </Button> */}
               <Button onClick={getDatesForLastWeek} variant="outline">
+                <RefreshCcw className="w-4 h-4 mr-2" /> {/* Mantener el icono de refresh si se quiere */}
                 Reset to Last 7 Days
               </Button>
             </div>
@@ -203,7 +242,8 @@ const AnalyticsTab: React.FC = () => {
       {!loading && !error && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SecurityTrendsChart data={trendData} />
-          <FailureCauseChart data={failureCauseData} />
+          {/* ¡CAMBIO CLAVE! Añadir una prop 'key' que cambie con las fechas */}
+          <FailureCauseChart key={`${dateFrom}-${dateTo}`} data={failureCauseData} />
         </div>
       )}
     </div>

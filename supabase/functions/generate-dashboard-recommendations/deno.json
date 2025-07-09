@@ -1,0 +1,11 @@
+{
+  "imports": {
+    "https://deno.land/std@0.177.0/http/server.ts": "https://deno.land/std@0.177.0/http/server.ts",
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2",
+    "https://deno.land/std@0.177.0/uuid/mod.ts": "https://deno.land/std@0.177.0/uuid/mod.ts"
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.window"],
+    "strict": true
+  }
+}
