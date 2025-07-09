@@ -25,6 +25,7 @@ type Log = {
     full_name: string;
     role_id: string;
     status_id: string;
+    profile_picture_url: string | null;
   } | null;
   zones: {
     name: string;
@@ -42,6 +43,7 @@ type DisplayLog = {
   userStatus: string;
   zoneName: string;
   status: string;
+  profilePictureUrl: string | null;
 };
 
 type SummaryEntry = {
@@ -79,14 +81,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // --- Lucide React Icons ---
-import { ChevronDown, ChevronUp, Search, SlidersHorizontal, TrendingUp, RefreshCcw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, SlidersHorizontal, TrendingUp, RefreshCcw, UserCircle } from 'lucide-react';
 
 // Supabase Client Configuration
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-console.log('DEBUG: SUPABASE_URL:', SUPABASE_URL ? 'Loaded' : 'UNDEFINED');
-console.log('DEBUG: SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'Loaded' : 'UNDEFINED');
+// console.log('DEBUG: SUPABASE_URL:', SUPABASE_URL ? 'Loaded' : 'UNDEFINED');
+// console.log('DEBUG: SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'Loaded' : 'UNDEFINED');
 
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
@@ -118,6 +120,10 @@ const AccessLogsTab: React.FC = () => {
   // --- AI Details Modal State (kept for potential future use, not used in main table) ---
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null);
 
+  // --- Image Modal States ---
+  const [imageModalOpen, setImageModalOpen] = useState(false); // Nuevo estado para controlar el modal de imagen
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null); // Nuevo estado para la URL de la imagen en el modal
+
   // --- Catalog States (fetched within this component) ---
   const [roles, setRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
@@ -140,7 +146,7 @@ const AccessLogsTab: React.FC = () => {
 
   // --- Fetch Catalogs (Roles, Zones, User Statuses, All Users) ---
   const fetchCatalogs = useCallback(async () => {
-    console.log('DEBUG: fetchCatalogs STARTING');
+    // console.log('DEBUG: fetchCatalogs STARTING');
     setLoadingRoles(true);
     setErrorRoles(null);
     setLoadingZonesList(true);
@@ -156,7 +162,7 @@ const AccessLogsTab: React.FC = () => {
       const { data: rolesData, error: rolesError } = await supabase.from('roles_catalog').select('id, name');
       if (rolesError) throw rolesError;
       setRoles(rolesData || []);
-      console.log('DEBUG: Roles Loaded Successfully.');
+      // console.log('DEBUG: Roles Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching roles:', error);
       setErrorRoles(error.message || 'Failed to load roles.');
@@ -169,7 +175,7 @@ const AccessLogsTab: React.FC = () => {
       const { data: zonesData, error: zonesError } = await supabase.from('zones').select('id, name');
       if (zonesError) throw zonesError;
       setZonesList(zonesData || []);
-      console.log('DEBUG: Zones Loaded Successfully.');
+      // console.log('DEBUG: Zones Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching zones:', error);
       setErrorZonesList(error.message || 'Failed to load zones.');
@@ -182,7 +188,7 @@ const AccessLogsTab: React.FC = () => {
       const { data: userStatusesData, error: userStatusesError } = await supabase.from('user_statuses_catalog').select('id, name');
       if (userStatusesError) throw userStatusesError;
       setUserStatuses(userStatusesData || []);
-      console.log('DEBUG: User Statuses Loaded Successfully.');
+      // console.log('DEBUG: User Statuses Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching user statuses:', error);
       setErrorUserStatuses(error.message || 'Failed to load user statuses.');
@@ -195,7 +201,7 @@ const AccessLogsTab: React.FC = () => {
       const { data: usersData, error: usersError } = await supabase.from('users').select('id, full_name');
       if (usersError) throw usersError;
       setAllUsersForFilter(usersData.filter((u) => u.full_name).map((u) => ({ id: u.id, full_name: u.full_name! })) || []);
-      console.log('DEBUG: All Users for Filter Loaded Successfully.');
+      // console.log('DEBUG: All Users for Filter Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching all users for filter:', error);
       setErrorAllUsers(error.message || 'Failed to load all users for filter.');
@@ -205,31 +211,31 @@ const AccessLogsTab: React.FC = () => {
     }
 
     setCatalogsReady(allCatalogsLoaded);
-    console.log('DEBUG: fetchCatalogs FINISHED. catalogsReady:', allCatalogsLoaded);
+    // console.log('DEBUG: fetchCatalogs FINISHED. catalogsReady:', allCatalogsLoaded);
   }, [supabase]);
 
   useEffect(() => {
-    console.log('DEBUG: useEffect for fetchCatalogs triggered.');
+    // console.log('DEBUG: useEffect for fetchCatalogs triggered.');
     fetchCatalogs();
   }, [fetchCatalogs]);
 
   // --- Fetch Access Logs from Supabase ---
   const fetchAccessLogs = useCallback(async () => {
-    console.log(
-      'DEBUG: fetchAccessLogs STARTING. catalogsReady:',
-      catalogsReady,
-      'loadingRoles:',
-      loadingRoles,
-      'loadingZonesList:',
-      loadingZonesList,
-      'loadingUserStatuses:',
-      loadingUserStatuses,
-      'loadingAllUsers:',
-      loadingAllUsers
-    );
+    // console.log(
+    //   'DEBUG: fetchAccessLogs STARTING. catalogsReady:',
+    //   catalogsReady,
+    //   'loadingRoles:',
+    //   loadingRoles,
+    //   'loadingZonesList:',
+    //   loadingZonesList,
+    //   'loadingUserStatuses:',
+    //   loadingUserStatuses,
+    //   'loadingAllUsers:',
+    //   loadingAllUsers
+    // );
     if (!catalogsReady || loadingRoles || loadingZonesList || loadingUserStatuses || loadingAllUsers) {
       setLoadingAccessLogs(true);
-      console.log('DEBUG: fetchAccessLogs returning early because catalogs not ready or still loading.');
+      // console.log('DEBUG: fetchAccessLogs returning early because catalogs not ready or still loading.');
       return;
     }
 
@@ -239,7 +245,7 @@ const AccessLogsTab: React.FC = () => {
       let query = supabase
         .from('logs')
         .select(
-          `id,timestamp,user_id,observed_user_id,camera_id,result,user_type,match_status,decision,reason,confidence_score,requested_zone_id,users(full_name,role_id,status_id),zones(name)`
+          `id,timestamp,user_id,observed_user_id,camera_id,result,user_type,match_status,decision,reason,confidence_score,requested_zone_id,users(full_name,role_id,status_id,profile_picture_url),zones(name)`
         )
         .not('user_id', 'is', null)
         .order('timestamp', { ascending: false });
@@ -255,18 +261,14 @@ const AccessLogsTab: React.FC = () => {
         query = query.eq('user_id', selectedLogUserId);
       }
 
-      console.log('DEBUG: selectedLogZone (name) for Supabase query:', selectedLogZone);
+      // console.log('DEBUG: selectedLogZone (name) for Supabase query:', selectedLogZone);
       if (selectedLogZone !== 'all') {
-        // ¡CAMBIO CLAVE! Encontrar el ID de la zona seleccionada para filtrar por requested_zone_id
         const zoneToFilter = zonesList.find((zone) => zone.name === selectedLogZone);
         if (zoneToFilter) {
-          console.log('DEBUG: Filtering by requested_zone_id:', zoneToFilter.id, 'for zone name:', selectedLogZone);
+          // console.log('DEBUG: Filtering by requested_zone_id:', zoneToFilter.id, 'for zone name:', selectedLogZone);
           query = query.eq('requested_zone_id', zoneToFilter.id);
         } else {
-          // Si el nombre de la zona seleccionada no se encuentra en zonesList (ej. dato corrupto),
-          // entonces no aplicar el filtro de zona o aplicar un filtro que no devuelva nada
           console.warn('WARNING: Selected zone name not found in zonesList:', selectedLogZone);
-          // Para asegurar que no se muestre nada incorrecto, podemos forzar un filtro que no coincida
           query = query.eq('requested_zone_id', 'non-existent-id');
         }
       }
@@ -274,7 +276,7 @@ const AccessLogsTab: React.FC = () => {
       const { data: rawLogs, error: logsError } = (await query) as {
         data:
           | (Log & {
-              users: { full_name: string; role_id: string; status_id: string } | null;
+              users: { full_name: string; role_id: string; status_id: string; profile_picture_url: string | null } | null;
               zones: { name: string } | null;
             })[]
           | null;
@@ -286,7 +288,7 @@ const AccessLogsTab: React.FC = () => {
         throw logsError;
       }
 
-      console.log('Raw Logs Data from Supabase (COMPLETE):', JSON.stringify(rawLogs, null, 2));
+      // console.log('Raw Logs Data from Supabase (COMPLETE):', JSON.stringify(rawLogs, null, 2));
 
       const uniqueUserIds = Array.from(new Set((rawLogs || []).map((log) => log.user_id).filter(Boolean))) as string[];
 
@@ -320,10 +322,10 @@ const AccessLogsTab: React.FC = () => {
       let processedLogs: DisplayLog[] = [];
       if (rawLogs) {
         processedLogs = rawLogs.map((log) => {
-          console.log('Processing Log Entry ID:', log.id);
-          console.log('DEBUG: log.users object for this entry:', log.users);
-          console.log('DEBUG: log.requested_zone_id for this entry:', log.requested_zone_id);
-          console.log('DEBUG: log.zones object (from Supabase join) for this entry:', log.zones);
+          // console.log('Processing Log Entry ID:', log.id);
+          // console.log('DEBUG: log.users object for this entry:', log.users);
+          // console.log('DEBUG: log.requested_zone_id for this entry:', log.requested_zone_id);
+          // console.log('DEBUG: log.zones object (from Supabase join) for this entry:', log.zones);
 
           const userDetails = log.users;
           const userName = userDetails?.full_name || log.user_id || 'N/A';
@@ -334,12 +336,12 @@ const AccessLogsTab: React.FC = () => {
 
           const userStatus = userDetails?.status_id ? userStatuses.find((s) => s.id === userDetails.status_id)?.name || 'N/A' : 'N/A';
 
-          // Priorizar log.zones?.name (de la unión), luego zonesList.find, luego requested_zone_id
           const zoneName =
             log.zones?.name || (log.requested_zone_id ? zonesList.find((z) => z.id === log.requested_zone_id)?.name || log.requested_zone_id : 'N/A');
-          console.log('DEBUG: Resolved ZoneName for display:', zoneName);
+          // console.log('DEBUG: Resolved ZoneName for display:', zoneName);
 
           const status = log.decision;
+          const profilePictureUrl = userDetails?.profile_picture_url || null;
 
           return {
             id: log.id,
@@ -351,12 +353,11 @@ const AccessLogsTab: React.FC = () => {
             userStatus: userStatus,
             zoneName: zoneName,
             status: status,
+            profilePictureUrl: profilePictureUrl,
           };
         });
       }
 
-      // ¡CAMBIO CLAVE! Filtro client-side como salvaguarda FINAL para la zona
-      // Esto es crucial si el filtro de Supabase no es 100% estricto con los joins nulos
       const finalFilteredLogs = processedLogs.filter((log) => {
         const matchesZoneFilter = selectedLogZone === 'all' ? true : log.zoneName === selectedLogZone;
 
@@ -374,7 +375,7 @@ const AccessLogsTab: React.FC = () => {
       });
 
       setAccessLogs(finalFilteredLogs);
-      console.log('DEBUG: fetchAccessLogs FINISHED successfully. Final filtered logs count:', finalFilteredLogs.length);
+      // console.log('DEBUG: fetchAccessLogs FINISHED successfully. Final filtered logs count:', finalFilteredLogs.length);
     } catch (error: any) {
       console.error('Error fetching access logs:', error);
       setErrorAccessLogs(error.message || 'Failed to load access logs.');
@@ -387,10 +388,10 @@ const AccessLogsTab: React.FC = () => {
     dateTo,
     selectedLogStatus,
     selectedLogUserId,
-    selectedLogZone, // Asegurarse de que este en las dependencias
+    selectedLogZone,
     generalSearchTerm,
     roles,
-    zonesList, // Asegurarse de que zonesList esté en las dependencias para el find
+    zonesList,
     userStatuses,
     catalogsReady,
     loadingRoles,
@@ -400,18 +401,18 @@ const AccessLogsTab: React.FC = () => {
   ]);
 
   useEffect(() => {
-    console.log(
-      'DEBUG: useEffect for fetchAccessLogs triggered. catalogsReady:',
-      catalogsReady,
-      'loadingRoles:',
-      loadingRoles,
-      'loadingZonesList:',
-      loadingZonesList,
-      'loadingUserStatuses:',
-      loadingUserStatuses,
-      'loadingAllUsers:',
-      loadingAllUsers
-    );
+    // console.log(
+    //   'DEBUG: useEffect for fetchAccessLogs triggered. catalogsReady:',
+    //   catalogsReady,
+    //   'loadingRoles:',
+    //   loadingRoles,
+    //   'loadingZonesList:',
+    //   loadingZonesList,
+    //   'loadingUserStatuses:',
+    //   loadingUserStatuses,
+    //   'loadingAllUsers:',
+    //   loadingAllUsers
+    // );
     if (catalogsReady && !loadingRoles && !loadingZonesList && !loadingUserStatuses && !loadingAllUsers) {
       fetchAccessLogs();
     }
@@ -422,7 +423,13 @@ const AccessLogsTab: React.FC = () => {
   }, [generalSearchTerm, selectedLogUserId, selectedLogZone, selectedLogStatus, dateFrom, dateTo, logItemsPerPage]);
 
   const handleAIDetails = useCallback((log: DisplayLog) => {
-    console.log('AI Details for log (if needed):', log);
+    // console.log('AI Details for log (if needed):', log);
+  }, []);
+
+  // Nuevo manejador para abrir el modal de imagen
+  const openImageModal = useCallback((imageUrl: string) => {
+    setCurrentImageUrl(imageUrl);
+    setImageModalOpen(true);
   }, []);
 
   const handleSummarySort = useCallback(
@@ -438,6 +445,7 @@ const AccessLogsTab: React.FC = () => {
   );
 
   const logColumns: Column[] = [
+    { key: 'profilePicture', label: 'Photo', sortable: false },
     { key: 'timestamp', label: 'Timestamp', sortable: true },
     { key: 'userName', label: 'User Name', sortable: true },
     { key: 'userEmail', label: 'User Email', sortable: false },
@@ -603,7 +611,6 @@ const AccessLogsTab: React.FC = () => {
                   <SelectValue placeholder="All Zones" />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* ¡CAMBIO CLAVE! Corregido a "All Zones" */}
                   <SelectItem value="all">All Zones</SelectItem>
                   {zonesList.map((zone) => (
                     <SelectItem key={zone.id} value={zone.name}>
@@ -692,6 +699,22 @@ const AccessLogsTab: React.FC = () => {
                   {paginatedLogs.length > 0 ? (
                     paginatedLogs.map((log) => (
                       <TableRow key={log.id}>
+                        <TableCell>
+                          {log.profilePictureUrl ? (
+                            <img
+                              src={log.profilePictureUrl}
+                              alt={log.userName || 'User'}
+                              className="w-10 h-10 rounded-full object-cover cursor-pointer" // Añadir cursor-pointer
+                              onClick={() => openImageModal(log.profilePictureUrl!)} // Abrir modal al hacer clic
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = 'https://placehold.co/40x40/cccccc/ffffff?text=N/A';
+                              }}
+                            />
+                          ) : (
+                            <UserCircle className="w-10 h-10 text-gray-400" />
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{log.timestamp}</TableCell>
                         <TableCell className="font-medium">{log.userName}</TableCell>
                         <TableCell className="text-gray-600">{log.userEmail}</TableCell>
@@ -789,11 +812,12 @@ const AccessLogsTab: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Access Summary Modal (sin cambios relevantes para esta tarea) */}
       <Dialog open={summaryModalOpen} onOpenChange={setSummaryModalOpen}>
         <DialogContent className="sm:max-w-6xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Access Summary & Insights</DialogTitle>
-            <DialogDescription>Daily access summary for all users (Today: {new Date().toLocaleDateString()})</DialogDescription>
+            {/* <DialogDescription>Daily access summary for all users (Today: {new Date().toLocaleDateString()})</DialogDescription> */}
           </DialogHeader>
 
           <div className="space-y-6">
@@ -819,6 +843,14 @@ const AccessLogsTab: React.FC = () => {
                   <div className="text-center">
                     <p className="2xl font-bold text-red-600">{accessLogs.filter((log: any) => log.status === 'access_denied').length}</p>
                     <p className="text-sm text-gray-600">Failed</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-600">{Array.from(new Set(accessLogs.map((log: any) => log.zoneName))).length}</p>
+                    <p className="text-sm text-gray-600">Zones Accessed</p>
                   </div>
                 </CardContent>
               </Card>
@@ -986,6 +1018,7 @@ const AccessLogsTab: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* AI Details Modal (sin cambios relevantes para esta tarea) */}
       <Dialog open={!!aiDetailsLog} onOpenChange={() => setAIDetailsLog(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -1002,6 +1035,38 @@ const AccessLogsTab: React.FC = () => {
           </div>
           <DialogFooter>
             <Button onClick={() => setAIDetailsLog(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nuevo Modal para mostrar la imagen de perfil en grande */}
+      <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          {' '}
+          {/* Ajusta el tamaño máximo del modal */}
+          <DialogHeader>
+            <DialogTitle>Profile Picture</DialogTitle>
+            <DialogDescription>
+              Full size profile picture of {accessLogs.find((log) => log.profilePictureUrl === currentImageUrl)?.userName || 'the user'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center items-center p-4">
+            {currentImageUrl ? (
+              <img
+                src={currentImageUrl}
+                alt="Profile Picture"
+                className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" // Estilos para la imagen grande
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = 'https://placehold.co/400x400/cccccc/ffffff?text=Image+Not+Available'; // Fallback para imagen grande
+                }}
+              />
+            ) : (
+              <div className="text-center text-gray-500">No image available.</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setImageModalOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
