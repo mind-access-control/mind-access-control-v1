@@ -1,13 +1,56 @@
 // Importar las dependencias necesarias.
-// 'serve' es para crear un servidor HTTP básico en Deno.
-// 'createClient' es el cliente de Supabase para interactuar con tu proyecto.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type PostgrestError as _PostgrestError } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// Este console.log aparecerá en los logs de la Edge Function cuando se inicie.
 console.log('Edge Function "ef-users" started!');
 
-// Interfaces for type safety
+// --- Interfaces para Tipado de Datos ---
+
+// Interfaz para elementos de catálogo (roles, estados, zonas)
+interface CatalogItem {
+  id: string;
+  name: string;
+}
+
+// ¡CAMBIO CLAVE! Interfaz para la estructura de acceso a zonas desde la base de datos
+// Ahora 'zones' es un array de CatalogItem, reflejando cómo Supabase lo devuelve en el join
+interface UserZoneAccessDB {
+  zones: CatalogItem[]; // Es un array, incluso si solo hay una zona
+}
+
+// Interfaz para la estructura de la cara (embedding)
+interface FaceDB {
+  embedding: number[];
+}
+
+// ¡CAMBIO CLAVE! Interfaz para la estructura de datos de usuario tal como viene de la consulta Supabase JOINED
+// Supabase a menudo devuelve las relaciones como arrays, incluso si solo hay un elemento.
+interface UserDataFromDB {
+  id: string;
+  full_name: string | null;
+  profile_picture_url: string | null;
+  access_method: string | null;
+  created_at: string;
+  updated_at: string;
+  // Estos ahora son arrays, ya que Supabase puede aplanarlos así en la respuesta REST
+  roles_catalog: CatalogItem[] | null; // Puede ser un array de un solo elemento
+  user_statuses_catalog: CatalogItem[] | null; // Puede ser un array de un solo elemento
+  user_zone_access: UserZoneAccessDB[]; // Array de objetos que contienen arrays de zonas
+  faces: FaceDB[];
+}
+
+// Interfaz para la estructura de datos de usuario transformada para el frontend
+interface TransformedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  accessZones: string[]; // Array de nombres de zonas
+  faceEmbedding?: number[];
+  profilePictureUrl?: string | null;
+}
+
+// Interfaz para el payload de creación/actualización de usuario
 interface UserPayload {
   fullName: string;
   email: string;
@@ -18,11 +61,7 @@ interface UserPayload {
   profilePictureUrl?: string;
 }
 
-interface Zone {
-  id: string;
-  name: string;
-}
-
+// Interfaz para la solicitud de lista de usuarios (query params)
 interface UserListRequest {
   page?: number;
   limit?: number;
@@ -34,6 +73,7 @@ interface UserListRequest {
   sortOrder?: 'asc' | 'desc';
 }
 
+// Interfaz para la respuesta paginada
 interface PaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -53,8 +93,6 @@ interface PaginatedResponse<T> {
     };
   };
 }
-
-type CatalogItem = { id: string; name: string };
 
 // Helper function to create Supabase client
 function createSupabaseClient() {
@@ -190,6 +228,11 @@ async function handleGet(req: Request) {
         return createCorsResponse({ error: error.message }, 500);
       }
 
+      const userData: UserDataFromDB | undefined = data?.[0];
+      if (!userData) {
+        return createCorsResponse({ error: 'User not found' }, 404);
+      }
+
       // Get user email from auth.users
       const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
 
@@ -207,22 +250,22 @@ async function handleGet(req: Request) {
         });
       }
 
-      // Process the data (similar to the list logic but for single user)
-      const userData = data[0]; // Get the first (and only) user
-      if (!userData) {
-        return createCorsResponse({ error: 'User not found' }, 404);
-      }
+      // Extract unique zone names from the joined data
+      // ¡CAMBIO CLAVE! Acceder a access.zones[0].name porque zones es un array
+      const zoneNames =
+        userData.user_zone_access
+          ?.map((access: UserZoneAccessDB) => access.zones?.[0]?.name) // Acceder al primer elemento del array zones
+          .filter(Boolean) || [];
 
-      // Extract zone names from the joined data
-      const zoneNames = userData.user_zone_access?.map((access: { zones: { name: string } }) => access.zones.name) || [];
-
-      // Transform the data to match the User interface
-      const transformedUser = {
+      // Transform the data to match the TransformedUser interface
+      const transformedUser: TransformedUser = {
         id: userData.id,
         name: userData.full_name || '',
         email: emailMap.get(userData.id) || '',
-        role: userData.roles_catalog?.name || '',
+        // ¡CAMBIO CLAVE! Acceder al primer elemento del array roles_catalog
+        role: userData.roles_catalog?.[0]?.name || '',
         accessZones: zoneNames,
+        // ¡CAMBIO CLAVE! Acceder al primer elemento del array faces
         faceEmbedding: userData.faces?.[0]?.embedding || undefined,
         profilePictureUrl: userData.profile_picture_url || undefined,
       };
@@ -259,62 +302,59 @@ async function handleGet(req: Request) {
     }
 
     // Process the data to group zone access by user
-    const userMap = new Map<string, {
-      id: string;
-      full_name?: string;
-      profile_picture_url?: string;
-      roles_catalog?: { id?: string; name?: string };
-      user_zone_access: { zones: { id: string; name: string } }[];
-      faces: { embedding?: number[] }[];
-    }>();
+    const userMap = new Map<string, UserDataFromDB>();
 
     // Group the data by user ID
-    data.forEach((row: any) => {
+    data.forEach((row: UserDataFromDB) => {
       const userId = row.id;
 
       if (!userMap.has(userId)) {
         userMap.set(userId, {
-          id: userId,
-          full_name: row.full_name,
-          profile_picture_url: row.profile_picture_url,
-          roles_catalog: row.roles_catalog,
-          user_zone_access: [],
-          faces: []
+          ...row,
+          // Asegurarse de que estos sean arrays vacíos si no están presentes
+          user_zone_access: row.user_zone_access || [],
+          faces: row.faces || [],
+          // Asegurarse de que roles_catalog y user_statuses_catalog sean arrays o null
+          roles_catalog: row.roles_catalog || null,
+          user_statuses_catalog: row.user_statuses_catalog || null,
         });
       }
 
       const user = userMap.get(userId)!;
 
-      // Add zone access if it exists
-      if (row.user_zone_access && row.user_zone_access.length > 0) {
+      // Add zone access if it exists (y si es un array válido)
+      if (row.user_zone_access && Array.isArray(row.user_zone_access)) {
         user.user_zone_access.push(...row.user_zone_access);
       }
 
-      // Add face embedding if it exists
-      if (row.faces && row.faces.length > 0) {
+      // Add face embedding if it exists (y si es un array válido)
+      if (row.faces && Array.isArray(row.faces)) {
         user.faces.push(...row.faces);
       }
     });
 
-    // Transform the data to match the User interface
-    const transformUser = (user: ReturnType<typeof userMap.get>) => {
+    // Transform the data to match the TransformedUser interface
+    const transformUser = (user: UserDataFromDB): TransformedUser | null => {
       if (!user) return null;
 
       // Extract unique zone names
-      const zoneNames = [...new Set(user.user_zone_access.map(access => access.zones.name))];
+      // ¡CAMBIO CLAVE! Acceder a access.zones[0].name porque zones es un array
+      const zoneNames = [...new Set(user.user_zone_access.map((access) => access.zones?.[0]?.name))];
 
       return {
         id: user.id,
         name: user.full_name || '',
         email: emailMap.get(user.id) || '',
-        role: user.roles_catalog?.name || '',
+        // ¡CAMBIO CLAVE! Acceder al primer elemento del array roles_catalog
+        role: user.roles_catalog?.[0]?.name || '',
         accessZones: zoneNames,
+        // ¡CAMBIO CLAVE! Acceder al primer elemento del array faces
         faceEmbedding: user.faces?.[0]?.embedding || undefined,
         profilePictureUrl: user.profile_picture_url || undefined,
       };
     };
 
-    const transformedData = Array.from(userMap.values()).map(transformUser).filter(Boolean);
+    const transformedData = Array.from(userMap.values()).map(transformUser).filter(Boolean) as TransformedUser[];
 
     // Calculate pagination info
     const total = count || 0;
@@ -330,7 +370,7 @@ async function handleGet(req: Request) {
     const { data: zones } = await supabase.from('zones').select('id, name');
 
     // Create paginated response
-    const response: PaginatedResponse<ReturnType<typeof transformUser>> = {
+    const response: PaginatedResponse<TransformedUser> = {
       data: transformedData,
       pagination: {
         page,
@@ -417,12 +457,12 @@ async function handlePost(req: Request) {
     }
 
     if (!zonesData || zonesData.length !== payload.accessZoneNames.length) {
-      const foundZoneNames = (zonesData || []).map((z: Zone) => z.name);
+      const foundZoneNames = (zonesData || []).map((z: CatalogItem) => z.name);
       const missingZones = payload.accessZoneNames.filter((name: string) => !foundZoneNames.includes(name));
       throw new Error(`Some access zones not found: ${missingZones.join(', ')}`);
     }
 
-    const resolvedZoneIds = zonesData.map((zone: Zone) => zone.id);
+    const resolvedZoneIds = zonesData.map((zone: CatalogItem) => zone.id);
 
     // 3. Insert into users table
     const currentTimestamp = new Date().toISOString();
@@ -541,12 +581,12 @@ async function handlePutPatch(req: Request) {
       }
 
       if (!zonesData || zonesData.length !== payload.accessZoneNames.length) {
-        const foundZoneNames = (zonesData || []).map((z: Zone) => z.name);
+        const foundZoneNames = (zonesData || []).map((z: CatalogItem) => z.name);
         const missingZones = payload.accessZoneNames.filter((name: string) => !foundZoneNames.includes(name));
         throw new Error(`Some access zones not found: ${missingZones.join(', ')}`);
       }
 
-      const resolvedZoneIds = zonesData.map((zone: Zone) => zone.id);
+      const resolvedZoneIds = zonesData.map((zone: CatalogItem) => zone.id);
       const zoneAccessesToInsert = resolvedZoneIds.map((zoneId: string) => ({
         user_id: userId,
         zone_id: zoneId,

@@ -22,7 +22,8 @@ interface GetObservedUsersResponse {
 const ObservedUsersTab: React.FC = () => {
   const [observedUsers, setObservedUsers] = useState<ObservedUser[]>([]);
   const [totalObservedUsersCount, setTotalObservedUsersCount] = useState(0); // Conteo para la tabla/paginación
-  const [absoluteObservedUsersCount, setAbsoluteObservedUsersCount] = useState(0); // NUEVO: Conteo total real
+  // ¡CAMBIO CLAVE! Asegurarse de que setAbsoluteTotalCount esté desestructurado aquí
+  const [absoluteObservedUsersCount, setAbsoluteTotalCount] = useState(0); // NUEVO: Conteo total real
 
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [highRiskCount, setHighRiskCount] = useState(0);
@@ -79,7 +80,7 @@ const ObservedUsersTab: React.FC = () => {
 
       setObservedUsers(result.users);
       setTotalObservedUsersCount(result.totalCount); // Conteo para la tabla
-      setAbsoluteObservedUsersCount(result.absoluteTotalCount); // NUEVO: Conteo absoluto para la card
+      setAbsoluteTotalCount(result.absoluteTotalCount); // NUEVO: Conteo absoluto para la card
       setPendingReviewCount(result.pendingReviewCount);
       setHighRiskCount(result.highRiskCount);
       setActiveTemporalCount(result.activeTemporalCount);
@@ -140,6 +141,7 @@ const ObservedUsersTab: React.FC = () => {
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
+  // Definición de handleCardClick
   const handleCardClick = useCallback((type: 'total' | 'pendingReview' | 'highRisk' | 'activeTemporal' | 'expired') => {
     setCurrentPage(1);
     setSearchTerm('');
@@ -201,17 +203,6 @@ const ObservedUsersTab: React.FC = () => {
     },
     [fetchObservedUsers]
   );
-
-  const handleRegisterObservedUser = useCallback((user: ObservedUser) => {
-    console.log(`Action: Register user ${user.id} - NOT YET IMPLEMENTED`);
-    setActionMessage(`Registro de usuario ${user.id} no implementado aún.`);
-    if (actionMessageTimeoutRef.current) {
-      clearTimeout(actionMessageTimeoutRef.current);
-    }
-    actionMessageTimeoutRef.current = setTimeout(() => {
-      setActionMessage(null);
-    }, 10000);
-  }, []);
 
   const handleExtendObservedUserAccess = useCallback(
     (user: ObservedUser) => {
@@ -283,7 +274,6 @@ const ObservedUsersTab: React.FC = () => {
           sortField={observedSortField}
           sortDirection={observedSortDirection}
           onSortChange={handleObservedSortChange}
-          onRegister={handleRegisterObservedUser}
           onExtend={handleExtendObservedUserAccess}
           onBlock={handleBlockObservedUser}
           searchTerm={searchTerm}

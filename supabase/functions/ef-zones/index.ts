@@ -1,6 +1,6 @@
 // Import necessary dependencies
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'; // Importar SupabaseClient
 
 console.log('Edge Function "ef-zones" started!');
 
@@ -8,25 +8,26 @@ console.log('Edge Function "ef-zones" started!');
 interface Zone {
   id: string;
   name: string;
-  access_level?: number;
-  category?: string;
+  access_level?: number | null; // Puede ser null si no se define
+  category?: string | null; // Puede ser null si no se define
 }
 
 interface CreateZoneRequest {
   name: string;
-  access_level?: number;
-  category?: string;
+  access_level?: number | null;
+  category?: string | null;
 }
 
 interface UpdateZoneRequest {
   name?: string;
-  access_level?: number;
-  category?: string;
+  access_level?: number | null;
+  category?: string | null;
 }
 
-interface ZoneResponse {
-  success: boolean;
-  data?: Zone | Zone[];
+// Interfaz para el tipo de respuesta general de la Edge Function
+interface EdgeFunctionResponse {
+  success?: boolean;
+  data?: Zone | Zone[] | null;
   error?: string;
   message?: string;
 }
@@ -37,23 +38,18 @@ interface ErrorWithMessage {
 }
 
 function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof (error as ErrorWithMessage).message === "string"
-  );
+  return typeof error === 'object' && error !== null && 'message' in error && typeof (error as ErrorWithMessage).message === 'string';
 }
 
 // CORS response helper
-function createCorsResponse(data: any, status: number = 200): Response {
+function createCorsResponse(data: unknown | EdgeFunctionResponse, status: number = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-requested-with, x-request-id",
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-requested-with, x-request-id',
     },
   });
 }
@@ -72,15 +68,15 @@ function validateZoneName(name: string): string | null {
   return null;
 }
 
-function validateAccessLevel(accessLevel?: number): string | null {
-  if (accessLevel !== undefined && (typeof accessLevel !== 'number' || accessLevel < 0)) {
+function validateAccessLevel(accessLevel?: number | null): string | null {
+  if (accessLevel !== undefined && accessLevel !== null && (typeof accessLevel !== 'number' || accessLevel < 0)) {
     return 'Access level must be a non-negative number';
   }
   return null;
 }
 
-function validateCategory(category?: string): string | null {
-  if (category !== undefined && (typeof category !== 'string' || category.trim().length === 0)) {
+function validateCategory(category?: string | null): string | null {
+  if (category !== undefined && category !== null && (typeof category !== 'string' || category.trim().length === 0)) {
     return 'Category must be a non-empty string';
   }
   if (category && category.length > 50) {
@@ -89,29 +85,30 @@ function validateCategory(category?: string): string | null {
   return null;
 }
 
+// Helper function to create Supabase client
+function createSupabaseClient(): SupabaseClient {
+  return createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
+    auth: { persistSession: false },
+  });
+}
+
 // Main request handler
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
       headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-requested-with, x-request-id",
-        "Access-Control-Max-Age": "86400",
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-requested-with, x-request-id',
+        'Access-Control-Max-Age': '86400',
       },
     });
   }
 
   // Initialize Supabase client with service role for admin operations
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    {
-      auth: { persistSession: false },
-    },
-  );
+  const supabase = createSupabaseClient();
 
   try {
     const url = new URL(req.url);
@@ -122,57 +119,45 @@ serve(async (req: Request): Promise<Response> => {
 
     // Route based on HTTP method
     switch (req.method) {
-      case "GET":
+      case 'GET':
         return await handleGet(req, supabase, zoneId);
-      case "POST":
+      case 'POST':
         return await handlePost(req, supabase);
-      case "PUT":
-      case "PATCH":
+      case 'PUT':
+      case 'PATCH':
         return await handlePutPatch(req, supabase, zoneId);
-      case "DELETE":
+      case 'DELETE':
         return await handleDelete(req, supabase, zoneId);
       default:
-        return createCorsResponse(
-          { error: `Method ${req.method} not allowed` },
-          405
-        );
+        return createCorsResponse({ error: `Method ${req.method} not allowed` }, 405);
     }
   } catch (error: unknown) {
-    console.error("🔥 Unhandled error in manage-zones Edge Function:", error);
+    console.error('🔥 Unhandled error in manage-zones Edge Function:', error);
 
-    let errorMessage = "An unexpected error occurred";
+    let errorMessage = 'An unexpected error occurred';
     if (error instanceof Error) {
       errorMessage = error.message;
-    } else if (typeof error === "string") {
+    } else if (typeof error === 'string') {
       errorMessage = error;
     } else if (isErrorWithMessage(error)) {
       errorMessage = error.message;
     }
 
-    return createCorsResponse(
-      { error: errorMessage },
-      500
-    );
+    return createCorsResponse({ error: errorMessage }, 500);
   }
 });
 
 // GET: Retrieve zones
-async function handleGet(req: Request, supabase: any, zoneId?: string | null): Promise<Response> {
+// ¡CAMBIO CLAVE! Renombrar 'req' a '_req'
+async function handleGet(_req: Request, supabase: SupabaseClient, zoneId?: string | null): Promise<Response> {
   try {
     if (zoneId) {
       // Get specific zone by ID
-      const { data, error } = await supabase
-        .from("zones")
-        .select("id, name, access_level, category")
-        .eq("id", zoneId)
-        .single();
+      const { data, error } = await supabase.from('zones').select('id, name, access_level, category').eq('id', zoneId).single();
 
       if (error) {
         if (error.code === 'PGRST116') {
-          return createCorsResponse(
-            { error: "Zone not found" },
-            404
-          );
+          return createCorsResponse({ error: 'Zone not found' }, 404);
         }
         throw new Error(`Error fetching zone: ${error.message}`);
       }
@@ -180,14 +165,11 @@ async function handleGet(req: Request, supabase: any, zoneId?: string | null): P
       return createCorsResponse({
         success: true,
         data,
-        message: "Zone retrieved successfully"
+        message: 'Zone retrieved successfully',
       });
     } else {
       // Get all zones
-      const { data, error } = await supabase
-        .from("zones")
-        .select("id, name, access_level, category")
-        .order("name", { ascending: true });
+      const { data, error } = await supabase.from('zones').select('id, name, access_level, category').order('name', { ascending: true });
 
       if (error) {
         throw new Error(`Error fetching zones: ${error.message}`);
@@ -196,7 +178,7 @@ async function handleGet(req: Request, supabase: any, zoneId?: string | null): P
       return createCorsResponse({
         success: true,
         data: data || [],
-        message: `Retrieved ${data?.length || 0} zones successfully`
+        message: `Retrieved ${data?.length || 0} zones successfully`,
       });
     }
   } catch (error) {
@@ -205,62 +187,49 @@ async function handleGet(req: Request, supabase: any, zoneId?: string | null): P
 }
 
 // POST: Create new zone
-async function handlePost(req: Request, supabase: any): Promise<Response> {
+async function handlePost(req: Request, supabase: SupabaseClient): Promise<Response> {
+  // 'req' is used via 'req.json()'
   try {
     const payload: CreateZoneRequest = await req.json();
 
     // Validate input
     const nameError = validateZoneName(payload.name);
     if (nameError) {
-      return createCorsResponse(
-        { error: nameError },
-        400
-      );
+      return createCorsResponse({ error: nameError }, 400);
     }
 
     const accessLevelError = validateAccessLevel(payload.access_level);
     if (accessLevelError) {
-      return createCorsResponse(
-        { error: accessLevelError },
-        400
-      );
+      return createCorsResponse({ error: accessLevelError }, 400);
     }
 
     const categoryError = validateCategory(payload.category);
     if (categoryError) {
-      return createCorsResponse(
-        { error: categoryError },
-        400
-      );
+      return createCorsResponse({ error: categoryError }, 400);
     }
 
     // Check if zone name already exists
-    const { data: existingZone, error: checkError } = await supabase
-      .from("zones")
-      .select("id")
-      .eq("name", payload.name.trim())
-      .single();
+    const { data: existingZone, error: checkError } = await supabase.from('zones').select('id').eq('name', payload.name.trim()).single();
 
     if (checkError && checkError.code !== 'PGRST116') {
       throw new Error(`Error checking existing zone: ${checkError.message}`);
     }
 
     if (existingZone) {
-      return createCorsResponse(
-        { error: "Zone with this name already exists" },
-        409
-      );
+      return createCorsResponse({ error: 'Zone with this name already exists' }, 409);
     }
 
     // Create new zone
     const { data, error } = await supabase
-      .from("zones")
-      .insert([{
-        name: payload.name.trim(),
-        access_level: payload.access_level || null,
-        category: payload.category || 'Employee',
-      }])
-      .select("id, name, access_level, category")
+      .from('zones')
+      .insert([
+        {
+          name: payload.name.trim(),
+          access_level: payload.access_level || null,
+          category: payload.category || 'Employee',
+        },
+      ])
+      .select('id, name, access_level, category')
       .single();
 
     if (error) {
@@ -269,24 +238,25 @@ async function handlePost(req: Request, supabase: any): Promise<Response> {
 
     console.log(`✅ Zone created: ${data.name} (ID: ${data.id})`);
 
-    return createCorsResponse({
-      success: true,
-      data,
-      message: "Zone created successfully"
-    }, 201);
+    return createCorsResponse(
+      {
+        success: true,
+        data,
+        message: 'Zone created successfully',
+      },
+      201
+    );
   } catch (error) {
     throw error;
   }
 }
 
 // PUT/PATCH: Update zone
-async function handlePutPatch(req: Request, supabase: any, zoneId?: string | null): Promise<Response> {
+async function handlePutPatch(req: Request, supabase: SupabaseClient, zoneId?: string | null): Promise<Response> {
+  // 'req' is used via 'req.url' and 'req.json()'
   try {
     if (!zoneId) {
-      return createCorsResponse(
-        { error: "Zone ID is required for updates" },
-        400
-      );
+      return createCorsResponse({ error: 'Zone ID is required for updates' }, 400);
     }
 
     const payload: UpdateZoneRequest = await req.json();
@@ -295,46 +265,30 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
     if (payload.name !== undefined) {
       const nameError = validateZoneName(payload.name);
       if (nameError) {
-        return createCorsResponse(
-          { error: nameError },
-          400
-        );
+        return createCorsResponse({ error: nameError }, 400);
       }
     }
 
     if (payload.access_level !== undefined) {
       const accessLevelError = validateAccessLevel(payload.access_level);
       if (accessLevelError) {
-        return createCorsResponse(
-          { error: accessLevelError },
-          400
-        );
+        return createCorsResponse({ error: accessLevelError }, 400);
       }
     }
 
     if (payload.category !== undefined) {
       const categoryError = validateCategory(payload.category);
       if (categoryError) {
-        return createCorsResponse(
-          { error: categoryError },
-          400
-        );
+        return createCorsResponse({ error: categoryError }, 400);
       }
     }
 
     // Check if zone exists
-    const { data: existingZone, error: checkError } = await supabase
-      .from("zones")
-      .select("id, name")
-      .eq("id", zoneId)
-      .single();
+    const { data: existingZone, error: checkError } = await supabase.from('zones').select('id, name').eq('id', zoneId).single();
 
     if (checkError) {
       if (checkError.code === 'PGRST116') {
-        return createCorsResponse(
-          { error: "Zone not found" },
-          404
-        );
+        return createCorsResponse({ error: 'Zone not found' }, 404);
       }
       throw new Error(`Error checking zone existence: ${checkError.message}`);
     }
@@ -342,10 +296,10 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
     // Check for name conflicts if name is being updated
     if (payload.name && payload.name.trim() !== existingZone.name) {
       const { data: nameConflict, error: nameCheckError } = await supabase
-        .from("zones")
-        .select("id")
-        .eq("name", payload.name.trim())
-        .neq("id", zoneId)
+        .from('zones')
+        .select('id')
+        .eq('name', payload.name.trim())
+        .neq('id', zoneId)
         .single();
 
       if (nameCheckError && nameCheckError.code !== 'PGRST116') {
@@ -353,32 +307,24 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
       }
 
       if (nameConflict) {
-        return createCorsResponse(
-          { error: "Zone with this name already exists" },
-          409
-        );
+        return createCorsResponse({ error: 'Zone with this name already exists' }, 409);
       }
     }
 
     // Prepare update payload
-    const updatePayload: any = {};
-    if (payload.name !== undefined) {
+    const updatePayload: Partial<Zone> = {};
+    if (payload.name !== undefined && payload.name !== null) {
       updatePayload.name = payload.name.trim();
     }
     if (payload.access_level !== undefined) {
       updatePayload.access_level = payload.access_level;
     }
-    if (payload.category !== undefined) {
+    if (payload.category !== undefined && payload.category !== null) {
       updatePayload.category = payload.category.trim();
     }
 
     // Update zone
-    const { data, error } = await supabase
-      .from("zones")
-      .update(updatePayload)
-      .eq("id", zoneId)
-      .select("id, name, access_level, category")
-      .single();
+    const { data, error } = await supabase.from('zones').update(updatePayload).eq('id', zoneId).select('id, name, access_level, category').single();
 
     if (error) {
       throw new Error(`Error updating zone: ${error.message}`);
@@ -389,7 +335,7 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
     return createCorsResponse({
       success: true,
       data,
-      message: "Zone updated successfully"
+      message: 'Zone updated successfully',
     });
   } catch (error) {
     throw error;
@@ -397,73 +343,47 @@ async function handlePutPatch(req: Request, supabase: any, zoneId?: string | nul
 }
 
 // DELETE: Remove zone
-async function handleDelete(req: Request, supabase: any, zoneId?: string | null): Promise<Response> {
+// ¡CAMBIO CLAVE! Renombrar 'req' a '_req'
+async function handleDelete(_req: Request, supabase: SupabaseClient, zoneId?: string | null): Promise<Response> {
   try {
     if (!zoneId) {
-      return createCorsResponse(
-        { error: "Zone ID is required for deletion" },
-        400
-      );
+      return createCorsResponse({ error: 'Zone ID is required for deletion' }, 400);
     }
 
     // Check if zone exists
-    const { data: existingZone, error: checkError } = await supabase
-      .from("zones")
-      .select("id, name")
-      .eq("id", zoneId)
-      .single();
+    const { data: existingZone, error: checkError } = await supabase.from('zones').select('id, name').eq('id', zoneId).single();
 
     if (checkError) {
       if (checkError.code === 'PGRST116') {
-        return createCorsResponse(
-          { error: "Zone not found" },
-          404
-        );
+        return createCorsResponse({ error: 'Zone not found' }, 404);
       }
       throw new Error(`Error checking zone existence: ${checkError.message}`);
     }
 
     // Check for dependencies (users with access to this zone)
-    const { data: userAccess, error: accessCheckError } = await supabase
-      .from("user_zone_access")
-      .select("user_id")
-      .eq("zone_id", zoneId)
-      .limit(1);
+    const { data: userAccess, error: accessCheckError } = await supabase.from('user_zone_access').select('user_id').eq('zone_id', zoneId).limit(1);
 
     if (accessCheckError) {
       throw new Error(`Error checking zone dependencies: ${accessCheckError.message}`);
     }
 
     if (userAccess && userAccess.length > 0) {
-      return createCorsResponse(
-        { error: "Cannot delete zone: Users have access to this zone. Remove user access first." },
-        409
-      );
+      return createCorsResponse({ error: 'Cannot delete zone: Users have access to this zone. Remove user access first.' }, 409);
     }
 
     // Check for cameras in this zone
-    const { data: cameras, error: cameraCheckError } = await supabase
-      .from("cameras")
-      .select("id")
-      .eq("zone_id", zoneId)
-      .limit(1);
+    const { data: cameras, error: cameraCheckError } = await supabase.from('cameras').select('id').eq('zone_id', zoneId).limit(1);
 
     if (cameraCheckError) {
       throw new Error(`Error checking camera dependencies: ${cameraCheckError.message}`);
     }
 
     if (cameras && cameras.length > 0) {
-      return createCorsResponse(
-        { error: "Cannot delete zone: Cameras are assigned to this zone. Reassign cameras first." },
-        409
-      );
+      return createCorsResponse({ error: 'Cannot delete zone: Cameras are assigned to this zone. Reassign cameras first.' }, 409);
     }
 
     // Delete zone
-    const { error } = await supabase
-      .from("zones")
-      .delete()
-      .eq("id", zoneId);
+    const { error } = await supabase.from('zones').delete().eq('id', zoneId);
 
     if (error) {
       throw new Error(`Error deleting zone: ${error.message}`);
@@ -473,9 +393,9 @@ async function handleDelete(req: Request, supabase: any, zoneId?: string | null)
 
     return createCorsResponse({
       success: true,
-      message: "Zone deleted successfully"
+      message: 'Zone deleted successfully',
     });
   } catch (error) {
     throw error;
   }
-} 
+}
