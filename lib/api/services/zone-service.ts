@@ -1,13 +1,16 @@
 import { ZoneClient } from '../clients/zone-client';
 import { Zone } from '../types';
+import { extractArrayData, extractObjectData } from '../utils';
 
 export interface CreateZoneRequest {
   name: string;
+  category?: string;
   access_level?: number;
 }
 
 export interface UpdateZoneRequest {
   name?: string;
+  category?: string;
   access_level?: number;
 }
 
@@ -27,10 +30,10 @@ export class ZoneService {
    */
   static async getZones(): Promise<Zone[]> {
     const response = await zoneClient.getZones();
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to fetch zones');
     }
-    return response.data;
+    return extractArrayData<Zone>(response);
   }
 
   /**
@@ -38,10 +41,10 @@ export class ZoneService {
    */
   static async getZone(id: string): Promise<Zone> {
     const response = await zoneClient.getZone(id);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to fetch zone');
     }
-    return response.data;
+    return extractObjectData<Zone>(response);
   }
 
   /**
@@ -49,10 +52,10 @@ export class ZoneService {
    */
   static async createZone(request: CreateZoneRequest): Promise<Zone> {
     const response = await zoneClient.createZone(request);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to create zone');
     }
-    return response.data;
+    return extractObjectData<Zone>(response);
   }
 
   /**
@@ -60,10 +63,10 @@ export class ZoneService {
    */
   static async updateZone(id: string, request: UpdateZoneRequest): Promise<Zone> {
     const response = await zoneClient.updateZone(id, request);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to update zone');
     }
-    return response.data;
+    return extractObjectData<Zone>(response);
   }
 
   /**
@@ -103,11 +106,27 @@ export class ZoneService {
   }
 
   /**
+   * Validate category
+   */
+  static validateCategory(category?: string): string | null {
+    if (category !== undefined && (typeof category !== 'string' || category.trim().length === 0)) {
+      return 'Category must be a non-empty string';
+    }
+    if (category && category.length > 50) {
+      return 'Category must be 50 characters or less';
+    }
+    return null;
+  }
+
+  /**
    * Validate create zone request
    */
   static validateCreateRequest(request: CreateZoneRequest): string | null {
     const nameError = this.validateZoneName(request.name);
     if (nameError) return nameError;
+
+    const categoryError = this.validateCategory(request.category);
+    if (categoryError) return categoryError;
 
     const accessLevelError = this.validateAccessLevel(request.access_level);
     if (accessLevelError) return accessLevelError;
@@ -122,6 +141,11 @@ export class ZoneService {
     if (request.name !== undefined) {
       const nameError = this.validateZoneName(request.name);
       if (nameError) return nameError;
+    }
+
+    if (request.category !== undefined) {
+      const categoryError = this.validateCategory(request.category);
+      if (categoryError) return categoryError;
     }
 
     if (request.access_level !== undefined) {

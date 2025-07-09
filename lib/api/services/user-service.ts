@@ -1,7 +1,7 @@
 import { UserClient } from '../clients/user-client';
-import { validateUser, validatePagination, validateSorting } from '../validation';
-import { ValidationErrorClass } from '../validation';
-import { CreateUserRequest, UpdateUserRequest, DeleteUserRequest, UserListRequest, UserListResponse, User, Role } from '../types';
+import { CreateUserRequest, DeleteUserRequest, UpdateUserRequest, User, UserListRequest, UserListResponse } from '../types';
+import { extractObjectData } from '../utils';
+import { validatePagination, validateSorting, validateUser, ValidationErrorClass } from '../validation';
 
 // Create a singleton instance of UserClient
 const userClient = new UserClient();
@@ -19,11 +19,11 @@ export class UserService {
 
     // Make API call
     const response = await userClient.createUser(data);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to create user');
     }
 
-    return response.data;
+    return extractObjectData<{ userId: string }>(response);
   }
 
   /**
@@ -35,11 +35,11 @@ export class UserService {
     }
 
     const response = await userClient.updateUser(request);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to update user');
     }
 
-    return response.data;
+    return extractObjectData<{ message: string }>(response);
   }
 
   /**
@@ -51,11 +51,11 @@ export class UserService {
     }
 
     const response = await userClient.deleteUser(request);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to delete user');
     }
 
-    return response.data;
+    return extractObjectData<{ message: string }>(response);
   }
 
   /**
@@ -91,26 +91,26 @@ export class UserService {
     }
 
     const response = await userClient.getUserById(userId);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to fetch user');
     }
 
-    return response.data;
+    return extractObjectData<User>(response);
   }
 
   /**
    * Get a single user role by ID
    */
-  static async getUserRoleById(userId: string):  Promise<{ role_name: string }> {
+  static async getUserRoleById(userId: string): Promise<{ role_name: string }> {
     if (!userId) {
       throw new ValidationErrorClass('User ID is required', [{ field: 'userId', message: 'User ID is required' }]);
     }
 
     const response = await userClient.getUserRoleById(userId);
-    if (!response.success || !response.data) {
+    if (!response.success) {
       throw new Error(response.error || 'Failed to fetch user role');
     }
 
-    return response.data;
+    return extractObjectData<{ role_name: string }>(response);
   }
 }

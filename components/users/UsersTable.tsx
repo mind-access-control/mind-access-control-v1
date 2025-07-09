@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 import { UserService } from '@/lib/api/services/user-service';
 import { UpdateUserRequest, User } from '@/lib/api/types';
@@ -20,7 +21,6 @@ const UsersTable: React.FC = () => {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editingAccessZones, setEditingAccessZones] = useState<string[]>([]);
-  const [editingAccessZonesOpen, setEditingAccessZonesOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
 
@@ -254,62 +254,24 @@ const UsersTable: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           {editingUserId === user.id ? (
-                            <div>
-                              <Popover open={editingAccessZonesOpen} onOpenChange={setEditingAccessZonesOpen}>
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={editingAccessZonesOpen}
-                                    className="w-full justify-between h-8 text-left font-normal"
-                                  >
-                                    {editingAccessZones.length > 0
-                                      ? `${editingAccessZones.length} zone${editingAccessZones.length > 1 ? 's' : ''}`
-                                      : 'Select zones'}
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[200px] p-0" align="start">
-                                  <div className="p-2 space-y-1 max-h-[200px] overflow-auto">
-                                    {errorZones ? (
-                                      <div className="text-red-500 p-2">Error: {errorZones}</div>
-                                    ) : loadingZones ? (
-                                      <div className="text-gray-500 p-2">Loading zones...</div>
-                                    ) : zonesData && zonesData.length > 0 ? (
-                                      zonesData.map((zone) => (
-                                        <div key={zone.id} className="flex items-center space-x-2">
-                                          <Checkbox
-                                            id={`edit-zone-${zone.id}-${editingUser?.id || ''}`}
-                                            checked={editingAccessZones.includes(zone.name)}
-                                            onCheckedChange={() => toggleEditingAccessZone(zone.name)}
-                                          />
-                                          <label
-                                            htmlFor={`edit-zone-${zone.id}-${editingUser?.id || ''}`}
-                                            className="text-sm font-medium leading-none cursor-pointer"
-                                          >
-                                            {zone.name}
-                                          </label>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      !loadingZones && !errorZones && <div className="p-2 text-gray-500">No zones available</div>
-                                    )}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                              {editingAccessZones.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {editingAccessZones.slice(0, 2).map((zone) => (
-                                    <Badge key={zone} variant="secondary" className="text-xs py-0 px-1">
-                                      {zone}
-                                    </Badge>
-                                  ))}
-                                  {editingAccessZones.length > 2 && (
-                                    <Badge variant="secondary" className="text-xs py-0 px-1">
-                                      +{editingAccessZones.length - 2}
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
+                            <div className="w-64">
+                              <ZoneSelector
+                                zones={zonesData}
+                                selectedZones={editingAccessZones}
+                                onZoneToggle={toggleEditingAccessZone}
+                                onSelectAll={(zoneNames) => {
+                                  // Add all zones that aren't already selected
+                                  zoneNames.forEach(zoneName => {
+                                    if (!editingAccessZones.includes(zoneName)) {
+                                      setEditingAccessZones(prev => [...prev, zoneName]);
+                                    }
+                                  });
+                                }}
+                                loading={loadingZones}
+                                error={errorZones}
+                                placeholder="Select access zones"
+                                className="text-sm"
+                              />
                             </div>
                           ) : (
                             <>

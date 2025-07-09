@@ -46,14 +46,14 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: Role;
-  status: UserStatus;
-  accessZones: Zone[];
+  role: string; // Changed from Role object to string (name)
+  status?: string; // Changed from UserStatus object to string (name), made optional
+  accessZones: string[]; // Changed from Zone[] to string[] (zone names)
   faceEmbedding?: number[];
   profilePictureUrl?: string;
-  accessMethod: 'facial' | 'card' | 'pin';
-  createdAt: string;
-  updatedAt: string;
+  accessMethod?: 'facial' | 'card' | 'pin';
+  createdAt?: string;
+  updatedAt?: string;
   deletedAt?: string;
 }
 
@@ -139,8 +139,22 @@ export interface UserStatus {
 export interface Zone {
   id: string;
   name: string;
+  category: string;
   access_level?: number;
 }
+
+// ============================================================================
+// CAMERA MANAGEMENT TYPES
+// ============================================================================
+
+export interface Camera {
+  id: string;
+  name: string;
+  zone_id: string;
+  location?: string;
+  zone?: { id: string; name: string; category?: string } | null;
+}
+
 // ============================================================================
 // AUTHENTICATION TYPES
 // ============================================================================

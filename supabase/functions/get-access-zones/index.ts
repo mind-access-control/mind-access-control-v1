@@ -59,7 +59,7 @@ serve(async (req: Request) => {
     // No se usa 'order by' aquí.
     const { data, error } = await supabase
       .from("zones")
-      .select("id, name"); // Solo necesitamos id y name para el dropdown
+      .select("id, name, category"); // Include category for grouping
 
     if (error) {
       console.error("Error fetching zones:", error);
