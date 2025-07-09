@@ -258,7 +258,7 @@ async function handlePost(req: Request, supabase: any): Promise<Response> {
       .insert([{
         name: payload.name.trim(),
         access_level: payload.access_level || null,
-        category: payload.category || 'General',
+        category: payload.category || 'Employee',
       }])
       .select("id, name, access_level, category")
       .single();

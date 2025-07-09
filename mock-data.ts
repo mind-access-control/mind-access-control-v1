@@ -281,6 +281,9 @@ export const defaultNewCamera = {
   location: '',
 };
 
+ // Predefined categories for zones
+ export const zoneCategories = ['Employee', 'Visitor', 'Management', 'Security', 'Maintenance', 'Guest', 'Contractor', 'Other'];
+
 // Export all mock data as a single object for easy importing
 export const mockData = {
   accessLogs,
@@ -301,4 +304,5 @@ export const mockData = {
   trendData,
   failureCauseData,
   defaultNewCamera,
+  zoneCategories,
 };

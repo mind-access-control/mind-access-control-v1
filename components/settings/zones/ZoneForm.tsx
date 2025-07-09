@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useZoneActions } from '@/hooks/zone.hooks';
 import { ZoneService } from '@/lib/api/services/zone-service';
+import { zoneCategories } from '@/mock-data';
 import { useState } from 'react';
 
 const ZoneForm: React.FC = () => {
@@ -12,9 +13,6 @@ const ZoneForm: React.FC = () => {
   const [newZoneCategory, setNewZoneCategory] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { loadZonesAndNotify } = useZoneActions();
-
-  // Predefined categories for zones
-  const zoneCategories = ['Employee', 'Visitor', 'Management', 'Security', 'Maintenance', 'Guest', 'Contractor', 'Other'];
 
   const handleAddZone = async () => {
     if (!newZoneName.trim()) return;
