@@ -1,17 +1,27 @@
 -- Migration to add zone categories
 -- This adds a category field to zones for better organization
 
--- Add category column to zones table
-ALTER TABLE "public"."zones" 
-ADD COLUMN "category" "text" DEFAULT 'Employee';
+-- up migration
+BEGIN;
 
--- Create an index for better performance when filtering by category
-CREATE INDEX "zones_category_idx" ON "public"."zones" USING "btree" ("category");
+-- Add category column to zones table IF NOT EXISTS
+-- ¡CAMBIO CLAVE! Usar ADD COLUMN IF NOT EXISTS
+ALTER TABLE "public"."zones"
+ADD COLUMN IF NOT EXISTS "category" "text" DEFAULT 'Employee';
 
--- Update existing zones with default category
-UPDATE "public"."zones" SET "category" = 'Employee' WHERE "category" IS NULL;
+-- Si la columna ya existía pero no tenía un valor por defecto,
+-- puedes añadir una actualización para los valores existentes si es necesario.
+-- UPDATE "public"."zones" SET "category" = 'Employee' WHERE "category" IS NULL;
 
--- Grant permissions
-GRANT ALL ON TABLE "public"."zones" TO "anon";
-GRANT ALL ON TABLE "public"."zones" TO "authenticated";
-GRANT ALL ON TABLE "public"."zones" TO "service_role"; 
+
+COMMIT;
+
+-- down migration
+BEGIN;
+
+-- Drop category column from zones table IF EXISTS
+-- ¡CAMBIO CLAVE! Usar DROP COLUMN IF EXISTS
+ALTER TABLE "public"."zones"
+DROP COLUMN IF EXISTS "category";
+
+COMMIT;

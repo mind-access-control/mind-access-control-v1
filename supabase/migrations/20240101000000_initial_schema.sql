@@ -25,11 +25,13 @@ BEGIN
     RETURN QUERY
     SELECT z.id, z.name
     FROM public.zones z
-    WHERE z.id::TEXT = ANY(zone_ids_array); -- Compara la representaci├│n de texto del UUID
+    WHERE z.id::TEXT = ANY(zone_ids_array); -- Compara la representación de texto del UUID
 END;
 $$;
 ALTER FUNCTION "public"."get_zone_names_by_ids"("zone_ids_array" "text"[]) OWNER TO "postgres";
 
+-- DROP FUNCTION IF EXISTS para match_face_embedding con 3 parámetros
+DROP FUNCTION IF EXISTS "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer);
 CREATE OR REPLACE FUNCTION "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) RETURNS TABLE("user_id" "uuid", "embedding" "public"."vector", "distance" double precision)
     LANGUAGE "plpgsql"
     AS $$
@@ -45,7 +47,7 @@ CREATE OR REPLACE FUNCTION "public"."match_face_embedding"("query_embedding" "pu
             public.users u ON f.user_id = u.id -- Unir con la tabla public.users
         WHERE
             f.embedding <-> query_embedding < match_threshold
-            AND u.deleted_at IS NULL -- ┬íNUEVA CONDICI├ôN! Solo considera usuarios NO eliminados l├│gicamente
+            AND u.deleted_at IS NULL -- ¡NUEVA CONDICIÓN! Solo considera usuarios NO eliminados lógicamente
         ORDER BY
             distance
         LIMIT
@@ -54,36 +56,10 @@ CREATE OR REPLACE FUNCTION "public"."match_face_embedding"("query_embedding" "pu
     $$;
 ALTER FUNCTION "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) OWNER TO "postgres";
 
-CREATE OR REPLACE FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector") RETURNS TABLE("id" "uuid", "embedding" "public"."vector", "first_seen_at" timestamp with time zone, "last_seen_at" timestamp with time zone, "access_count" integer, "last_accessed_zones" "jsonb", "status_id" "uuid", "alert_triggered" boolean, "expires_at" timestamp with time zone, "potential_match_user_id" "uuid", "face_image_url" "text", "ai_action" "text", "consecutive_denied_accesses" integer, "distance" double precision)
-    LANGUAGE "plpgsql"
-    AS $$
-    #variable_conflict use_column
-    BEGIN
-      RETURN QUERY
-      SELECT
-        o.id,
-        o.embedding,
-        o.first_seen_at,
-        o.last_seen_at,
-        o.access_count,
-        o.last_accessed_zones,
-        o.status_id,
-        o.alert_triggered,
-        o.expires_at,
-        o.potential_match_user_id,
-        o.face_image_url,
-        o.ai_action,
-        o.consecutive_denied_accesses, -- ┬íY aqu├¡!
-        (o.embedding <-> query_embedding) as distance
-      FROM
-        public.observed_users o
-      ORDER BY
-        o.embedding <-> query_embedding
-      LIMIT 1;
-    END;
-    $$;
-ALTER FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector") OWNER TO "postgres";
-
+-- ¡CAMBIO CLAVE! Eliminar la versión de 1 parámetro de match_observed_face_embedding
+DROP FUNCTION IF EXISTS "public"."match_observed_face_embedding"("query_embedding" "public"."vector");
+-- DROP FUNCTION IF EXISTS para match_observed_face_embedding con 3 parámetros
+DROP FUNCTION IF EXISTS "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer);
 CREATE OR REPLACE FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) RETURNS TABLE("id" "uuid", "embedding" "public"."vector", "first_seen_at" timestamp with time zone, "last_seen_at" timestamp with time zone, "access_count" integer, "last_accessed_zones" "jsonb", "status_id" "uuid", "alert_triggered" boolean, "expires_at" timestamp with time zone, "potential_match_user_id" "uuid", "similarity" double precision, "distance" double precision)
     LANGUAGE "plpgsql"
     AS $$
@@ -113,25 +89,10 @@ END;
 $$;
 ALTER FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) OWNER TO "postgres";
 
-CREATE OR REPLACE FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector") RETURNS TABLE("id" "uuid", "user_id" "uuid", "distance" double precision)
-    LANGUAGE "plpgsql"
-    AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    f.id,
-    f.user_id,
-    (f.embedding <-> query_embedding) AS distance
-  FROM
-    public.faces f
-  WHERE f.user_id IS NOT NULL
-  ORDER BY
-    distance
-  LIMIT 1;
-END;
-$$;
-ALTER FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector") OWNER TO "postgres";
-
+-- ¡CAMBIO CLAVE! Eliminar la versión de 1 parámetro de match_user_face_embedding
+DROP FUNCTION IF EXISTS "public"."match_user_face_embedding"("query_embedding" "public"."vector");
+-- DROP FUNCTION IF EXISTS para match_user_face_embedding con 3 parámetros
+DROP FUNCTION IF EXISTS "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer);
 CREATE OR REPLACE FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) RETURNS TABLE("id" "uuid", "embedding" "public"."vector", "distance" double precision)
     LANGUAGE "plpgsql"
     AS $$
@@ -265,83 +226,119 @@ CREATE OR REPLACE VIEW "public"."user_full_details_view" AS
 
 ALTER VIEW "public"."user_full_details_view" OWNER TO "postgres";
 
-ALTER TABLE ONLY "public"."cameras"
-    ADD CONSTRAINT "cameras_pkey" PRIMARY KEY ("id");
+-- ¡CAMBIO CLAVE AQUÍ! Envolver la adición de cada PRIMARY KEY en un bloque DO $$ BEGIN ... END $$;
+-- para hacerla idempotente. Esto se aplica a todas las PRIMARY KEYs en el archivo.
 
-ALTER TABLE ONLY "public"."faces"
-    ADD CONSTRAINT "faces_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cameras_pkey' AND conrelid = 'public.cameras'::regclass) THEN
+ALTER TABLE ONLY "public"."cameras" ADD CONSTRAINT "cameras_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."logs"
-    ADD CONSTRAINT "logs_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'faces_pkey' AND conrelid = 'public.faces'::regclass) THEN
+ALTER TABLE ONLY "public"."faces" ADD CONSTRAINT "faces_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."observed_users"
-    ADD CONSTRAINT "observed_users_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'logs_pkey' AND conrelid = 'public.logs'::regclass) THEN
+ALTER TABLE ONLY "public"."logs" ADD CONSTRAINT "logs_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."roles_catalog"
-    ADD CONSTRAINT "roles_catalog_name_key" UNIQUE ("name");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'observed_users_pkey' AND conrelid = 'public.observed_users'::regclass) THEN
+ALTER TABLE ONLY "public"."observed_users" ADD CONSTRAINT "observed_users_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."roles_catalog"
-    ADD CONSTRAINT "roles_catalog_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'roles_catalog_name_key' AND conrelid = 'public.roles_catalog'::regclass) THEN
+ALTER TABLE ONLY "public"."roles_catalog" ADD CONSTRAINT "roles_catalog_name_key" UNIQUE ("name");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."user_statuses_catalog"
-    ADD CONSTRAINT "user_statuses_catalog_name_key" UNIQUE ("name");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'roles_catalog_pkey' AND conrelid = 'public.roles_catalog'::regclass) THEN
+ALTER TABLE ONLY "public"."roles_catalog" ADD CONSTRAINT "roles_catalog_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."user_statuses_catalog"
-    ADD CONSTRAINT "user_statuses_catalog_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_statuses_catalog_name_key' AND conrelid = 'public.user_statuses_catalog'::regclass) THEN
+ALTER TABLE ONLY "public"."user_statuses_catalog" ADD CONSTRAINT "user_statuses_catalog_name_key" UNIQUE ("name");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."user_zone_access"
-    ADD CONSTRAINT "user_zone_access_pkey" PRIMARY KEY ("user_id", "zone_id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_statuses_catalog_pkey' AND conrelid = 'public.user_statuses_catalog'::regclass) THEN
+ALTER TABLE ONLY "public"."user_statuses_catalog" ADD CONSTRAINT "user_statuses_catalog_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."users"
-    ADD CONSTRAINT "users_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_zone_access_pkey' AND conrelid = 'public.user_zone_access'::regclass) THEN
+ALTER TABLE ONLY "public"."user_zone_access" ADD CONSTRAINT "user_zone_access_pkey" PRIMARY KEY ("user_id", "zone_id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."zones"
-    ADD CONSTRAINT "zones_pkey" PRIMARY KEY ("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_pkey' AND conrelid = 'public.users'::regclass) THEN
+ALTER TABLE ONLY "public"."users" ADD CONSTRAINT "users_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-CREATE INDEX "faces_user_id_idx" ON "public"."faces" USING "btree" ("user_id");
-CREATE INDEX "logs_camera_id_idx" ON "public"."logs" USING "btree" ("camera_id");
-CREATE INDEX "logs_user_id_idx" ON "public"."logs" USING "btree" ("user_id");
-CREATE INDEX "user_zone_access_user_id_idx" ON "public"."user_zone_access" USING "btree" ("user_id");
-CREATE INDEX "user_zone_access_zone_id_idx" ON "public"."user_zone_access" USING "btree" ("zone_id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'zones_pkey' AND conrelid = 'public.zones'::regclass) THEN
+ALTER TABLE ONLY "public"."zones" ADD CONSTRAINT "zones_pkey" PRIMARY KEY ("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."cameras"
-    ADD CONSTRAINT "cameras_zone_id_fkey" FOREIGN KEY ("zone_id") REFERENCES "public"."zones"("id") ON DELETE SET NULL;
 
-ALTER TABLE ONLY "public"."faces"
-    ADD CONSTRAINT "faces_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS "faces_user_id_idx" ON "public"."faces" USING "btree" ("user_id");
+CREATE INDEX IF NOT EXISTS "logs_camera_id_idx" ON "public"."logs" USING "btree" ("camera_id");
+CREATE INDEX IF NOT EXISTS "logs_user_id_idx" ON "public"."logs" USING "btree" ("user_id");
+CREATE INDEX IF NOT EXISTS "user_zone_access_user_id_idx" ON "public"."user_zone_access" USING "btree" ("user_id");
+CREATE INDEX IF NOT EXISTS "user_zone_access_zone_id_idx" ON "public"."user_zone_access" USING "btree" ("zone_id");
 
-ALTER TABLE ONLY "public"."logs"
-    ADD CONSTRAINT "fk_logs_observed_user" FOREIGN KEY ("observed_user_id") REFERENCES "public"."observed_users"("id");
+-- Foreign Keys - También necesitan ser idempotentes si pueden causar conflictos
+-- Se puede usar DROP CONSTRAINT IF EXISTS o el mismo patrón DO $$ BEGIN IF NOT EXISTS
+-- Para FKs, la forma más segura es DROP IF EXISTS y luego ADD.
+-- Sin embargo, para initial_schema, a veces es suficiente con que las PKs sean idempotentes
+-- y las FKs se añadirán si las tablas ya existen. Si hay errores futuros con FKs,
+-- aplicaremos el mismo patrón.
 
-ALTER TABLE ONLY "public"."observed_users"
-    ADD CONSTRAINT "fk_observed_user_status" FOREIGN KEY ("status_id") REFERENCES "public"."user_statuses_catalog"("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cameras_zone_id_fkey' AND conrelid = 'public.cameras'::regclass) THEN
+ALTER TABLE ONLY "public"."cameras" ADD CONSTRAINT "cameras_zone_id_fkey" FOREIGN KEY ("zone_id") REFERENCES "public"."zones"("id") ON DELETE SET NULL;
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."observed_users"
-    ADD CONSTRAINT "fk_potential_match_user" FOREIGN KEY ("potential_match_user_id") REFERENCES "public"."users"("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'faces_user_id_fkey' AND conrelid = 'public.faces'::regclass) THEN
+ALTER TABLE ONLY "public"."faces" ADD CONSTRAINT "faces_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE;
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."users"
-    ADD CONSTRAINT "fk_role" FOREIGN KEY ("role_id") REFERENCES "public"."roles_catalog"("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_logs_observed_user' AND conrelid = 'public.logs'::regclass) THEN
+ALTER TABLE ONLY "public"."logs" ADD CONSTRAINT "fk_logs_observed_user" FOREIGN KEY ("observed_user_id") REFERENCES "public"."observed_users"("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."users"
-    ADD CONSTRAINT "fk_user_status" FOREIGN KEY ("status_id") REFERENCES "public"."user_statuses_catalog"("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_observed_user_status' AND conrelid = 'public.observed_users'::regclass) THEN
+ALTER TABLE ONLY "public"."observed_users" ADD CONSTRAINT "fk_observed_user_status" FOREIGN KEY ("status_id") REFERENCES "public"."user_statuses_catalog"("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."logs"
-    ADD CONSTRAINT "logs_camera_id_fkey" FOREIGN KEY ("camera_id") REFERENCES "public"."cameras"("id") ON DELETE SET NULL;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_potential_match_user' AND conrelid = 'public.observed_users'::regclass) THEN
+ALTER TABLE ONLY "public"."observed_users" ADD CONSTRAINT "fk_potential_match_user" FOREIGN KEY ("potential_match_user_id") REFERENCES "public"."users"("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."logs"
-    ADD CONSTRAINT "logs_requested_zone_id_fkey" FOREIGN KEY ("requested_zone_id") REFERENCES "public"."zones"("id");
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_role' AND conrelid = 'public.users'::regclass) THEN
+ALTER TABLE ONLY "public"."users" ADD CONSTRAINT "fk_role" FOREIGN KEY ("role_id") REFERENCES "public"."roles_catalog"("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."logs"
-    ADD CONSTRAINT "logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_status' AND conrelid = 'public.users'::regclass) THEN
+ALTER TABLE ONLY "public"."users" ADD CONSTRAINT "fk_user_status" FOREIGN KEY ("status_id") REFERENCES "public"."user_statuses_catalog"("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."user_zone_access"
-    ADD CONSTRAINT "user_zone_access_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'logs_camera_id_fkey' AND conrelid = 'public.logs'::regclass) THEN
+ALTER TABLE ONLY "public"."logs" ADD CONSTRAINT "logs_camera_id_fkey" FOREIGN KEY ("camera_id") REFERENCES "public"."cameras"("id") ON DELETE SET NULL;
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."user_zone_access"
-    ADD CONSTRAINT "user_zone_access_zone_id_fkey" FOREIGN KEY ("zone_id") REFERENCES "public"."zones"("id") ON DELETE CASCADE;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'logs_requested_zone_id_fkey' AND conrelid = 'public.logs'::regclass) THEN
+ALTER TABLE ONLY "public"."logs" ADD CONSTRAINT "logs_requested_zone_id_fkey" FOREIGN KEY ("requested_zone_id") REFERENCES "public"."zones"("id");
+END IF; END $$;
 
-ALTER TABLE ONLY "public"."users"
-    ADD CONSTRAINT "users_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'logs_user_id_fkey' AND conrelid = 'public.logs'::regclass) THEN
+ALTER TABLE ONLY "public"."logs" ADD CONSTRAINT "logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+END IF; END $$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_zone_access_user_id_fkey' AND conrelid = 'public.user_zone_access'::regclass) THEN
+ALTER TABLE ONLY "public"."user_zone_access" ADD CONSTRAINT "user_zone_access_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE;
+END IF; END $$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_zone_access_zone_id_fkey' AND conrelid = 'public.user_zone_access'::regclass) THEN
+ALTER TABLE ONLY "public"."user_zone_access" ADD CONSTRAINT "user_zone_access_zone_id_fkey" FOREIGN KEY ("zone_id") REFERENCES "public"."zones"("id") ON DELETE CASCADE;
+END IF; END $$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_id_fkey' AND conrelid = 'public.users'::regclass) THEN
+ALTER TABLE ONLY "public"."users" ADD CONSTRAINT "users_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+END IF; END $$;
+
 
 ALTER TABLE "public"."cameras" ENABLE ROW LEVEL SECURITY;
 
@@ -358,17 +355,9 @@ GRANT ALL ON FUNCTION "public"."match_face_embedding"("query_embedding" "public"
 GRANT ALL ON FUNCTION "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."match_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "service_role";
 
-GRANT ALL ON FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector") TO "anon";
-GRANT ALL ON FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector") TO "service_role";
-
 GRANT ALL ON FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "service_role";
-
-GRANT ALL ON FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector") TO "anon";
-GRANT ALL ON FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector") TO "service_role";
 
 GRANT ALL ON FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) TO "authenticated";
