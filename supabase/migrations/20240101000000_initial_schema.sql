@@ -89,17 +89,16 @@ END;
 $$;
 ALTER FUNCTION "public"."match_observed_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) OWNER TO "postgres";
 
--- ¡CAMBIO CLAVE! Eliminar la versión de 1 parámetro de match_user_face_embedding
-DROP FUNCTION IF EXISTS "public"."match_user_face_embedding"("query_embedding" "public"."vector");
+-- ¡CAMBIO CLAVE AQUÍ!
 -- DROP FUNCTION IF EXISTS para match_user_face_embedding con 3 parámetros
 DROP FUNCTION IF EXISTS "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer);
-CREATE OR REPLACE FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) RETURNS TABLE("id" "uuid", "embedding" "public"."vector", "distance" double precision)
+CREATE OR REPLACE FUNCTION "public"."match_user_face_embedding"("query_embedding" "public"."vector", "match_threshold" double precision, "match_count" integer) RETURNS TABLE("user_id" "uuid", "embedding" "public"."vector", "distance" double precision) -- CAMBIO: Ahora devuelve 'user_id'
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
   RETURN QUERY
   SELECT
-    f.user_id AS id,
+    f.user_id, -- CAMBIO: Selecciona directamente 'user_id' sin alias 'AS id'
     f.embedding,
     (f.embedding <=> query_embedding) AS distance
   FROM
@@ -281,7 +280,7 @@ CREATE INDEX IF NOT EXISTS "user_zone_access_user_id_idx" ON "public"."user_zone
 CREATE INDEX IF NOT EXISTS "user_zone_access_zone_id_idx" ON "public"."user_zone_access" USING "btree" ("zone_id");
 
 -- Foreign Keys - También necesitan ser idempotentes si pueden causar conflictos
--- Se puede usar DROP CONSTRAINT IF EXISTS o el mismo patrón DO $$ BEGIN IF NOT EXISTS
+-- Se puede usar DROP CONSTRAINT IF EXISTS o el mismo patrón DO $$ BEGIN ... END $$;
 -- Para FKs, la forma más segura es DROP IF EXISTS y luego ADD.
 -- Sin embargo, para initial_schema, a veces es suficiente con que las PKs sean idempotentes
 -- y las FKs se añadirán si las tablas ya existen. Si hay errores futuros con FKs,

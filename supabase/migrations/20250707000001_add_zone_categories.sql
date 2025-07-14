@@ -16,12 +16,3 @@ ADD COLUMN IF NOT EXISTS "category" "text" DEFAULT 'Employee';
 
 COMMIT;
 
--- down migration
-BEGIN;
-
--- Drop category column from zones table IF EXISTS
--- ¡CAMBIO CLAVE! Usar DROP COLUMN IF EXISTS
-ALTER TABLE "public"."zones"
-DROP COLUMN IF EXISTS "category";
-
-COMMIT;
