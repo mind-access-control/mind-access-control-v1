@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -7,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Eye, UserCircle2, ChevronUp, ChevronDown, Search, RefreshCcw } from 'lucide-react';
 
 // IMPORTAR LAS INTERFACES DESDE EL ARCHIVO COMPARTIDO
-import { ObservedUser, ItemWithNameAndId, ObservedUserSortField, SortDirection } from '@/types/common';
+import { ObservedUser, ObservedUserSortField } from '@/lib/api/types';
 
 // IMPORTAR EL NUEVO COMPONENTE DE MODAL
 import RegisterUserModal from './RegisterUserModal';
+import { EMPTY_STRING, NA_VALUE } from '@/lib/constants';
+import { SortDirection } from '@/app/enums';
 
 // Define the props this component will receive
 interface ObservedUsersTableProps {
@@ -53,7 +57,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [showImageModal, setShowImageModal] = useState<boolean>(false);
   const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
-  const [selectedImageAlt, setSelectedImageAlt] = useState<string>('');
+  const [selectedImageAlt, setSelectedImageAlt] = useState<string>(EMPTY_STRING);
 
   // NUEVOS ESTADOS PARA LA MODAL DE REGISTRO
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -76,7 +80,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
   const handleImageError = (userId: string, photoUrl: string | null) => {
     const cleanPhotoUrl = photoUrl ? photoUrl.split('?')[0] : 'no-image-url';
     setImageErrors((prev) => ({ ...prev, [cleanPhotoUrl]: true }));
-    console.warn(`Failed to load image for user ${userId} at URL: ${photoUrl || 'N/A'}`);
+    console.warn(`Failed to load image for user ${userId} at URL: ${photoUrl || NA_VALUE}`);
   };
 
   // Función para abrir la modal de imagen
@@ -123,7 +127,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
               {columns.map((col) => (
                 <TableHead
                   key={col.key}
-                  className={`py-2 px-2 text-left ${col.sortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`py-2 px-2 text-left ${col.sortable ? 'cursor-pointer select-none' : EMPTY_STRING}`}
                   onClick={() => {
                     if (col.sortable) {
                       onSortChange(col.key as ObservedUserSortField);
@@ -133,7 +137,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
                   <span className="flex items-center">
                     {col.label}
                     {col.sortable && sortField === col.key && (
-                      <span className="ml-1">{sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
+                      <span className="ml-1">{sortDirection === SortDirection.ASC ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
                     )}
                   </span>
                 </TableHead>
@@ -256,7 +260,7 @@ const ObservedUsersTable: React.FC<ObservedUsersTableProps> = ({
                 variant={currentPage === page ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => onPageChange(page)}
-                className={`w-8 h-8 p-0 ${currentPage === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                className={`w-8 h-8 p-0 ${currentPage === page ? 'bg-teal-600 hover:bg-teal-700' : EMPTY_STRING}`}
               >
                 {page}
               </Button>

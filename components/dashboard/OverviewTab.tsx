@@ -8,63 +8,14 @@ import KpiCard from './cards/KpiCard';
 import SuspiciousUserList from './lists/SuspiciousUserList';
 import AIRecommendationList from './lists/AIRecommendationList';
 import AIDetailsModal from './modals/AIDetailsModal'; // Importar el modal
+import { AIRecommendation, KpiData, RiskScore, SuspiciousUserForDisplay, SuspiciousUserMapEntry } from '@/lib/api/types';
+import { LogDecision, RiskStatus, UserType } from '@/app/enums';
+import { EDGE_FUNCTIONS } from '@/lib/constants';
 
 // Supabase Client Configuration
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
-
-// Tipos para los datos de logs relevantes
-type LogData = {
-  timestamp: string;
-  decision: 'access_granted' | 'access_denied' | 'error' | 'unknown';
-  reason: string | null;
-  user_id: string | null; // ID de usuario registrado
-  observed_user_id: string | null; // ID de usuario observado
-  user_type: 'registered' | 'observed' | 'new_observed' | 'unknown' | null;
-};
-
-// Tipo para los datos de KPI
-interface KpiData {
-  totalUsers: number;
-  activeZones: number;
-  accessesToday: number;
-  activeAlerts: number;
-  anomalousAttempts: number;
-  successRate: number;
-}
-
-// Tipo para el Risk Score
-interface RiskScore {
-  score: number;
-  status: 'low' | 'moderate' | 'high';
-}
-
-// Tipo para las entradas del mapa de usuarios sospechosos (uso interno, incluye 'count')
-interface SuspiciousUserMapEntry {
-  id: string; // Puede ser user_id o observed_user_id
-  name: string; // Nombre completo o ID si no se encuentra
-  reason: string;
-  details?: any;
-  count: number; // Propiedad 'count' es requerida aquí para la lógica de agrupación
-  photoUrl?: string | null; // URL de la foto de perfil
-}
-
-// ¡CAMBIO CLAVE! Nuevo tipo para los usuarios sospechosos que se mostrarán (NO incluye 'count')
-interface SuspiciousUserForDisplay {
-  id: string;
-  name: string;
-  reason: string;
-  details?: any;
-  photoUrl?: string | null;
-}
-
-// Tipo para las recomendaciones de IA
-interface AIRecommendation {
-  id: string;
-  action: string;
-  details: string;
-}
 
 const OverviewTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -79,7 +30,7 @@ const OverviewTab: React.FC = () => {
     anomalousAttempts: 0,
     successRate: 0,
   });
-  const [riskScore, setRiskScore] = useState<RiskScore>({ score: 0, status: 'low' });
+  const [riskScore, setRiskScore] = useState<RiskScore>({ score: 0, status: RiskStatus.LOW });
   // ¡CAMBIO CLAVE! Usar el nuevo tipo para el estado
   const [suspiciousUsers, setSuspiciousUsers] = useState<SuspiciousUserForDisplay[]>([]);
   const [aiRecommendations, setAIRecommendations] = useState<AIRecommendation[]>([]);
@@ -133,8 +84,8 @@ const OverviewTab: React.FC = () => {
       const allRegisteredUserIds = new Set<string>();
       const allObservedUserIds = new Set<string>();
       todayLogs?.forEach((log) => {
-        if (log.user_type === 'registered' && log.user_id) allRegisteredUserIds.add(log.user_id);
-        if ((log.user_type === 'observed' || log.user_type === 'new_observed') && log.observed_user_id) allObservedUserIds.add(log.observed_user_id);
+        if (log.user_type === UserType.REGISTERED && log.user_id) allRegisteredUserIds.add(log.user_id);
+        if ((log.user_type === UserType.OBSERVED || log.user_type === UserType.NEW_OBSERVED) && log.observed_user_id) allObservedUserIds.add(log.observed_user_id);
       });
 
       // Obtener detalles de usuarios registrados
@@ -150,9 +101,9 @@ const OverviewTab: React.FC = () => {
       );
 
       todayLogs?.forEach((log) => {
-        if (log.decision === 'access_granted') {
+        if (log.decision === LogDecision.ACCESS_GRANTED) {
           successfulAccesses++;
-        } else if (log.decision === 'access_denied' || log.decision === 'error') {
+        } else if (log.decision === LogDecision.ACCESS_DENIED || log.decision === LogDecision.ERROR) {
           failedAccesses++;
 
           if (log.reason?.includes('Alert triggered: true')) {
@@ -168,12 +119,12 @@ const OverviewTab: React.FC = () => {
             let currentUserPhotoUrl: string | null = null;
 
             // Determinar si es usuario registrado u observado
-            if (log.user_type === 'registered' && log.user_id) {
+            if (log.user_type === UserType.REGISTERED && log.user_id) {
               currentUserId = log.user_id;
               const userDetails = registeredUserDetailsMap.get(currentUserId);
               currentUserName = userDetails?.name || currentUserId;
               currentUserPhotoUrl = userDetails?.photo || null;
-            } else if ((log.user_type === 'observed' || log.user_type === 'new_observed') && log.observed_user_id) {
+            } else if ((log.user_type === UserType.OBSERVED || log.user_type === UserType.NEW_OBSERVED) && log.observed_user_id) {
               currentUserId = log.observed_user_id;
               const userDetails = observedUserDetailsMap.get(currentUserId);
               currentUserName = userDetails?.name || `Observed User ${currentUserId.substring(0, 8)}`;
@@ -203,9 +154,9 @@ const OverviewTab: React.FC = () => {
 
       // 4. Overall Risk Score (Heurística simple)
       const riskScoreValue = failedAccesses * 0.7 + activeAlerts * 0.3;
-      let riskStatus: 'low' | 'moderate' | 'high' = 'low';
-      if (riskScoreValue > 10) riskStatus = 'high';
-      else if (riskScoreValue > 3) riskStatus = 'moderate';
+      let riskStatus = RiskStatus.LOW;
+      if (riskScoreValue > 10)  riskStatus = RiskStatus.HIGH;
+      else if (riskScoreValue > 3) riskStatus = RiskStatus.MODERATE;
       const finalRiskScore = { score: parseFloat(riskScoreValue.toFixed(1)), status: riskStatus };
       setRiskScore(finalRiskScore);
 
@@ -225,7 +176,7 @@ const OverviewTab: React.FC = () => {
 
       setLoadingAI(true);
       try {
-        const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/generate-dashboard-recommendations`;
+        const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GENERATE_DASHBOARD_RECOMMENDATIONS}`;
 
         const payload = {
           riskScore: finalRiskScore,

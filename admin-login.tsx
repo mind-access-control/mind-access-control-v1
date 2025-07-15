@@ -12,10 +12,11 @@ import { userAuthActions } from '@/hooks/auth.hooks';
 import { Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { EMPTY_STRING } from '@/lib/constants';
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(EMPTY_STRING);
+  const [password, setPassword] = useState(EMPTY_STRING);
   const [isLoading, setIsLoading] = useState(false);
   const { signIn } = userAuthActions();
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +62,8 @@ export default function AdminLogin() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    setEmail('');
-    setPassword('');
+    setEmail(EMPTY_STRING);
+    setPassword(EMPTY_STRING);
     setError(null);
     setSuccess(null);
   };

@@ -1,37 +1,35 @@
+'use client';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Camera, Zone } from '@/lib/api/types';
+import { EMPTY_STRING } from '@/lib/constants';
 import { Edit, Save, Trash2, X } from 'lucide-react';
 import React, { useState } from 'react';
 
 interface CameraTableProps {
-  cameras: {
-    id: string;
-    name: string;
-    zone_id: string;
-    location?: string;
-    zone?: { id: string; name: string; category?: string } | null;
-  }[];
-  zones: { id: string; name: string }[];
-  onEdit: (id: string, data: { name: string; zone_id: string; location?: string }) => void;
-  onDelete: (camera: { id: string; name: string }) => void;
+  cameras: Camera[];
+  zones: Zone[];
+  onEdit: (id: string, data: Camera) => void;
+  onDelete: (camera: Camera) => void;
   loading?: boolean;
 }
 
 export const CameraTable: React.FC<CameraTableProps> = ({ cameras, zones, onEdit, onDelete, loading }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ name: string; zone_id: string; location?: string }>({ name: '', zone_id: '', location: '' });
+  const [editForm, setEditForm] = useState<Camera>({ name: EMPTY_STRING, zone_id: EMPTY_STRING, location: EMPTY_STRING });
 
-  const startEdit = (camera: { id: string; name: string; zone_id: string; location?: string }) => {
-    setEditingId(camera.id);
-    setEditForm({ name: camera.name, zone_id: camera.zone_id, location: camera.location || '' });
+  const startEdit = (camera: Camera) => {
+    setEditingId(camera.id || null);
+    setEditForm({ name: camera.name, zone_id: camera.zone_id || EMPTY_STRING, location: camera.location || EMPTY_STRING });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditForm({ name: '', zone_id: '', location: '' });
+    setEditForm({ name: EMPTY_STRING, zone_id: EMPTY_STRING, location: EMPTY_STRING });
   };
 
   const saveEdit = (id: string) => {
@@ -101,7 +99,7 @@ export const CameraTable: React.FC<CameraTableProps> = ({ cameras, zones, onEdit
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => saveEdit(camera.id)}
+                        onClick={() => saveEdit(camera.id || EMPTY_STRING)}
                         className="text-green-600 hover:text-green-700"
                         disabled={!editForm.name.trim() || !editForm.zone_id || loading}
                       >

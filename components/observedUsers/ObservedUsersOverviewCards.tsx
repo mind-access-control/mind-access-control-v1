@@ -1,10 +1,9 @@
+'use client';
+
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, AlertTriangle, Zap, CheckCircle, XCircle } from 'lucide-react';
-
-// IMPORTAR LAS INTERFACES DESDE EL ARCHIVO COMPARTIDO
-import { ObservedUser, ItemWithNameAndId } from '@/types/common';
-
+ 
 interface ObservedUsersOverviewCardsProps {
   totalObserved: number;
   pendingReviewCount: number;

@@ -1,3 +1,5 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,6 +11,7 @@ import { zoneCategories } from '@/mock-data';
 import { Edit, Save, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import DeleteZoneModal from './DeleteZoneModal';
+import { DEFAULT_ZONE_CATEGORY, EMPTY_STRING } from '@/lib/constants';
 
 interface ZoneTableProps {
   zones: Zone[];
@@ -17,8 +20,8 @@ interface ZoneTableProps {
 
 const ZoneTable: React.FC<ZoneTableProps> = ({ zones, onZoneUpdated }) => {
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
-  const [editingZoneName, setEditingZoneName] = useState('');
-  const [editingZoneCategory, setEditingZoneCategory] = useState('');
+  const [editingZoneName, setEditingZoneName] = useState(EMPTY_STRING);
+  const [editingZoneCategory, setEditingZoneCategory] = useState(EMPTY_STRING);
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [zoneToDelete, setZoneToDelete] = useState<Zone | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -27,13 +30,13 @@ const ZoneTable: React.FC<ZoneTableProps> = ({ zones, onZoneUpdated }) => {
   const startEditingZone = (zone: Zone) => {
     setEditingZoneId(zone.id);
     setEditingZoneName(zone.name);
-    setEditingZoneCategory(zone.category || 'Employee');
+    setEditingZoneCategory(zone.category || DEFAULT_ZONE_CATEGORY);
   };
 
   const cancelEditingZone = () => {
     setEditingZoneId(null);
-    setEditingZoneName('');
-    setEditingZoneCategory('');
+    setEditingZoneName(EMPTY_STRING);
+    setEditingZoneCategory(EMPTY_STRING);
   };
 
   const saveEditingZone = async () => {
@@ -41,9 +44,9 @@ const ZoneTable: React.FC<ZoneTableProps> = ({ zones, onZoneUpdated }) => {
 
     setIsLoading(editingZoneId);
     try {
-      const updatedZone = await ZoneService.updateZone(editingZoneId, {
+      await ZoneService.updateZone(editingZoneId, {
         name: editingZoneName.trim(),
-        category: editingZoneCategory.trim() || 'Employee',
+        category: editingZoneCategory.trim() || DEFAULT_ZONE_CATEGORY,
       });
       onZoneUpdated();
       cancelEditingZone();
@@ -135,7 +138,7 @@ const ZoneTable: React.FC<ZoneTableProps> = ({ zones, onZoneUpdated }) => {
                           </SelectContent>
                         </Select>
                       ) : (
-                        zone.category || 'Employee'
+                        zone.category || DEFAULT_ZONE_CATEGORY
                       )}
                     </TableCell>
                     <TableCell>

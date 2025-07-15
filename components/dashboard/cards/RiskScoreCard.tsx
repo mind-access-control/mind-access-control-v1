@@ -4,19 +4,20 @@ import React, { useState } from 'react'; // Importar useState
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Lightbulb } from 'lucide-react';
+import { RiskStatus } from '@/app/enums';
 
 interface RiskScoreCardProps {
   score: number;
-  status: 'low' | 'moderate' | 'high';
+  status: RiskStatus;
   tooltipText?: string; // Prop para el texto del tooltip
 }
 
 const RiskScoreCard: React.FC<RiskScoreCardProps> = ({ score, status, tooltipText }) => {
   const [showTooltip, setShowTooltip] = useState(false); // Estado para controlar la visibilidad del tooltip
 
-  const statusColor = status === 'low' ? 'text-green-500' : status === 'moderate' ? 'text-yellow-500' : 'text-red-500';
-  const bgColor = status === 'low' ? 'bg-green-50' : status === 'moderate' ? 'bg-yellow-50' : 'bg-red-50';
-  const borderColor = status === 'low' ? 'border-green-200' : status === 'moderate' ? 'border-yellow-200' : 'border-red-200';
+  const statusColor = status === RiskStatus.LOW ? 'text-green-500' : status === RiskStatus.MODERATE ? 'text-yellow-500' : 'text-red-500';
+  const bgColor = status === RiskStatus.LOW ? 'bg-green-50' : status === RiskStatus.MODERATE ? 'bg-yellow-50' : 'bg-red-50';
+  const borderColor = status === RiskStatus.LOW ? 'border-green-200' : status === RiskStatus.MODERATE ? 'border-yellow-200' : 'border-red-200';
 
   return (
     <div className="relative">

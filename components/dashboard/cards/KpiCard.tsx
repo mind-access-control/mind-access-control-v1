@@ -3,6 +3,7 @@
 import React, { useState } from 'react'; // Importar useState
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { EMPTY_STRING } from '@/lib/constants.ts';
 
 interface KpiCardProps {
   icon: React.ReactNode;
@@ -21,7 +22,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ icon, label, value, highlight = false
       {' '}
       {/* Contenedor relativo para posicionar el tooltip */}
       <Card
-        className={`bg-white rounded-xl shadow-lg p-6 flex flex-col items-center cursor-pointer ${highlight ? 'border-2 border-teal-500' : ''}`}
+        className={`bg-white rounded-xl shadow-lg p-6 flex flex-col items-center cursor-pointer ${highlight ? 'border-2 border-teal-500' : EMPTY_STRING}`}
         onMouseEnter={() => setShowTooltip(true)} // Mostrar tooltip al entrar el ratón
         onMouseLeave={() => setShowTooltip(false)} // Ocultar tooltip al salir el ratón
       >

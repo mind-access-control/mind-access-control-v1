@@ -5,19 +5,11 @@ import { AlertTriangle, Eye, UserCircle2 } from 'lucide-react';
 import ObservedUsersOverviewCards from '@/components/observedUsers/ObservedUsersOverviewCards';
 import ObservedUsersTable from '@/components/observedUsers/ObservedUsersTable';
 
-// IMPORTAR LAS INTERFACES DESDE EL ARCHIVO COMPARTIDO
-import { ObservedUser, ItemWithNameAndId, ObservedUserSortField, SortDirection } from '@/types/common';
+import { EDGE_FUNCTIONS, EMPTY_STRING } from '@/lib/constants';
+import { SortDirection } from '@/app/enums';
+import { ObservedUsersResponse, ObservedUser, ObservedUserSortField } from '@/lib/api/types';
 
-// Interfaz para la respuesta completa de la Edge Function (alineada con get-observed-users EF)
-interface GetObservedUsersResponse {
-  users: ObservedUser[];
-  totalCount: number; // Conteo para la tabla (puede ser filtrado)
-  absoluteTotalCount: number; // NUEVO: Conteo total real sin aplicar filtros
-  pendingReviewCount: number;
-  highRiskCount: number;
-  activeTemporalCount: number;
-  expiredCount: number;
-}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 const ObservedUsersTab: React.FC = () => {
   const [observedUsers, setObservedUsers] = useState<ObservedUser[]>([]);
@@ -31,12 +23,12 @@ const ObservedUsersTab: React.FC = () => {
   const [expiredCount, setExpiredCount] = useState(0);
 
   const [observedSortField, setObservedSortField] = useState<ObservedUserSortField>('firstSeen');
-  const [observedSortDirection, setObservedSortDirection] = useState<SortDirection>('desc');
+  const [observedSortDirection, setObservedSortDirection] = useState<SortDirection>(SortDirection.DESC);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(EMPTY_STRING);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [filterType, setFilterType] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>(EMPTY_STRING);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +44,7 @@ const ObservedUsersTab: React.FC = () => {
     setError(null);
 
     try {
-      const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-observed-users';
+      const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GET_OBSERVED_USERS}`;
 
       const url = new URL(edgeFunctionUrl);
       url.searchParams.append('searchTerm', searchTerm);
@@ -76,7 +68,7 @@ const ObservedUsersTab: React.FC = () => {
         throw new Error(errorData.error || errorData.message || `HTTP Error: ${response.status}`);
       }
 
-      const result: GetObservedUsersResponse = await response.json();
+      const result: ObservedUsersResponse = await response.json();
 
       setObservedUsers(result.users);
       setTotalObservedUsersCount(result.totalCount); // Conteo para la tabla
@@ -131,23 +123,23 @@ const ObservedUsersTab: React.FC = () => {
   const handleSearchChange = useCallback((term: string) => {
     setSearchTerm(term);
     setCurrentPage(1);
-    setFilterType('');
+    setFilterType(EMPTY_STRING);
   }, []);
 
   const handleRefresh = useCallback(() => {
     setCurrentPage(1);
-    setSearchTerm('');
-    setFilterType('');
+    setSearchTerm(EMPTY_STRING);
+    setFilterType(EMPTY_STRING);
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
   // Definición de handleCardClick
   const handleCardClick = useCallback((type: 'total' | 'pendingReview' | 'highRisk' | 'activeTemporal' | 'expired') => {
     setCurrentPage(1);
-    setSearchTerm('');
+    setSearchTerm(EMPTY_STRING);
 
     if (type === 'total') {
-      setFilterType('');
+      setFilterType(EMPTY_STRING);
     } else {
       setFilterType(type);
     }
@@ -162,7 +154,7 @@ const ObservedUsersTab: React.FC = () => {
       setActionMessage(null);
 
       try {
-        const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/manage-observed-user-actions';
+        const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.MANAGE_OBSERVED_USER_ACTIONS}`;
 
         const response = await fetch(edgeFunctionUrl, {
           method: 'POST',
@@ -223,10 +215,10 @@ const ObservedUsersTab: React.FC = () => {
   const handleObservedSortChange = useCallback(
     (field: ObservedUserSortField) => {
       if (observedSortField === field) {
-        setObservedSortDirection(observedSortDirection === 'asc' ? 'desc' : 'asc');
+        setObservedSortDirection(observedSortDirection === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC);
       } else {
         setObservedSortField(field);
-        setObservedSortDirection('asc');
+        setObservedSortDirection(SortDirection.ASC);
       }
       setCurrentPage(1);
     },

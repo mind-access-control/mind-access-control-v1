@@ -1,8 +1,9 @@
+'use client';
+
+import { SortDirection } from '@/app/enums';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -12,7 +13,8 @@ import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 import { UserService } from '@/lib/api/services/user-service';
 import { UpdateUserRequest, User } from '@/lib/api/types';
-import { SortDirection, SortField } from '@/types';
+import { DEFAULT_USER_STATUS, EMPTY_STRING } from '@/lib/constants';
+import { UserSortField } from '@/lib/api/types';
 import { AlertCircle, ChevronDown, ChevronUp, Edit, RotateCcw, Save, Search, Trash2, UserCheck, UserX, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 
@@ -27,12 +29,12 @@ const UsersTable: React.FC = () => {
   // --- Global UI Status / Feedback ---
   const [showStatusMessage, setShowStatusMessage] = useState<string | null>(null); // Mensajes de éxito/error al guardar/procesar
   // --- Dashboard Filtering/Sorting States (mantener tus existentes) ---
-  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState(EMPTY_STRING);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
   // Nuevo estado para el ordenamiento de la tabla de usuarios
-  const [sortField, setSortField] = useState<SortField>('name'); // Campo de ordenamiento por defecto
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // Dirección de ordenamiento por defecto
+  const [sortField, setSortField] = useState<UserSortField>('name'); // Campo de ordenamiento por defecto
+  const [sortDirection, setSortDirection] = useState<SortDirection>(SortDirection.ASC); // Dirección de ordenamiento por defecto
 
   const { users, loadingUsers, errorUsers, setLoadingUsers, loadUsersAndNotify, zonesData, loadingZones, errorZones } = useUserActions();
 
@@ -40,13 +42,13 @@ const UsersTable: React.FC = () => {
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
       if (sortField === 'name') {
-        return sortDirection === 'asc' ? a.name?.localeCompare(b.name) : b.name?.localeCompare(a.name);
+        return sortDirection === SortDirection.ASC ? a.name?.localeCompare(b.name) : b.name?.localeCompare(a.name);
       }
       if (sortField === 'email') {
-        return sortDirection === 'asc' ? a.email?.localeCompare(b.email) : b.email?.localeCompare(a.email);
+        return sortDirection === SortDirection.ASC ? a.email?.localeCompare(b.email) : b.email?.localeCompare(a.email);
       }
       if (sortField === 'role') {
-        return sortDirection === 'asc' ? a.role?.localeCompare(b.role) : b.role?.localeCompare(a.role);
+        return sortDirection === SortDirection.ASC ? a.role?.localeCompare(b.role) : b.role?.localeCompare(a.role);
       }
       return 0;
     });
@@ -68,12 +70,12 @@ const UsersTable: React.FC = () => {
     setEditingAccessZones((prev) => (prev.includes(zoneName) ? prev.filter((name) => name !== zoneName) : [...prev, zoneName]));
   };
 
-  const handleSort = (field: SortField) => {
+  const handleSort = (field: UserSortField) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(sortDirection === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC);
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection(SortDirection.ASC);
     }
   };
 
@@ -99,7 +101,7 @@ const UsersTable: React.FC = () => {
         userId: editingUserId || undefined,
         fullName: editingUser.name,
         roleName: editingUser.role,
-        statusName: editingUser.status || 'active',
+        statusName: editingUser.status || DEFAULT_USER_STATUS,
         accessZoneNames: editingAccessZones,
       };
 
@@ -170,7 +172,7 @@ const UsersTable: React.FC = () => {
             <span>Existing Users</span>
             <div className="flex items-center space-x-2">
               <Button variant="outline" size="sm" onClick={loadUsersAndNotify} disabled={loadingUsers} className="mr-2">
-                <RotateCcw className={`w-4 h-4 ${loadingUsers ? 'animate-spin' : ''}`} />
+                <RotateCcw className={`w-4 h-4 ${loadingUsers ? 'animate-spin' : EMPTY_STRING}`} />
                 Refresh
               </Button>
               <Search className="w-4 h-4 text-gray-400" />
@@ -394,7 +396,7 @@ const UsersTable: React.FC = () => {
                         variant={currentPage === page ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setCurrentPage(page)}
-                        className={`w-8 h-8 p-0 ${currentPage === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                        className={`w-8 h-8 p-0 ${currentPage === page ? 'bg-teal-600 hover:bg-teal-700' : EMPTY_STRING}`}
                       >
                         {page}
                       </Button>
