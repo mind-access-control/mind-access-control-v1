@@ -1,24 +1,28 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Camera, Zone } from '@/lib/api/types';
+import { EMPTY_STRING } from '@/lib/constants';
 import React, { useState } from 'react';
 
 interface CameraFormProps {
-  zones: { id: string; name: string }[];
-  onAdd: (camera: { name: string; zone_id: string; location?: string }) => void;
+  zones: Zone[];
+  onAdd: (camera: Camera) => void;
   loading?: boolean;
 }
 
 export const CameraForm: React.FC<CameraFormProps> = ({ zones, onAdd, loading }) => {
-  const [form, setForm] = useState({ name: '', zone_id: '', location: '' });
+  const [form, setForm] = useState({ name: EMPTY_STRING, zone_id: EMPTY_STRING, location: EMPTY_STRING });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (form.name.trim() && form.zone_id) {
       onAdd(form);
-      setForm({ name: '', zone_id: '', location: '' });
+      setForm({ name: EMPTY_STRING, zone_id: EMPTY_STRING, location: EMPTY_STRING });
     }
   };
 

@@ -1,74 +1,26 @@
 'use client'; // This line goes at the beginning if it's a Client Component
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-// --- Types Import ---
-type Role = { id: string; name: string };
-type UserStatus = { id: string; name: string };
-type Zone = { id: string; name: string };
-type UserForFilter = { id: string; full_name: string };
-
-type Log = {
-  id: string; // Log ID (UUID)
-  timestamp: string;
-  user_id: string | null; // Registered user ID
-  observed_user_id: string | null; // Observed user ID
-  camera_id: string | null;
-  result: boolean; // Access granted/denied
-  user_type: 'registered' | 'observed' | 'new_observed' | 'unknown' | null;
-  match_status: string | null;
-  decision: 'unknown' | 'access_granted' | 'access_denied' | 'error';
-  reason: string;
-  confidence_score: number | null;
-  requested_zone_id: string | null;
-  users: {
-    full_name: string;
-    role_id: string;
-    status_id: string;
-    profile_picture_url: string | null;
-  } | null;
-  zones: {
-    name: string;
-  } | null;
-};
-
-// Joined Log type for display in frontend
-type DisplayLog = {
-  id: string;
-  timestamp: string;
-  userId: string | null;
-  userName: string;
-  userEmail: string;
-  userRole: string;
-  userStatus: string;
-  zoneName: string;
-  status: string;
-  profilePictureUrl: string | null;
-};
-
-type SummaryEntry = {
-  user: string;
-  email: string;
-  firstAccess: string;
-  lastAccess: string;
-  totalAccesses: number;
-  successful: number;
-  failed: number;
-  successRate: number;
-  zoneAccesses: Record<string, number>;
-};
-
-// --- Types for sorting and filtering ---
-type LogSortField = 'timestamp' | 'userName' | 'zoneName' | 'status';
-type SortDirection = 'asc' | 'desc';
-type SummarySortField = 'user' | 'email' | 'firstAccess' | 'lastAccess' | 'totalAccesses' | 'successRate';
-
-// Type for table columns
-type Column = {
-  key: string;
-  label: string;
-  sortable: boolean;
-};
+// --- Constants Import ---
+import { DisplayLog, Log, LogSortField, Role, SummaryEntry, SummarySortField, UserForFilter, UserStatus, Zone } from '@/lib/api/types';
+import {
+  DEFAULT_FILTER_VALUES,
+  DEFAULT_LOG_CURRENT_PAGE,
+  DEFAULT_LOG_ITEMS_PER_PAGE,
+  DEFAULT_LOG_SORT_FIELD,
+  DEFAULT_SUMMARY_SORT_FIELD,
+  EDGE_FUNCTIONS,
+  EMPTY_STRING,
+  IMAGE_FALLBACKS,
+  LOG_COLUMNS,
+  NA_VALUE,
+  PAGINATION_OPTIONS,
+  SELECT_ALL_VALUE,
+  STATUS_FILTER_OPTIONS,
+  SUCCESS_RATE_THRESHOLDS,
+  SUMMARY_STATUS_FILTER_OPTIONS,
+} from '@/lib/constants';
 
 // --- Shadcn UI Components ---
 import { Badge } from '@/components/ui/badge';
@@ -81,15 +33,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // --- Lucide React Icons ---
-import { ChevronDown, ChevronUp, Search, SlidersHorizontal, TrendingUp, RefreshCcw, UserCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCcw, Search, SlidersHorizontal, TrendingUp, UserCircle } from 'lucide-react';
+import { LogDecision, SortDirection } from '@/app/enums';
 
 // Supabase Client Configuration
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// console.log('DEBUG: SUPABASE_URL:', SUPABASE_URL ? 'Loaded' : 'UNDEFINED');
-// console.log('DEBUG: SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'Loaded' : 'UNDEFINED');
-
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
 const AccessLogsTab: React.FC = () => {
@@ -98,24 +47,24 @@ const AccessLogsTab: React.FC = () => {
   const [loadingAccessLogs, setLoadingAccessLogs] = useState(true);
   const [errorAccessLogs, setErrorAccessLogs] = useState<string | null>(null);
 
-  const [generalSearchTerm, setGeneralSearchTerm] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [selectedLogUserId, setSelectedLogUserId] = useState('all');
-  const [selectedLogZone, setSelectedLogZone] = useState('all');
-  const [selectedLogStatus, setSelectedLogStatus] = useState('all');
+  const [generalSearchTerm, setGeneralSearchTerm] = useState(DEFAULT_FILTER_VALUES.generalSearchTerm);
+  const [dateFrom, setDateFrom] = useState(DEFAULT_FILTER_VALUES.dateFrom);
+  const [dateTo, setDateTo] = useState(DEFAULT_FILTER_VALUES.dateTo);
+  const [selectedLogUserId, setSelectedLogUserId] = useState(DEFAULT_FILTER_VALUES.selectedLogUserId);
+  const [selectedLogZone, setSelectedLogZone] = useState(DEFAULT_FILTER_VALUES.selectedLogZone);
+  const [selectedLogStatus, setSelectedLogStatus] = useState(DEFAULT_FILTER_VALUES.selectedLogStatus);
 
-  const [logSortField, setLogSortField] = useState<LogSortField>('timestamp');
-  const [logSortDirection, setLogSortDirection] = useState<SortDirection>('desc');
-  const [logCurrentPage, setLogCurrentPage] = useState(1);
-  const [logItemsPerPage, setLogItemsPerPage] = useState(10);
+  const [logSortField, setLogSortField] = useState<LogSortField>(DEFAULT_LOG_SORT_FIELD);
+  const [logSortDirection, setLogSortDirection] = useState<SortDirection>(SortDirection.DESC);
+  const [logCurrentPage, setLogCurrentPage] = useState(DEFAULT_LOG_CURRENT_PAGE);
+  const [logItemsPerPage, setLogItemsPerPage] = useState(DEFAULT_LOG_ITEMS_PER_PAGE);
 
   // --- Summary Modal States ---
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
-  const [summarySortField, setSummarySortField] = useState<SummarySortField>('user');
-  const [summarySortDirection, setSummarySortDirection] = useState<SortDirection>('asc');
-  const [summarySearchTerm, setSummarySearchTerm] = useState('');
-  const [summaryStatusFilter, setSummaryStatusFilter] = useState('all');
+  const [summarySortField, setSummarySortField] = useState<SummarySortField>(DEFAULT_SUMMARY_SORT_FIELD);
+  const [summarySortDirection, setSummarySortDirection] = useState<SortDirection>(SortDirection.ASC);
+  const [summarySearchTerm, setSummarySearchTerm] = useState(DEFAULT_FILTER_VALUES.summarySearchTerm);
+  const [summaryStatusFilter, setSummaryStatusFilter] = useState(DEFAULT_FILTER_VALUES.summaryStatusFilter);
 
   // --- AI Details Modal State (kept for potential future use, not used in main table) ---
   const [aiDetailsLog, setAIDetailsLog] = useState<any>(null);
@@ -172,7 +121,7 @@ const AccessLogsTab: React.FC = () => {
     }
 
     try {
-      const { data: zonesData, error: zonesError } = await supabase.from('zones').select('id, name');
+      const { data: zonesData, error: zonesError } = await supabase.from('zones').select('id, name, category, access_level');
       if (zonesError) throw zonesError;
       setZonesList(zonesData || []);
       // console.log('DEBUG: Zones Loaded Successfully.');
@@ -253,16 +202,16 @@ const AccessLogsTab: React.FC = () => {
       if (dateFrom) query = query.gte('timestamp', dateFrom);
       if (dateTo) query = query.lte('timestamp', dateTo);
 
-      if (selectedLogStatus !== 'all') {
+      if (selectedLogStatus !== SELECT_ALL_VALUE) {
         query = query.eq('decision', selectedLogStatus);
       }
 
-      if (selectedLogUserId !== 'all') {
+      if (selectedLogUserId !== SELECT_ALL_VALUE) {
         query = query.eq('user_id', selectedLogUserId);
       }
 
       // console.log('DEBUG: selectedLogZone (name) for Supabase query:', selectedLogZone);
-      if (selectedLogZone !== 'all') {
+      if (selectedLogZone !== SELECT_ALL_VALUE) {
         const zoneToFilter = zonesList.find((zone) => zone.name === selectedLogZone);
         if (zoneToFilter) {
           // console.log('DEBUG: Filtering by requested_zone_id:', zoneToFilter.id, 'for zone name:', selectedLogZone);
@@ -296,7 +245,7 @@ const AccessLogsTab: React.FC = () => {
 
       if (uniqueUserIds.length > 0) {
         try {
-          const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/get-user-emails`;
+          const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GET_USER_EMAILS}`;
 
           const response = await fetch(edgeFunctionUrl, {
             method: 'POST',
@@ -328,16 +277,16 @@ const AccessLogsTab: React.FC = () => {
           // console.log('DEBUG: log.zones object (from Supabase join) for this entry:', log.zones);
 
           const userDetails = log.users;
-          const userName = userDetails?.full_name || log.user_id || 'N/A';
+          const userName = userDetails?.full_name || log.user_id || NA_VALUE;
 
-          const userEmail = log.user_id ? userEmailsMap[log.user_id] || 'N/A' : 'N/A';
+          const userEmail = log.user_id ? userEmailsMap[log.user_id] || NA_VALUE : NA_VALUE;
 
-          const userRole = userDetails?.role_id ? roles.find((r) => r.id === userDetails.role_id)?.name || 'N/A' : 'N/A';
+          const userRole = userDetails?.role_id ? roles.find((r) => r.id === userDetails.role_id)?.name || NA_VALUE : NA_VALUE;
 
-          const userStatus = userDetails?.status_id ? userStatuses.find((s) => s.id === userDetails.status_id)?.name || 'N/A' : 'N/A';
+          const userStatus = userDetails?.status_id ? userStatuses.find((s) => s.id === userDetails.status_id)?.name || NA_VALUE : NA_VALUE;
 
           const zoneName =
-            log.zones?.name || (log.requested_zone_id ? zonesList.find((z) => z.id === log.requested_zone_id)?.name || log.requested_zone_id : 'N/A');
+            log.zones?.name || (log.requested_zone_id ? zonesList.find((z) => z.id === log.requested_zone_id)?.name || log.requested_zone_id : NA_VALUE);
           // console.log('DEBUG: Resolved ZoneName for display:', zoneName);
 
           const status = log.decision;
@@ -359,7 +308,7 @@ const AccessLogsTab: React.FC = () => {
       }
 
       const finalFilteredLogs = processedLogs.filter((log) => {
-        const matchesZoneFilter = selectedLogZone === 'all' ? true : log.zoneName === selectedLogZone;
+        const matchesZoneFilter = selectedLogZone === SELECT_ALL_VALUE ? true : log.zoneName === selectedLogZone;
 
         const lowerCaseSearchTerm = generalSearchTerm.toLowerCase();
         const matchesSearch = generalSearchTerm
@@ -435,25 +384,14 @@ const AccessLogsTab: React.FC = () => {
   const handleSummarySort = useCallback(
     (field: SummarySortField) => {
       if (summarySortField === field) {
-        setSummarySortDirection(summarySortDirection === 'asc' ? 'desc' : 'asc');
+        setSummarySortDirection(summarySortDirection === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC);
       } else {
         setSummarySortField(field);
-        setSummarySortDirection('asc');
+        setSummarySortDirection(SortDirection.ASC);
       }
     },
     [summarySortField, summarySortDirection]
   );
-
-  const logColumns: Column[] = [
-    { key: 'profilePicture', label: 'Photo', sortable: false },
-    { key: 'timestamp', label: 'Timestamp', sortable: true },
-    { key: 'userName', label: 'User Name', sortable: true },
-    { key: 'userEmail', label: 'User Email', sortable: false },
-    { key: 'userRole', label: 'User Role', sortable: false },
-    { key: 'userStatus', label: 'User Status', sortable: false },
-    { key: 'zoneName', label: 'Zone', sortable: true },
-    { key: 'status', label: 'Status', sortable: true },
-  ];
 
   const sortedLogs = useMemo(() => {
     return [...accessLogs].sort((a, b) => {
@@ -472,7 +410,7 @@ const AccessLogsTab: React.FC = () => {
         compareValue = a.status.localeCompare(b.status);
       }
 
-      return logSortDirection === 'asc' ? compareValue : -compareValue;
+      return logSortDirection === SortDirection.ASC ? compareValue : -compareValue;
     });
   }, [accessLogs, logSortField, logSortDirection]);
 
@@ -486,14 +424,14 @@ const AccessLogsTab: React.FC = () => {
 
     return uniqueUsers.map((userName) => {
       const userLogs = accessLogs.filter((log) => log.userName === userName);
-      const successful = userLogs.filter((log) => log.status === 'access_granted').length;
-      const failed = userLogs.filter((log) => log.status === 'access_denied').length;
+      const successful = userLogs.filter((log) => log.status === LogDecision.ACCESS_GRANTED).length;
+      const failed = userLogs.filter((log) => log.status === LogDecision.ACCESS_DENIED).length;
       const totalAccesses = userLogs.length;
       const successRate = totalAccesses > 0 ? (successful / totalAccesses) * 100 : 0;
 
       const timestamps = userLogs.map((log) => new Date(log.timestamp).getTime());
-      const firstAccess = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toLocaleString() : 'N/A';
-      const lastAccess = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toLocaleString() : 'N/A';
+      const firstAccess = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toLocaleString() : NA_VALUE;
+      const lastAccess = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toLocaleString() : NA_VALUE;
 
       const zoneAccesses: Record<string, number> = userLogs.reduce((acc: Record<string, number>, log) => {
         acc[log.zoneName] = (acc[log.zoneName] || 0) + 1;
@@ -502,7 +440,7 @@ const AccessLogsTab: React.FC = () => {
 
       return {
         user: userName,
-        email: userLogs[0]?.userEmail || 'N/A',
+        email: userLogs[0]?.userEmail || NA_VALUE,
         firstAccess,
         lastAccess,
         totalAccesses,
@@ -519,13 +457,13 @@ const AccessLogsTab: React.FC = () => {
       .filter((summary: SummaryEntry) => {
         const matchSearch = summarySearchTerm ? JSON.stringify(summary).toLowerCase().includes(summarySearchTerm.toLowerCase()) : true;
         const matchStatus =
-          summaryStatusFilter === 'all'
+          summaryStatusFilter === SELECT_ALL_VALUE
             ? true
             : summaryStatusFilter === 'successful'
-            ? summary.successful > 0
-            : summaryStatusFilter === 'failed'
-            ? summary.failed > 0
-            : true;
+              ? summary.successful > 0
+              : summaryStatusFilter === 'failed'
+                ? summary.failed > 0
+                : true;
         return matchSearch && matchStatus;
       })
       .sort((a: SummaryEntry, b: SummaryEntry) => {
@@ -543,7 +481,7 @@ const AccessLogsTab: React.FC = () => {
         } else if (summarySortField === 'successRate') {
           compareValue = a.successRate - b.successRate;
         }
-        return summarySortDirection === 'asc' ? compareValue : -compareValue;
+        return summarySortDirection === SortDirection.ASC ? compareValue : -compareValue;
       });
   }, [userSummaryData, summarySortField, summarySortDirection, summarySearchTerm, summaryStatusFilter]);
 
@@ -628,11 +566,11 @@ const AccessLogsTab: React.FC = () => {
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="access_granted">Access Granted</SelectItem>
-                  <SelectItem value="access_denied">Access Denied</SelectItem>
-                  <SelectItem value="unknown">Unknown</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
+                  {STATUS_FILTER_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -642,12 +580,12 @@ const AccessLogsTab: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => {
-                setGeneralSearchTerm('');
-                setDateFrom('');
-                setDateTo('');
-                setSelectedLogUserId('all');
-                setSelectedLogZone('all');
-                setSelectedLogStatus('all');
+                setGeneralSearchTerm(DEFAULT_FILTER_VALUES.generalSearchTerm);
+                setDateFrom(DEFAULT_FILTER_VALUES.dateFrom);
+                setDateTo(DEFAULT_FILTER_VALUES.dateTo);
+                setSelectedLogUserId(DEFAULT_FILTER_VALUES.selectedLogUserId);
+                setSelectedLogZone(DEFAULT_FILTER_VALUES.selectedLogZone);
+                setSelectedLogStatus(DEFAULT_FILTER_VALUES.selectedLogStatus);
               }}
             >
               Clear Filters
@@ -674,13 +612,15 @@ const AccessLogsTab: React.FC = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {logColumns.map((col) => (
+                    {LOG_COLUMNS.map((col) => (
                       <TableHead
                         key={col.key}
                         className={`cursor-pointer hover:bg-gray-50 select-none`}
                         onClick={() => {
                           if (col.sortable) {
-                            setLogSortDirection(logSortField === col.key ? (logSortDirection === 'asc' ? 'desc' : 'asc') : 'asc');
+                            setLogSortDirection(
+                              logSortField === col.key ? (logSortDirection === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC) : SortDirection.ASC
+                            );
                             setLogSortField(col.key as LogSortField);
                           }
                         }}
@@ -689,7 +629,7 @@ const AccessLogsTab: React.FC = () => {
                           {col.label}
                           {col.sortable &&
                             logSortField === col.key &&
-                            (logSortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (logSortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                     ))}
@@ -708,7 +648,7 @@ const AccessLogsTab: React.FC = () => {
                               onClick={() => openImageModal(log.profilePictureUrl!)} // Abrir modal al hacer clic
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = 'https://placehold.co/40x40/cccccc/ffffff?text=N/A';
+                                e.currentTarget.src = IMAGE_FALLBACKS.PROFILE_PICTURE;
                               }}
                             />
                           ) : (
@@ -733,8 +673,8 @@ const AccessLogsTab: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={log.status === 'access_granted' ? 'default' : 'destructive'}
-                            className={log.status === 'access_granted' ? 'bg-green-100 text-green-800' : ''}
+                            variant={log.status === LogDecision.ACCESS_GRANTED ? 'default' : 'destructive'}
+                            className={log.status === LogDecision.ACCESS_GRANTED ? 'bg-green-100 text-green-800' : ''}
                           >
                             {log.status.replace(/_/g, ' ')}
                           </Badge>
@@ -743,8 +683,13 @@ const AccessLogsTab: React.FC = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={logColumns.length} className="text-center py-8 text-gray-500">
-                        {generalSearchTerm || dateFrom || dateTo || selectedLogUserId !== 'all' || selectedLogZone !== 'all' || selectedLogStatus !== 'all'
+                      <TableCell colSpan={LOG_COLUMNS.length} className="text-center py-8 text-gray-500">
+                        {generalSearchTerm ||
+                        dateFrom ||
+                        dateTo ||
+                        selectedLogUserId !== SELECT_ALL_VALUE ||
+                        selectedLogZone !== SELECT_ALL_VALUE ||
+                        selectedLogStatus !== SELECT_ALL_VALUE
                           ? 'No logs found matching your filters.'
                           : 'No access logs for registered users found.'}
                       </TableCell>
@@ -763,10 +708,11 @@ const AccessLogsTab: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
+                  {PAGINATION_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option.toString()}>
+                      {option}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -791,7 +737,7 @@ const AccessLogsTab: React.FC = () => {
                       variant={logCurrentPage === page ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setLogCurrentPage(page)}
-                      className={`w-8 h-8 p-0 ${logCurrentPage === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                      className={`w-8 h-8 p-0 ${logCurrentPage === page ? 'bg-teal-600 hover:bg-teal-700' : EMPTY_STRING}`}
                     >
                       {page}
                     </Button>
@@ -884,9 +830,11 @@ const AccessLogsTab: React.FC = () => {
                         <SelectValue placeholder="All Users" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Users</SelectItem>
-                        <SelectItem value="successful">Users with Successful Access</SelectItem>
-                        <SelectItem value="failed">Users with Failed Access</SelectItem>
+                        {SUMMARY_STATUS_FILTER_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -894,8 +842,8 @@ const AccessLogsTab: React.FC = () => {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setSummarySearchTerm('');
-                        setSummaryStatusFilter('all');
+                        setSummarySearchTerm(DEFAULT_FILTER_VALUES.summarySearchTerm);
+                        setSummaryStatusFilter(DEFAULT_FILTER_VALUES.summaryStatusFilter);
                       }}
                     >
                       Clear Filters
@@ -915,42 +863,42 @@ const AccessLogsTab: React.FC = () => {
                         <div className="flex items-center">
                           User
                           {summarySortField === 'user' &&
-                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (summarySortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('email')}>
                         <div className="flex items-center">
                           Email
                           {summarySortField === 'email' &&
-                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (summarySortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('firstAccess')}>
                         <div className="flex items-center">
                           First Access
                           {summarySortField === 'firstAccess' &&
-                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (summarySortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('lastAccess')}>
                         <div className="flex items-center">
                           Last Access
                           {summarySortField === 'lastAccess' &&
-                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (summarySortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('totalAccesses')}>
                         <div className="flex items-center">
                           Total Accesses
                           {summarySortField === 'totalAccesses' &&
-                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (summarySortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSummarySort('successRate')}>
                         <div className="flex items-center">
                           Success Rate
                           {summarySortField === 'successRate' &&
-                            (summarySortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                            (summarySortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                         </div>
                       </TableHead>
                       <TableHead>Success/Failed</TableHead>
@@ -968,9 +916,19 @@ const AccessLogsTab: React.FC = () => {
                           <TableCell className="text-center font-medium">{summary.totalAccesses}</TableCell>
                           <TableCell className="text-center">
                             <Badge
-                              variant={summary.successRate >= 80 ? 'default' : summary.successRate >= 50 ? 'secondary' : 'destructive'}
+                              variant={
+                                summary.successRate >= SUCCESS_RATE_THRESHOLDS.HIGH
+                                  ? 'default'
+                                  : summary.successRate >= SUCCESS_RATE_THRESHOLDS.MEDIUM
+                                    ? 'secondary'
+                                    : 'destructive'
+                              }
                               className={
-                                summary.successRate >= 80 ? 'bg-green-100 text-green-800' : summary.successRate >= 50 ? 'bg-yellow-100 text-yellow-800' : ''
+                                summary.successRate >= SUCCESS_RATE_THRESHOLDS.HIGH
+                                  ? 'bg-green-100 text-green-800'
+                                  : summary.successRate >= SUCCESS_RATE_THRESHOLDS.MEDIUM
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : EMPTY_STRING
                               }
                             >
                               {summary.successRate}%
@@ -1000,7 +958,7 @@ const AccessLogsTab: React.FC = () => {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                          {summarySearchTerm || summaryStatusFilter !== 'all' ? 'No users found matching your filters.' : 'No user data available.'}
+                          {summarySearchTerm || summaryStatusFilter !== SELECT_ALL_VALUE ? 'No users found matching your filters.' : 'No user data available.'}
                         </TableCell>
                       </TableRow>
                     )}
@@ -1058,7 +1016,7 @@ const AccessLogsTab: React.FC = () => {
                 className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" // Estilos para la imagen grande
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src = 'https://placehold.co/400x400/cccccc/ffffff?text=Image+Not+Available'; // Fallback para imagen grande
+                  e.currentTarget.src = IMAGE_FALLBACKS.PROFILE_PICTURE_LARGE;
                 }}
               />
             ) : (

@@ -1,10 +1,13 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Camera } from '@/lib/api/types';
 import React from 'react';
 
 interface CameraDeleteDialogProps {
   open: boolean;
-  camera: { id: string; name: string } | null;
+  camera: Camera | null;
   onConfirm: () => void;
   onCancel: () => void;
 }

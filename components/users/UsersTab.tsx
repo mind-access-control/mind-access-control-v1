@@ -1,3 +1,5 @@
+'use client';
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,13 +9,15 @@ import { AlertCircle, Check, Download, FileSpreadsheet, X } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import UsersForm from './UsersForm';
 import UsersTable from './UsersTable';
+import { EMPTY_STRING } from '@/lib/constants';
+import { UploadStatus } from '@/app/enums';
 
 const UsersTab: React.FC = () => {
   const [csvIsDragging, setCsvIsDragging] = useState(false);
 
   // Estados para la carga masiva CSV (faltantes)
   const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>(UploadStatus.IDLE);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
   //Refs
@@ -22,11 +26,11 @@ const UsersTab: React.FC = () => {
   const processBulkUpload = async () => {
     if (!selectedCsvFile) {
       setUploadMessage('Please select a CSV file first.');
-      setUploadStatus('error');
+      setUploadStatus(UploadStatus.ERROR);
       return;
     }
 
-    setUploadStatus('processing');
+    setUploadStatus(UploadStatus.PROCESSING);
     setUploadMessage('Processing CSV file...');
 
     try {
@@ -36,12 +40,12 @@ const UsersTab: React.FC = () => {
       console.log('Processing bulk upload for file:', selectedCsvFile.name);
       await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async work
 
-      setUploadStatus('success');
+      setUploadStatus(UploadStatus.SUCCESS);
       setUploadMessage(`Successfully processed ${selectedCsvFile.name}! Users will be added shortly.`);
       setSelectedCsvFile(null); // Clear selected file after processing
     } catch (error: any) {
       console.error('Error processing bulk upload:', error);
-      setUploadStatus('error');
+      setUploadStatus(UploadStatus.ERROR);
       setUploadMessage(`Failed to process CSV: ${error.message}`);
     }
   };
@@ -66,21 +70,21 @@ const UsersTab: React.FC = () => {
       const file = e.dataTransfer.files[0];
       if (file.type === 'text/csv') {
         setSelectedCsvFile(file);
-        setUploadStatus('idle');
+        setUploadStatus(UploadStatus.IDLE);
         setUploadMessage(null);
       } else {
         setUploadMessage('Please drop a CSV file.');
-        setUploadStatus('error');
+        setUploadStatus(UploadStatus.ERROR);
       }
     }
   };
 
   const clearCsvFile = () => {
     setSelectedCsvFile(null);
-    setUploadStatus('idle');
+    setUploadStatus(UploadStatus.IDLE);
     setUploadMessage(null);
     if (csvFileInputRef.current) {
-      csvFileInputRef.current.value = '';
+      csvFileInputRef.current.value = EMPTY_STRING;
     }
   };
 
@@ -88,7 +92,7 @@ const UsersTab: React.FC = () => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedCsvFile(file);
-      setUploadStatus('idle');
+      setUploadStatus(UploadStatus.IDLE);
       setUploadMessage(null);
     }
   };
@@ -152,7 +156,7 @@ const UsersTab: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-4">
-            {uploadStatus === 'idle' ? (
+            {uploadStatus === UploadStatus.IDLE ? (
               <div
                 className={`border-2 ${csvIsDragging ? 'border-teal-500 bg-teal-50' : 'border-dashed border-gray-300'} rounded-lg p-6 transition-colors`}
                 onDragOver={handleCsvDragOver}
@@ -175,7 +179,7 @@ const UsersTab: React.FC = () => {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
                 <p className="text-gray-600">{uploadMessage}</p>
               </div>
-            ) : uploadStatus === 'success' ? (
+            ) : uploadStatus === UploadStatus.SUCCESS ? (
               <Alert className="bg-green-50 border-green-200">
                 <Check className="h-4 w-4 text-green-600" />
                 <AlertTitle className="text-green-800">Success</AlertTitle>
@@ -189,7 +193,7 @@ const UsersTab: React.FC = () => {
               </Alert>
             )}
 
-            {selectedCsvFile && uploadStatus === 'idle' && (
+            {selectedCsvFile && uploadStatus === UploadStatus.IDLE && (
               <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-md">
                 <FileSpreadsheet className="h-5 w-5 text-teal-600" />
                 <span className="text-sm font-medium truncate">{selectedCsvFile.name}</span>
@@ -214,13 +218,17 @@ const UsersTab: React.FC = () => {
               onClick={() => {
                 setBulkUploadModalOpen(false);
                 setSelectedCsvFile(null);
-                setUploadStatus('idle');
+                setUploadStatus(UploadStatus.IDLE);
               }}
-              disabled={uploadStatus === 'processing'}
+              disabled={uploadStatus === UploadStatus.PROCESSING}
             >
               Cancel
             </Button>
-            <Button onClick={processBulkUpload} className="bg-teal-600 hover:bg-teal-700" disabled={!selectedCsvFile || uploadStatus === 'processing'}>
+            <Button
+              onClick={processBulkUpload}
+              className="bg-teal-600 hover:bg-teal-700"
+              disabled={!selectedCsvFile || uploadStatus === UploadStatus.PROCESSING}
+            >
               Process Upload
             </Button>
           </DialogFooter>

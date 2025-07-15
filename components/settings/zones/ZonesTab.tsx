@@ -1,3 +1,5 @@
+'use client';
+
 import { TabsContent } from '@/components/ui/tabs';
 import { cameras as mockCameras } from '@/mock-data';
 import React, { useState } from 'react';

@@ -1,3 +1,5 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -5,12 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useZoneActions } from '@/hooks/zone.hooks';
 import { ZoneService } from '@/lib/api/services/zone-service';
+import { DEFAULT_ZONE_CATEGORY, EMPTY_STRING } from '@/lib/constants';
 import { zoneCategories } from '@/mock-data';
 import { useState } from 'react';
 
 const ZoneForm: React.FC = () => {
-  const [newZoneName, setNewZoneName] = useState('');
-  const [newZoneCategory, setNewZoneCategory] = useState('');
+  const [newZoneName, setNewZoneName] = useState(EMPTY_STRING);
+  const [newZoneCategory, setNewZoneCategory] = useState(EMPTY_STRING);
   const [isLoading, setIsLoading] = useState(false);
   const { loadZonesAndNotify } = useZoneActions();
 
@@ -19,12 +22,12 @@ const ZoneForm: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const newZone = await ZoneService.createZone({
+      await ZoneService.createZone({
         name: newZoneName.trim(),
-        category: newZoneCategory.trim() || 'Employee', // Default to Employee if no category selected
+        category: newZoneCategory.trim() || DEFAULT_ZONE_CATEGORY,
       });
-      setNewZoneName('');
-      setNewZoneCategory('');
+      setNewZoneName(EMPTY_STRING);
+      setNewZoneCategory(EMPTY_STRING);
       await loadZonesAndNotify();
     } catch (error) {
       console.error('Failed to create zone:', error);

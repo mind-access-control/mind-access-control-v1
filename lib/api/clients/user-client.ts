@@ -8,7 +8,7 @@ import {
   UserListResponse,
   User,
 } from '../types';
-import { EDGE_FUNCTIONS } from '@/lib/constants';
+import { EDGE_FUNCTIONS, EMPTY_STRING } from '@/lib/constants';
 
 export class UserClient extends BaseApiClient {
   /**
@@ -28,7 +28,7 @@ export class UserClient extends BaseApiClient {
     return this.makeRequest(EDGE_FUNCTIONS.EF_USERS, {
       method: 'PUT',
       body: request,
-      params: { id: request.userId || '' },
+      params: { id: request.userId || EMPTY_STRING },
     });
   }
 

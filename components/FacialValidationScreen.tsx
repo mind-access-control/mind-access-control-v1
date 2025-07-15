@@ -1,20 +1,12 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import Webcam from 'react-webcam';
-import * as faceapi from 'face-api.js';
-import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '@/lib/supabase'; // Importa el cliente Supabase existente
+'use client';
 
-interface Zone {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-// --- ACTUALIZACIÓN DE INTERFACES PARA LA RESPUESTA UNIFICADA DE LA EDGE FUNCTION ---
-interface ItemWithNameAndId {
-  id: string;
-  name: string;
-}
+import React, { useRef, useState, useEffect, useCallback } from "react";
+import Webcam from "react-webcam";
+import * as faceapi from "face-api.js";
+import { v4 as uuidv4 } from "uuid";
+import { supabase } from "@/lib/supabase"; // Import the existing Supabase client
+import { EDGE_FUNCTIONS } from "@/lib/constants";
+import { ItemWithNameAndId, Zone } from "@/lib/api/types";
 
 interface UnifiedValidationResponse {
   user: {
@@ -138,7 +130,7 @@ const FacialValidationScreen: React.FC = () => {
     const fetchZones = async () => {
       setIsLoadingZones(true);
       try {
-        const response = await fetch('https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones');
+        const response = await fetch(process.env.NEXT_PUBLIC_SUPABASE_URL + EDGE_FUNCTIONS.GET_ACCESS_ZONES);
         if (!response.ok) {
           throw new Error('Failed to fetch zones');
         }
@@ -240,7 +232,7 @@ const FacialValidationScreen: React.FC = () => {
       setImageSrc(capturedImageSrc); // Muestra la imagen capturada inmediatamente
 
       try {
-        const validateEdgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/validate-user-face';
+        const validateEdgeFunctionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + EDGE_FUNCTIONS.VALIDATE_USER_FACE;
 
         const payload = {
           faceEmbedding: Array.from(descriptor),

@@ -19,25 +19,17 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { UserCircle2, X, Check, Upload, Camera, RotateCcw, AlertCircle } from 'lucide-react';
 
 // Import shared types
-import { ObservedUser } from '@/types/common';
-// KEY CHANGE! Import ZoneSelector
 import { ZoneSelector } from '@/components/ui/zone-selector';
-
-// Assuming your types file defines 'Zone' like this:
-// import { Zone } from "@/lib/api/types";
-// If not, define it here:
-interface Zone {
-  id: string;
-  name: string;
-  category: string; // Make sure your Edge Function 'get-access-zones' returns this
-  access_level?: number;
-}
+import { Zone, ObservedUser } from '@/lib/api/types';
 
 // Import Face-API.js
 import * as faceapi from 'face-api.js';
 
 // Import the CameraCapture component
 import { CameraCapture } from '@/components/camera-capture';
+import { EDGE_FUNCTIONS, EMAIL_REGEX, EMPTY_STRING, NA_VALUE } from '@/lib/constants';
+import { CatalogService } from '@/lib/api/services';
+import { ZoneService } from '@/lib/api/services/zone-service';
 
 // Define the props for the modal
 interface RegisterUserModalProps {
@@ -47,12 +39,14 @@ interface RegisterUserModalProps {
   onUserRegistered: () => void; // Callback when the user is successfully registered
 }
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, observedUser, onUserRegistered }) => {
   // --- New User Form States ---
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState(EMPTY_STRING);
+  const [email, setEmail] = useState(EMPTY_STRING);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<string>(EMPTY_STRING);
   const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive');
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
 
@@ -168,12 +162,10 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
       setLoadingRoles(true);
       setErrorRoles(null);
       try {
-        const response = await fetch('https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-roles');
-        if (!response.ok) throw new Error((await response.json()).error || 'Failed to fetch roles');
-        const result = await response.json();
-        setRoles(result.roles || []);
-        if (result.roles && result.roles.length > 0) {
-          setSelectedRole(result.roles[0].name); // Select the first role by default
+        const roles = await CatalogService.getRoles();
+        setRoles(roles || []);
+        if (roles && roles.length > 0) {
+          setSelectedRole(roles[0].name); // Select the first role by default
         }
       } catch (error: any) {
         console.error('Error fetching roles:', error);
@@ -186,12 +178,8 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
       setLoadingZones(true);
       setErrorZones(null);
       try {
-        const response = await fetch('https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-access-zones');
-        if (!response.ok) throw new Error((await response.json()).error || 'Failed to fetch zones');
-        const result = await response.json();
-        // IMPORTANT! Ensure your Edge Function 'get-access-zones' returns 'category'
-        // For example, if it returns { id: "1", name: "Zone A", category: "Employee" }
-        setZonesData(result.zones || []);
+        const zones = await ZoneService.getZones();
+        setZonesData(zones || []);
       } catch (error: any) {
         console.error('Error fetching zones:', error);
         setErrorZones(error.message);
@@ -203,16 +191,14 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
       setLoadingUserStatuses(true);
       setErrorUserStatuses(null);
       try {
-        const response = await fetch('https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-user-statuses');
-        if (!response.ok) throw new Error((await response.json()).error || 'Failed to fetch user statuses');
-        const result = await response.json();
-        setUserStatuses(result.statuses || []);
-        if (result.statuses && result.statuses.length > 0) {
-          const inactiveStatus = result.statuses.find((status: { name: string }) => status.name === 'Inactive');
+        const userStatuses = await CatalogService.getUserStatuses();
+        setUserStatuses(userStatuses || []);
+        if (userStatuses && userStatuses.length > 0) {
+          const inactiveStatus = userStatuses.find((status: { name: string }) => status.name === 'Inactive');
           if (inactiveStatus) {
             setSelectedUserStatus(inactiveStatus.name);
           } else {
-            setSelectedUserStatus(result.statuses[0].name); // Default if 'Inactive' does not exist
+            setSelectedUserStatus(userStatuses[0].name); // Default if 'Inactive' does not exist
           }
         }
       } catch (error: any) {
@@ -237,10 +223,10 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
             .catch((err) => console.error('Error preloading observed user image:', err));
         }
       } else {
-        setFullName('');
-        setEmail('');
+        setFullName(EMPTY_STRING);
+        setEmail(EMPTY_STRING);
         setEmailError(null);
-        setSelectedRole('');
+        setSelectedRole(EMPTY_STRING);
         setSelectedUserStatus('Inactive');
         setSelectedAccessZones([]);
         clearImage();
@@ -332,9 +318,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
 
   // --- Form validation and handling functions ---
   const validateEmail = (email: string) => {
-    const re =
-      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-    return re.test(String(email).toLowerCase());
+    return EMAIL_REGEX.test(String(email).toLowerCase());
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -389,7 +373,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
         observedUserId: observedUser?.id || null,
       };
 
-      const edgeFunctionUrl = 'https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/register-new-user';
+      const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.REGISTER_NEW_USER}`;
 
       const response = await fetch(edgeFunctionUrl, {
         method: 'POST',
@@ -405,13 +389,13 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
       }
 
       const result = await response.json();
-      setShowStatusMessage(`User registered successfully! ID: ${result.userId || 'N/A'}`);
+      setShowStatusMessage(`User registered successfully! ID: ${result.userId || NA_VALUE}`);
       console.log('User registration successful:', result);
 
-      setFullName('');
-      setEmail('');
+      setFullName(EMPTY_STRING);
+      setEmail(EMPTY_STRING);
       setEmailError(null);
-      setSelectedRole('');
+      setSelectedRole(EMPTY_STRING);
       setSelectedUserStatus('Inactive');
       setSelectedAccessZones([]);
       clearImage();
@@ -452,7 +436,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
                 placeholder="Enter email address"
                 value={email}
                 onChange={handleEmailChange}
-                className={emailError ? 'border-red-500' : ''}
+                className={emailError ? 'border-red-500' : EMPTY_STRING}
               />
               {emailError && (
                 <div className="flex items-center mt-1 text-red-500 text-sm">

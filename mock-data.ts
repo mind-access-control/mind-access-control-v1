@@ -1,91 +1,6 @@
 // Import types from the types file
-import type { Column, Log } from './types';
-
-// Mock Data Objects
-
-// 2. Access Logs Data
-export const accessLogs: Log[] = [
-  {
-    id: 1,
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
-    user: 'John Doe',
-    email: 'john.doe@example.com',
-    role: 'Admin',
-    zone: 'Server Room',
-    status: 'Granted',
-    method: 'Face Recognition',
-  },
-  {
-    id: 2,
-    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 minutes ago
-    user: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    role: 'User',
-    zone: 'Main Entrance',
-    status: 'Granted',
-    method: 'Card',
-  },
-  {
-    id: 3,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hour ago
-    user: 'Robert Johnson',
-    email: 'robert.johnson@example.com',
-    role: 'User',
-    zone: 'Parking Lot',
-    status: 'Denied',
-    method: 'Face Recognition',
-  },
-  {
-    id: 4,
-    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(), // 1.5 hours ago
-    user: 'Maria Garcia',
-    email: 'maria.garcia@example.com',
-    role: 'Admin',
-    zone: 'Server Room',
-    status: 'Granted',
-    method: 'Card',
-  },
-  {
-    id: 5,
-    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), // 2 hours ago
-    user: 'David Wilson',
-    email: 'david.wilson@example.com',
-    role: 'User',
-    zone: 'Main Entrance',
-    status: 'Granted',
-    method: 'Face Recognition',
-  },
-  {
-    id: 6,
-    timestamp: new Date(Date.now() - 1000 * 60 * 150).toISOString(), // 2.5 hours ago
-    user: 'John Doe',
-    email: 'john.doe@example.com',
-    role: 'Admin',
-    zone: 'Office Area',
-    status: 'Granted',
-    method: 'Card',
-  },
-  {
-    id: 7,
-    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(), // 3 hours ago
-    user: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    role: 'User',
-    zone: 'Office Area',
-    status: 'Denied',
-    method: 'Face Recognition',
-  },
-  {
-    id: 8,
-    timestamp: new Date(Date.now() - 1000 * 60 * 210).toISOString(), // 3.5 hours ago
-    user: 'Maria Garcia',
-    email: 'maria.garcia@example.com',
-    role: 'Admin',
-    zone: 'Parking Lot',
-    status: 'Granted',
-    method: 'Face Recognition',
-  },
-];
+import type { Column } from '@/lib/api/types';
+import { EMPTY_STRING } from '@/lib/constants';
 
 // 3. CSV Template Content
 export const csvTemplateContent = `Full Name,Email Address,User Role,Job Title,Access Zones,Photo URL
@@ -276,17 +191,16 @@ export const failureCauseData: any[] = [];
 
 // 15. Default States
 export const defaultNewCamera = {
-  name: '',
-  zone: '',
-  location: '',
+  name: EMPTY_STRING,
+  zone: EMPTY_STRING,
+  location: EMPTY_STRING,
 };
 
  // Predefined categories for zones
  export const zoneCategories = ['Employee', 'Visitor', 'Management', 'Security', 'Maintenance', 'Guest', 'Contractor', 'Other'];
 
 // Export all mock data as a single object for easy importing
-export const mockData = {
-  accessLogs,
+export const mockData = {  
   csvTemplateContent,
   zones,
   cameras,

@@ -4,14 +4,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, ArrowRight, UserCircle2 } from 'lucide-react';
-
-interface SuspiciousUser {
-  id: string;
-  name: string;
-  reason: string;
-  details?: any;
-  photoUrl?: string | null;
-}
+import { SuspiciousUser } from '@/lib/api/types';
 
 interface SuspiciousUserListProps {
   users: SuspiciousUser[];

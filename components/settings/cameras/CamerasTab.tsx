@@ -1,20 +1,23 @@
+'use client';
+
 import { TabsContent } from '@/components/ui/tabs';
 import { useCameraActions } from '@/hooks/camera.hooks';
 import { useZoneActions } from '@/hooks/zone.hooks';
 import { CameraService } from '@/lib/api/services/camera-service';
+import { Camera } from '@/lib/api/types';
 import React, { useState } from 'react';
 import { CameraDeleteDialog } from './CameraDeleteDialog';
 import { CameraForm } from './CameraForm';
 import { CameraTable } from './CameraTable';
 
 const CamerasTab: React.FC = () => {
-  const { cameras, isLoading, error, fetchCameras } = useCameraActions();
+  const { cameras, isLoading, fetchCameras } = useCameraActions();
   const { zones } = useZoneActions();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [cameraToDelete, setCameraToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
   const [loadingAction, setLoadingAction] = useState(false);
 
-  const handleAddCamera = async (camera: { name: string; zone_id: string; location?: string }) => {
+  const handleAddCamera = async (camera: Camera) => {
     setLoadingAction(true);
     try {
       await CameraService.createCamera(camera);
@@ -24,7 +27,7 @@ const CamerasTab: React.FC = () => {
     }
   };
 
-  const handleEditCamera = async (id: string, data: { name: string; zone_id: string; location?: string }) => {
+  const handleEditCamera = async (id: string, data: Camera) => {
     setLoadingAction(true);
     try {
       await CameraService.updateCamera(id, data);
@@ -34,7 +37,7 @@ const CamerasTab: React.FC = () => {
     }
   };
 
-  const handleDeleteCamera = (camera: { id: string; name: string }) => {
+  const handleDeleteCamera = (camera: Camera) => {
     setCameraToDelete(camera);
     setDeleteDialogOpen(true);
   };
@@ -43,8 +46,10 @@ const CamerasTab: React.FC = () => {
     if (!cameraToDelete) return;
     setLoadingAction(true);
     try {
-      await CameraService.deleteCamera(cameraToDelete.id);
-      await fetchCameras();
+      if (cameraToDelete.id) {
+        await CameraService.deleteCamera(cameraToDelete.id);
+        await fetchCameras();
+      }
     } finally {
       setLoadingAction(false);
       setDeleteDialogOpen(false);

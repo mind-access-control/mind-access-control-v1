@@ -29,42 +29,21 @@ import {
   CheckCircle,
   Loader2,
 } from "lucide-react";
+import { ObservedLog, ObservedLogSortField } from "@/lib/api/types";
+import { SortDirection } from "@/app/enums";
+import { EDGE_FUNCTIONS, EMPTY_STRING } from "@/lib/constants";
 
-// Assuming this interface will be defined in a shared file like '@/types/common'
-interface ItemWithNameAndId {
-  id: string;
-  name: string;
-}
-
-interface ObservedLog {
-  id: string; // Log ID
-  timestamp: string;
-  observedUserId: string; // Observed user ID
-  faceImageUrl: string | null; // URL of the last photo of the observed user
-  zone: ItemWithNameAndId; // {id, name} object
-  status: ItemWithNameAndId; // {id, name} object
-  aiAction: string | null; // AI suggested action
-  isRegistered: boolean; // Indicates if the observed user is registered
-}
-
-// Type for table sort fields, now including 'isRegistered'
-type ObservedLogSortField =
-  | "timestamp"
-  | "observedUserId"
-  | "zone"
-  | "status"
-  | "isRegistered";
-type SortDirection = "asc" | "desc";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 const DetailedObservedLogsTab: React.FC = () => {
   const [logs, setLogs] = useState<ObservedLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(EMPTY_STRING);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [sortField, setSortField] = useState<ObservedLogSortField>("timestamp");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortDirection, setSortDirection] = useState<SortDirection>(SortDirection.DESC);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
 
   const [startDate, setStartDate] = useState<string | null>(null);
@@ -74,7 +53,7 @@ const DetailedObservedLogsTab: React.FC = () => {
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
-  const [selectedImageAlt, setSelectedImageAlt] = useState<string>("");
+  const [selectedImageAlt, setSelectedImageAlt] = useState<string>(EMPTY_STRING);
 
   const handleImageClick = (imageUrl: string | null, userId: string) => {
     if (imageUrl) {
@@ -93,8 +72,7 @@ const DetailedObservedLogsTab: React.FC = () => {
     // only the refresh button will show loading state.
     setError(null);
     try {
-      const edgeFunctionUrl =
-        "https://bfkhgzjlpjatpzadvjbd.supabase.co/functions/v1/get-observed-user-logs";
+      const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GET_OBSERVED_USER_LOGS}`;
 
       const url = new URL(edgeFunctionUrl);
       url.searchParams.append("searchTerm", searchTerm);
@@ -156,7 +134,7 @@ const DetailedObservedLogsTab: React.FC = () => {
           if (!a.isRegistered && b.isRegistered) comparison = -1;
         }
 
-        return sortDirection === "asc" ? comparison : -comparison;
+        return sortDirection === SortDirection.ASC ? comparison : -comparison;
       });
 
       setLogs(processedLogs);
@@ -199,10 +177,10 @@ const DetailedObservedLogsTab: React.FC = () => {
   }, [totalLogsCount, itemsPerPage, currentPage]);
 
   const handleRefresh = useCallback(() => {
-    setSearchTerm("");
+    setSearchTerm(EMPTY_STRING);
     setCurrentPage(1);
     setSortField("timestamp");
-    setSortDirection("desc");
+    setSortDirection(SortDirection.DESC);
     setStartDate(null);
     setEndDate(null);
     setRefreshTrigger((prev) => prev + 1);
@@ -212,10 +190,10 @@ const DetailedObservedLogsTab: React.FC = () => {
   const handleSortChange = useCallback(
     (field: ObservedLogSortField) => {
       if (sortField === field) {
-        setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        setSortDirection(sortDirection === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC);
       } else {
         setSortField(field);
-        setSortDirection("asc");
+        setSortDirection(SortDirection.ASC);
       }
       setCurrentPage(1);
       // Removed setLoading(true) here to prevent "Loading logs..." on sort
@@ -233,7 +211,7 @@ const DetailedObservedLogsTab: React.FC = () => {
 
   const getSortIcon = (field: ObservedLogSortField) => {
     if (sortField === field) {
-      return sortDirection === "asc" ? (
+      return sortDirection === SortDirection.ASC ? (
         <ChevronUp className="w-4 h-4 inline ml-1" />
       ) : (
         <ChevronDown className="w-4 h-4 inline ml-1" />
@@ -294,7 +272,7 @@ const DetailedObservedLogsTab: React.FC = () => {
               id="startDate"
               type="date"
               className="py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200"
-              value={startDate || ""}
+              value={startDate || EMPTY_STRING}
               onChange={(e) => {
                 setStartDate(e.target.value);
                 setCurrentPage(1);
@@ -308,7 +286,7 @@ const DetailedObservedLogsTab: React.FC = () => {
               id="endDate"
               type="date"
               className="py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200"
-              value={endDate || ""}
+              value={endDate || EMPTY_STRING}
               onChange={(e) => {
                 setEndDate(e.target.value);
                 setCurrentPage(1);
@@ -423,7 +401,7 @@ const DetailedObservedLogsTab: React.FC = () => {
                             className="w-6 h-6 rounded-full object-cover"
                             onError={(e) => {
                               e.currentTarget.onerror = null;
-                              e.currentTarget.src = "";
+                              e.currentTarget.src = EMPTY_STRING;
                               e.currentTarget.style.display = "none";
                               const parent = e.currentTarget.parentElement;
                               if (parent) {
@@ -480,7 +458,7 @@ const DetailedObservedLogsTab: React.FC = () => {
                             ? "bg-red-100 text-red-800"
                             : log.status.name.toLowerCase() === "pending"
                             ? "bg-yellow-100 text-yellow-800"
-                            : ""
+                            : EMPTY_STRING
                         }
                       >
                         {log.status.name.replace(/_/g, " ")}
