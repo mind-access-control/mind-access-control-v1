@@ -1,3 +1,5 @@
+'use client';
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +10,7 @@ import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 
 import { CreateUserRequest, UploadService, UserService } from '@/lib/api';
-import { EMAIL_REGEX } from '@/lib/constants';
+import { EMAIL_REGEX, EMPTY_STRING, NA_VALUE } from '@/lib/constants';
 import { AlertCircle, Camera, Check, RotateCcw, Upload, X } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
 import { CameraCapture } from '../camera-capture';
@@ -16,10 +18,10 @@ import { CameraCapture } from '../camera-capture';
 const UsersForm: React.FC = () => {
   //States
   // --- New User Form States ---
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState(EMPTY_STRING);
+  const [email, setEmail] = useState(EMPTY_STRING);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<string>(EMPTY_STRING);
   const defaultStatus = 'active'; // Default to 'Active'
   const [selectedUserStatus, setSelectedUserStatus] = useState<string>(defaultStatus);
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
@@ -111,7 +113,7 @@ const UsersForm: React.FC = () => {
       console.error('Selected file is not an image.');
       setFaceDetectionError('Please select an image file (e.g., JPG, PNG).');
     }
-    e.target.value = '';
+    e.target.value = EMPTY_STRING;
   }, []);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,7 +140,7 @@ const UsersForm: React.FC = () => {
     setFaceEmbedding(null);
     setFaceDetectionError(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = EMPTY_STRING;
     }
   }, []);
 
@@ -215,17 +217,17 @@ const UsersForm: React.FC = () => {
         }
       }
       // Muestra un mensaje de éxito con el ID del usuario si se devuelve.
-      setShowStatusMessage(`User saved successfully! ID: ${result.userId || 'N/A'}`);
+      setShowStatusMessage(`User saved successfully! ID: ${result.userId || NA_VALUE}`);
       console.log('User registration successful:', result);
 
       // Refresh the users list to show the new user
       await loadUsersAndNotify();
 
       // Reinicia el formulario a sus valores iniciales después de un guardado exitoso.
-      setFullName('');
-      setEmail('');
+      setFullName(EMPTY_STRING);
+      setEmail(EMPTY_STRING);
       setEmailError(null);
-      setSelectedRole('');
+      setSelectedRole(EMPTY_STRING);
       setSelectedUserStatus(defaultStatus);
       setSelectedAccessZones([]);
       clearImage(); // Limpia la imagen y los estados relacionados (embedding, error de detección).
@@ -284,7 +286,7 @@ const UsersForm: React.FC = () => {
                 placeholder="Enter email address"
                 value={email}
                 onChange={handleEmailChange}
-                className={emailError ? 'border-red-500' : ''}
+                className={emailError ? 'border-red-500' : EMPTY_STRING}
               />
               {emailError && (
                 <div className="flex items-center mt-1 text-red-500 text-sm">

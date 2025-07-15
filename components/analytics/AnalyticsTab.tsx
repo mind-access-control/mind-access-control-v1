@@ -9,31 +9,18 @@ import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import SecurityTrendsChart from './SecurityTrendsChart';
 import FailureCauseChart from './FailureCauseChart';
+import { EMPTY_STRING } from '@/lib/constants';
+import { DailyTrendEntry, LogData } from '@/lib/api/types';
+import { LogDecision } from '@/app/enums';
 
 // Supabase Client Configuration
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
-// Definir un tipo para los datos brutos de logs que necesitamos
-type LogData = {
-  timestamp: string;
-  decision: 'access_granted' | 'access_denied' | 'error' | 'unknown';
-  reason: string | null;
-  match_status: string | null;
-};
-
-// Tipo para los datos de tendencia diarios
-type DailyTrendEntry = {
-  name: string; // Será el nombre corto del día (Mon, Tue, etc.)
-  dateKey: string; // Será la fecha completa UTC (YYYY-MM-DD) para orden y referencia
-  success: number;
-  failed: number;
-};
-
 const AnalyticsTab: React.FC = () => {
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>(EMPTY_STRING);
+  const [dateTo, setDateTo] = useState<string>(EMPTY_STRING);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,11 +55,11 @@ const AnalyticsTab: React.FC = () => {
 
   // Helper para categorizar las razones de fallo
   const categorizeFailureReason = useCallback((log: LogData): string => {
-    const reason = log.reason?.toLowerCase() || '';
+    const reason = log.reason?.toLowerCase() || EMPTY_STRING;
     const decision = log.decision;
-    const matchStatus = log.match_status?.toLowerCase() || '';
+    const matchStatus = log.match_status?.toLowerCase() || EMPTY_STRING;
 
-    if (decision === 'access_granted') return 'Success';
+    if (decision === LogDecision.ACCESS_GRANTED) return 'Success';
 
     if (reason.includes('access denied for zone')) {
       return 'Access Denied (Zone)';
@@ -89,10 +76,10 @@ const AnalyticsTab: React.FC = () => {
     if (reason.includes('system error')) {
       return 'System Error';
     }
-    if (decision === 'error') {
+    if (decision === LogDecision.ERROR) {
       return 'Processing Error';
     }
-    if (decision === 'unknown') {
+    if (decision === LogDecision.UNKNOWN) {
       return 'Unknown Decision';
     }
 
@@ -152,9 +139,9 @@ const AnalyticsTab: React.FC = () => {
         const dateKey = logDate.toISOString().split('T')[0]; // YYYY-MM-DD (UTC)
 
         if (dailyDataMap[dateKey]) {
-          if (log.decision === 'access_granted') {
+          if (log.decision === LogDecision.ACCESS_GRANTED) {
             dailyDataMap[dateKey].success++;
-          } else if (log.decision === 'access_denied' || log.decision === 'error') {
+          } else if (log.decision === LogDecision.ACCESS_DENIED || log.decision === LogDecision.ERROR) {
             dailyDataMap[dateKey].failed++;
           }
         }
@@ -172,7 +159,7 @@ const AnalyticsTab: React.FC = () => {
       // --- Procesar datos para Failure Cause Chart ---
       const failureCauses: { [key: string]: number } = {};
       logs.forEach((log) => {
-        if (log.decision === 'access_denied' || log.decision === 'error') {
+        if (log.decision === LogDecision.ACCESS_DENIED || log.decision === LogDecision.ERROR) {
           const categorizedReason = categorizeFailureReason(log);
           failureCauses[categorizedReason] = (failureCauses[categorizedReason] || 0) + 1;
           // console.log(`DEBUG: Failed Log - Timestamp: ${log.timestamp}, Decision: ${log.decision}, Reason: "${log.reason}", Match Status: "${log.match_status}" -> Categorized As: "${categorizedReason}"`); // Descomentar para depuración detallada

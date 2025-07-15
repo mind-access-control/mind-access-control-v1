@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Zone } from '@/lib/api/types';
 import { ChevronDown, X } from 'lucide-react';
 import React from 'react';
+import { EMPTY_STRING } from '@/lib/constants.ts';
 
 interface ZoneSelectorProps {
   zones: Zone[];
@@ -28,7 +29,7 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
   error = null,
   disabled = false,
   placeholder = 'Select zones',
-  className = '',
+  className = EMPTY_STRING,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -161,7 +162,7 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
                 : error
                 ? `Error: ${error}`
                 : selectedZones.length > 0
-                ? `${selectedZones.length} zone${selectedZones.length > 1 ? 's' : ''} selected`
+                ? `${selectedZones.length} zone${selectedZones.length > 1 ? 's' : EMPTY_STRING} selected`
                 : placeholder}
             </span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -206,7 +207,7 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
                           {category}
                         </Badge>
                         <span className="text-xs text-gray-500">
-                          ({categoryZones.length} zone{categoryZones.length > 1 ? 's' : ''})
+                          ({categoryZones.length} zone{categoryZones.length > 1 ? 's' : EMPTY_STRING})
                         </span>
                         {/* Category Select All */}
                         <div className="ml-auto">

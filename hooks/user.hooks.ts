@@ -7,6 +7,7 @@ import { UserService } from '@/lib/api/services/user-service';
 import { ZoneService } from '@/lib/api/services/zone-service';
 import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
+import { EMPTY_STRING } from '@/lib/constants.ts';
 
 // Create a simple event system for user updates
 const userUpdateCallbacks: (() => void)[] = [];
@@ -18,7 +19,7 @@ const notifyUserUpdate = () => {
 
 export function useUserActions() {
   // --- New User Form States ---
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<string>(EMPTY_STRING);
   const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive'); // Default to 'Inactive'
   // States for data fetched from Edge Functions
   const [roles, setRoles] = useState<Role[]>([]);

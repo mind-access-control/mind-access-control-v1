@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Camera, X, RotateCcw, Check, AlertCircle } from "lucide-react"
+import { EMPTY_STRING } from "@/lib/constants"
 
 interface CameraCaptureProps {
   onCapture: (imageData: string) => void
@@ -18,7 +19,7 @@ export function CameraCapture({ onCapture, onClose, open }: CameraCaptureProps) 
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cameraList, setCameraList] = useState<MediaDeviceInfo[]>([])
-  const [selectedCamera, setSelectedCamera] = useState<string>("")
+  const [selectedCamera, setSelectedCamera] = useState<string>(EMPTY_STRING)
   const [isLoading, setIsLoading] = useState(false)
   const [permissionStatus, setPermissionStatus] = useState<string>("unknown")
 

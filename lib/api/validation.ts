@@ -1,4 +1,4 @@
-import { EMAIL_REGEX } from '../constants';
+import { EMAIL_REGEX, EMPTY_STRING } from '../constants';
 import { ValidationError as ValidationErrorType } from './types';
 
 // ============================================================================
@@ -40,7 +40,7 @@ export function validateField<T>(value: any, field: keyof T, rules: ValidationRu
   const errors: ValidationErrorType[] = [];
 
   // Required check
-  if (rule.required && (value === undefined || value === null || value === '')) {
+  if (rule.required && (value === undefined || value === null || value === EMPTY_STRING)) {
     errors.push({
       field: String(field),
       message: `${String(field)} is required`,
@@ -50,7 +50,7 @@ export function validateField<T>(value: any, field: keyof T, rules: ValidationRu
   }
 
   // Skip further validation if value is empty and not required
-  if (value === undefined || value === null || value === '') {
+  if (value === undefined || value === null || value === EMPTY_STRING) {
     return { value, errors };
   }
 
@@ -365,7 +365,7 @@ export function validateFaceRequest(data: any): { data: any; errors: ValidationE
 // ============================================================================
 
 export function sanitizeInput(input: string): string {
-  return input.trim().replace(/[<>]/g, '');
+  return input.trim().replace(/[<>]/g, EMPTY_STRING);
 }
 
 export function validatePagination(params: any): { page: number; limit: number } {
