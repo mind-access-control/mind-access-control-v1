@@ -1,23 +1,21 @@
 'use client'; // This line goes at the beginning if it's a Client Component
-import { createClient } from '@supabase/supabase-js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 // --- Constants Import ---
-import { DisplayLog, Log, LogSortField, Role, SummaryEntry, SummarySortField, UserForFilter, UserStatus, Zone } from '@/lib/api/types';
+import { AccessLogFilter, DisplayLog, LogSortField, Role, SummaryEntry, SummarySortField, UserForFilter, UserStatus, Zone } from '@/lib/api/types';
 import {
   DEFAULT_FILTER_VALUES,
   DEFAULT_LOG_CURRENT_PAGE,
   DEFAULT_LOG_ITEMS_PER_PAGE,
   DEFAULT_LOG_SORT_FIELD,
   DEFAULT_SUMMARY_SORT_FIELD,
-  EDGE_FUNCTIONS,
   EMPTY_STRING,
   IMAGE_FALLBACKS,
   LOG_COLUMNS,
   NA_VALUE,
   PAGINATION_OPTIONS,
   SELECT_ALL_VALUE,
-  STATUS_FILTER_OPTIONS,
+  DECISION_FILTER_OPTIONS,
   SUCCESS_RATE_THRESHOLDS,
   SUMMARY_STATUS_FILTER_OPTIONS,
 } from '@/lib/constants';
@@ -35,11 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 // --- Lucide React Icons ---
 import { ChevronDown, ChevronUp, RefreshCcw, Search, SlidersHorizontal, TrendingUp, UserCircle } from 'lucide-react';
 import { LogDecision, SortDirection } from '@/app/enums';
-
-// Supabase Client Configuration
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+import { CatalogService, UserService, AccessLogService, ZoneService } from '@/lib/api/services';
 
 const AccessLogsTab: React.FC = () => {
   // --- Access Logs Filtering/Sorting States ---
@@ -51,8 +45,8 @@ const AccessLogsTab: React.FC = () => {
   const [dateFrom, setDateFrom] = useState(DEFAULT_FILTER_VALUES.dateFrom);
   const [dateTo, setDateTo] = useState(DEFAULT_FILTER_VALUES.dateTo);
   const [selectedLogUserId, setSelectedLogUserId] = useState(DEFAULT_FILTER_VALUES.selectedLogUserId);
-  const [selectedLogZone, setSelectedLogZone] = useState(DEFAULT_FILTER_VALUES.selectedLogZone);
-  const [selectedLogStatus, setSelectedLogStatus] = useState(DEFAULT_FILTER_VALUES.selectedLogStatus);
+  const [selectedLogZoneId, setSelectedLogZoneId] = useState(DEFAULT_FILTER_VALUES.selectedLogZoneId);
+  const [selectedLogDecisionId, setSelectedLogDecisionId] = useState(DEFAULT_FILTER_VALUES.selectedLogDecisionId);
 
   const [logSortField, setLogSortField] = useState<LogSortField>(DEFAULT_LOG_SORT_FIELD);
   const [logSortDirection, setLogSortDirection] = useState<SortDirection>(SortDirection.DESC);
@@ -108,9 +102,8 @@ const AccessLogsTab: React.FC = () => {
     let allCatalogsLoaded = true;
 
     try {
-      const { data: rolesData, error: rolesError } = await supabase.from('roles_catalog').select('id, name');
-      if (rolesError) throw rolesError;
-      setRoles(rolesData || []);
+      const roles = await CatalogService.getRoles();
+      setRoles(roles || []);
       // console.log('DEBUG: Roles Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching roles:', error);
@@ -121,9 +114,8 @@ const AccessLogsTab: React.FC = () => {
     }
 
     try {
-      const { data: zonesData, error: zonesError } = await supabase.from('zones').select('id, name, category, access_level');
-      if (zonesError) throw zonesError;
-      setZonesList(zonesData || []);
+      const zones = await ZoneService.getZones();
+      setZonesList(zones || []);
       // console.log('DEBUG: Zones Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching zones:', error);
@@ -134,9 +126,8 @@ const AccessLogsTab: React.FC = () => {
     }
 
     try {
-      const { data: userStatusesData, error: userStatusesError } = await supabase.from('user_statuses_catalog').select('id, name');
-      if (userStatusesError) throw userStatusesError;
-      setUserStatuses(userStatusesData || []);
+      const userStatuses = await CatalogService.getUserStatuses();
+      setUserStatuses(userStatuses || []);
       // console.log('DEBUG: User Statuses Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching user statuses:', error);
@@ -147,9 +138,8 @@ const AccessLogsTab: React.FC = () => {
     }
 
     try {
-      const { data: usersData, error: usersError } = await supabase.from('users').select('id, full_name');
-      if (usersError) throw usersError;
-      setAllUsersForFilter(usersData.filter((u) => u.full_name).map((u) => ({ id: u.id, full_name: u.full_name! })) || []);
+      const users = await UserService.getAllUsersForFilter();
+      setAllUsersForFilter(users || []);
       // console.log('DEBUG: All Users for Filter Loaded Successfully.');
     } catch (error: any) {
       console.error('Error fetching all users for filter:', error);
@@ -161,7 +151,7 @@ const AccessLogsTab: React.FC = () => {
 
     setCatalogsReady(allCatalogsLoaded);
     // console.log('DEBUG: fetchCatalogs FINISHED. catalogsReady:', allCatalogsLoaded);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     // console.log('DEBUG: useEffect for fetchCatalogs triggered.');
@@ -191,140 +181,23 @@ const AccessLogsTab: React.FC = () => {
     setLoadingAccessLogs(true);
     setErrorAccessLogs(null);
     try {
-      let query = supabase
-        .from('logs')
-        .select(
-          `id,timestamp,user_id,observed_user_id,camera_id,result,user_type,match_status,decision,reason,confidence_score,requested_zone_id,users(full_name,role_id,status_id,profile_picture_url),zones(name)`
-        )
-        .not('user_id', 'is', null)
-        .order('timestamp', { ascending: false });
-
-      if (dateFrom) query = query.gte('timestamp', dateFrom);
-      if (dateTo) query = query.lte('timestamp', dateTo);
-
-      if (selectedLogStatus !== SELECT_ALL_VALUE) {
-        query = query.eq('decision', selectedLogStatus);
-      }
-
-      if (selectedLogUserId !== SELECT_ALL_VALUE) {
-        query = query.eq('user_id', selectedLogUserId);
-      }
-
-      // console.log('DEBUG: selectedLogZone (name) for Supabase query:', selectedLogZone);
-      if (selectedLogZone !== SELECT_ALL_VALUE) {
-        const zoneToFilter = zonesList.find((zone) => zone.name === selectedLogZone);
-        if (zoneToFilter) {
-          // console.log('DEBUG: Filtering by requested_zone_id:', zoneToFilter.id, 'for zone name:', selectedLogZone);
-          query = query.eq('requested_zone_id', zoneToFilter.id);
-        } else {
-          console.warn('WARNING: Selected zone name not found in zonesList:', selectedLogZone);
-          query = query.eq('requested_zone_id', 'non-existent-id');
-        }
-      }
-
-      const { data: rawLogs, error: logsError } = (await query) as {
-        data:
-          | (Log & {
-              users: { full_name: string; role_id: string; status_id: string; profile_picture_url: string | null } | null;
-              zones: { name: string } | null;
-            })[]
-          | null;
-        error: any;
+      const filter: AccessLogFilter = {
+        dateFrom,
+        dateTo,
+        selectedLogDecisionId,
+        selectedLogUserId,
+        selectedLogZoneId,
+        generalSearchTerm,
       };
+      const result = await AccessLogService.getAccessLogs(
+        filter,
+        roles,
+        userStatuses,
+        zonesList
+      );
 
-      if (logsError) {
-        console.error('Supabase Query Error:', logsError);
-        throw logsError;
-      }
-
-      // console.log('Raw Logs Data from Supabase (COMPLETE):', JSON.stringify(rawLogs, null, 2));
-
-      const uniqueUserIds = Array.from(new Set((rawLogs || []).map((log) => log.user_id).filter(Boolean))) as string[];
-
-      let userEmailsMap: Record<string, string> = {};
-
-      if (uniqueUserIds.length > 0) {
-        try {
-          const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GET_USER_EMAILS}`;
-
-          const response = await fetch(edgeFunctionUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({ userIds: uniqueUserIds }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Edge Function error: ${errorData.error || response.statusText}`);
-          }
-
-          const result = await response.json();
-          userEmailsMap = result.emails;
-        } catch (edgeError: any) {
-          console.error('Error fetching emails via Edge Function:', edgeError);
-        }
-      }
-
-      let processedLogs: DisplayLog[] = [];
-      if (rawLogs) {
-        processedLogs = rawLogs.map((log) => {
-          // console.log('Processing Log Entry ID:', log.id);
-          // console.log('DEBUG: log.users object for this entry:', log.users);
-          // console.log('DEBUG: log.requested_zone_id for this entry:', log.requested_zone_id);
-          // console.log('DEBUG: log.zones object (from Supabase join) for this entry:', log.zones);
-
-          const userDetails = log.users;
-          const userName = userDetails?.full_name || log.user_id || NA_VALUE;
-
-          const userEmail = log.user_id ? userEmailsMap[log.user_id] || NA_VALUE : NA_VALUE;
-
-          const userRole = userDetails?.role_id ? roles.find((r) => r.id === userDetails.role_id)?.name || NA_VALUE : NA_VALUE;
-
-          const userStatus = userDetails?.status_id ? userStatuses.find((s) => s.id === userDetails.status_id)?.name || NA_VALUE : NA_VALUE;
-
-          const zoneName =
-            log.zones?.name || (log.requested_zone_id ? zonesList.find((z) => z.id === log.requested_zone_id)?.name || log.requested_zone_id : NA_VALUE);
-          // console.log('DEBUG: Resolved ZoneName for display:', zoneName);
-
-          const status = log.decision;
-          const profilePictureUrl = userDetails?.profile_picture_url || null;
-
-          return {
-            id: log.id,
-            timestamp: new Date(log.timestamp).toLocaleString(),
-            userId: log.user_id,
-            userName: userName,
-            userEmail: userEmail,
-            userRole: userRole,
-            userStatus: userStatus,
-            zoneName: zoneName,
-            status: status,
-            profilePictureUrl: profilePictureUrl,
-          };
-        });
-      }
-
-      const finalFilteredLogs = processedLogs.filter((log) => {
-        const matchesZoneFilter = selectedLogZone === SELECT_ALL_VALUE ? true : log.zoneName === selectedLogZone;
-
-        const lowerCaseSearchTerm = generalSearchTerm.toLowerCase();
-        const matchesSearch = generalSearchTerm
-          ? log.userName.toLowerCase().includes(lowerCaseSearchTerm) ||
-            log.userEmail.toLowerCase().includes(lowerCaseSearchTerm) ||
-            log.userRole.toLowerCase().includes(lowerCaseSearchTerm) ||
-            log.userStatus.toLowerCase().includes(lowerCaseSearchTerm) ||
-            log.zoneName.toLowerCase().includes(lowerCaseSearchTerm) ||
-            log.status.toLowerCase().includes(lowerCaseSearchTerm)
-          : true;
-
-        return matchesZoneFilter && matchesSearch;
-      });
-
-      setAccessLogs(finalFilteredLogs);
-      // console.log('DEBUG: fetchAccessLogs FINISHED successfully. Final filtered logs count:', finalFilteredLogs.length);
+      setAccessLogs(result || []);
+      // console.log('DEBUG: fetchAccessLogs FINISHED successfully. Final filtered logs count:', result.length);
     } catch (error: any) {
       console.error('Error fetching access logs:', error);
       setErrorAccessLogs(error.message || 'Failed to load access logs.');
@@ -332,12 +205,11 @@ const AccessLogsTab: React.FC = () => {
       setLoadingAccessLogs(false);
     }
   }, [
-    supabase,
     dateFrom,
     dateTo,
-    selectedLogStatus,
+    selectedLogDecisionId,
     selectedLogUserId,
-    selectedLogZone,
+    selectedLogZoneId,
     generalSearchTerm,
     roles,
     zonesList,
@@ -369,7 +241,7 @@ const AccessLogsTab: React.FC = () => {
 
   useEffect(() => {
     setLogCurrentPage(1);
-  }, [generalSearchTerm, selectedLogUserId, selectedLogZone, selectedLogStatus, dateFrom, dateTo, logItemsPerPage]);
+  }, [generalSearchTerm, selectedLogUserId, selectedLogZoneId, selectedLogDecisionId, dateFrom, dateTo, logItemsPerPage]);
 
   const handleAIDetails = useCallback((log: DisplayLog) => {
     // console.log('AI Details for log (if needed):', log);
@@ -532,7 +404,7 @@ const AccessLogsTab: React.FC = () => {
                   <SelectValue placeholder="All Users" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Users</SelectItem>
+                  <SelectItem value={SELECT_ALL_VALUE}>All Users</SelectItem>
                   {allUsersForFilter.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.full_name}
@@ -544,14 +416,14 @@ const AccessLogsTab: React.FC = () => {
 
             <div className="space-y-2">
               <Label>Access Zone</Label>
-              <Select value={selectedLogZone} onValueChange={setSelectedLogZone} disabled={loadingAccessLogs || !catalogsReady || loadingZonesList}>
+              <Select value={selectedLogZoneId} onValueChange={setSelectedLogZoneId} disabled={loadingAccessLogs || !catalogsReady || loadingZonesList}>
                 <SelectTrigger className="bg-slate-50">
                   <SelectValue placeholder="All Zones" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Zones</SelectItem>
+                  <SelectItem value={SELECT_ALL_VALUE}>All Zones</SelectItem>
                   {zonesList.map((zone) => (
-                    <SelectItem key={zone.id} value={zone.name}>
+                    <SelectItem key={zone.id} value={zone.id}>
                       {zone.name}
                     </SelectItem>
                   ))}
@@ -561,12 +433,12 @@ const AccessLogsTab: React.FC = () => {
 
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select value={selectedLogStatus} onValueChange={setSelectedLogStatus} disabled={loadingAccessLogs || !catalogsReady}>
+              <Select value={selectedLogDecisionId} onValueChange={setSelectedLogDecisionId} disabled={loadingAccessLogs || !catalogsReady}>
                 <SelectTrigger className="bg-slate-50">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_FILTER_OPTIONS.map((option) => (
+                  {DECISION_FILTER_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -583,9 +455,9 @@ const AccessLogsTab: React.FC = () => {
                 setGeneralSearchTerm(DEFAULT_FILTER_VALUES.generalSearchTerm);
                 setDateFrom(DEFAULT_FILTER_VALUES.dateFrom);
                 setDateTo(DEFAULT_FILTER_VALUES.dateTo);
-                setSelectedLogUserId(DEFAULT_FILTER_VALUES.selectedLogUserId);
-                setSelectedLogZone(DEFAULT_FILTER_VALUES.selectedLogZone);
-                setSelectedLogStatus(DEFAULT_FILTER_VALUES.selectedLogStatus);
+                setSelectedLogUserId(SELECT_ALL_VALUE);
+                setSelectedLogZoneId(SELECT_ALL_VALUE);
+                setSelectedLogDecisionId(SELECT_ALL_VALUE);
               }}
             >
               Clear Filters
@@ -688,8 +560,8 @@ const AccessLogsTab: React.FC = () => {
                         dateFrom ||
                         dateTo ||
                         selectedLogUserId !== SELECT_ALL_VALUE ||
-                        selectedLogZone !== SELECT_ALL_VALUE ||
-                        selectedLogStatus !== SELECT_ALL_VALUE
+                        selectedLogZoneId !== SELECT_ALL_VALUE ||
+                        selectedLogDecisionId !== SELECT_ALL_VALUE
                           ? 'No logs found matching your filters.'
                           : 'No access logs for registered users found.'}
                       </TableCell>

@@ -3,19 +3,6 @@
 // ============================================================================
 
 /**
- * Helper function to get a human-readable name from a TypeScript type
- */
-function getTypeName<T>(): string {
-  // Try to extract type name from constructor
-  try {
-    // This is a fallback - we'll use a more robust approach
-    return 'item';
-  } catch {
-    return 'item';
-  }
-}
-
-/**
  * Generic function to extract data from API responses that may have nested data structures.
  * Handles multiple patterns:
  * - Direct data: response.data

@@ -1,7 +1,7 @@
-import { UserClient } from '../clients/user-client';
-import { CreateUserRequest, DeleteUserRequest, UpdateUserRequest, User, UserListRequest, UserListResponse } from '../types';
-import { extractObjectData } from '../utils';
-import { validatePagination, validateSorting, validateUser, ValidationErrorClass } from '../validation';
+import { UserClient } from '@/lib/api/clients/user-client';
+import { CreateUserRequest, DeleteUserRequest, UpdateUserRequest, User, UserForFilter, UserListRequest, UserListResponse } from '@/lib/api/types';
+import { extractArrayData, extractObjectData } from '@/lib/api/utils';
+import { validatePagination, validateSorting, validateUser, ValidationErrorClass } from '@/lib/api/validation';
 
 // Create a singleton instance of UserClient
 const userClient = new UserClient();
@@ -9,6 +9,8 @@ const userClient = new UserClient();
 export class UserService {
   /**
    * Create a new user with validation
+   * @param request - The request object containing the user data
+   * @returns The response object containing the user ID
    */
   static async createUser(request: CreateUserRequest): Promise<{ userId: string }> {
     // Validate request
@@ -28,6 +30,8 @@ export class UserService {
 
   /**
    * Update an existing user
+   * @param request - The request object containing the user data
+   * @returns The response object containing the message
    */
   static async updateUser(request: UpdateUserRequest): Promise<{ message: string }> {
     if (!request.userId) {
@@ -44,6 +48,8 @@ export class UserService {
 
   /**
    * Delete a user
+   * @param request - The request object containing the user ID
+   * @returns The response object containing the message
    */
   static async deleteUser(request: DeleteUserRequest): Promise<{ message: string }> {
     if (!request.userId) {
@@ -60,6 +66,8 @@ export class UserService {
 
   /**
    * Get users with pagination and filtering
+   * @param request - The request object containing the user data
+   * @returns The response object containing the users
    */
   static async getUsers(request: UserListRequest = {}): Promise<UserListResponse> {
     // Validate pagination and sorting
@@ -84,6 +92,8 @@ export class UserService {
 
   /**
    * Get a single user by ID
+   * @param userId - The ID of the user to fetch
+   * @returns The response object containing the user
    */
   static async getUserById(userId: string): Promise<User> {
     if (!userId) {
@@ -100,6 +110,8 @@ export class UserService {
 
   /**
    * Get a single user role by ID
+   * @param userId - The ID of the user to fetch the role for
+   * @returns The response object containing the user role
    */
   static async getUserRoleById(userId: string): Promise<{ role_name: string }> {
     if (!userId) {
@@ -112,5 +124,17 @@ export class UserService {
     }
 
     return extractObjectData<{ role_name: string }>(response);
+  }
+
+  /**
+   * Get all users for filter
+   * @returns The response object containing the users for filter
+   */
+  static async getAllUsersForFilter(): Promise<UserForFilter[]> {
+    const response = await userClient.getAllUsersForFilter();
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to fetch users for filter');
+    }
+    return extractArrayData<UserForFilter>(response, 'users');
   }
 }

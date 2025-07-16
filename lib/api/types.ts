@@ -68,8 +68,9 @@ export interface CreateUserRequest {
   statusName: string;
   accessZoneNames: string[];
   faceEmbedding?: number[];
-  profilePictureUrl?: string;
+  profilePictureUrl?: string | null;
   accessMethod?: 'facial' | 'card' | 'pin';
+  observedUserId?: string | null;
 }
 
 export interface UpdateUserRequest {
@@ -133,6 +134,25 @@ export type UserStatus = {
 // ZONE MANAGEMENT TYPES
 // ============================================================================
 
+export interface CreateZoneRequest {
+  name: string;
+  category?: string;
+  access_level?: number;
+}
+
+export interface UpdateZoneRequest {
+  name?: string;
+  category?: string;
+  access_level?: number;
+}
+
+export interface ZoneResponse {
+  success: boolean;
+  data?: Zone | Zone[];
+  error?: string;
+  message?: string;
+}
+
 export type Zone = {
   id: string;
   name: string;
@@ -183,6 +203,15 @@ export interface RefreshTokenRequest {
 // ============================================================================
 // ACCESS LOGS TYPES
 // ============================================================================
+
+export type AccessLogFilter = {
+  dateFrom: string;
+  dateTo: string;
+  selectedLogDecisionId: string;
+  selectedLogUserId: string;
+  selectedLogZoneId: string;  
+  generalSearchTerm: string;
+};
 
 export type UserForFilter = { 
   id: string; 
@@ -274,10 +303,30 @@ export type DailyTrendEntry = {
   failed: number;
 };
 
+export type AnalyticResponse = {
+  dailyTrendData: DailyTrendEntry[];
+  failureCauseData: { name: string; value: number }[];
+};
+
 // ============================================================================
 // OVERVIEW TAB TYPES
 // ============================================================================
 
+export interface AIRecommendationRequest {
+  riskScore: RiskScore;
+  kpiData: KpiData;
+  suspiciousUsers: SuspiciousUserForDisplay[];
+}
+export interface OverviewResponse {
+  totalUsers: number;
+  activeZonesCount: number;
+  accessesToday: number;
+  activeAlerts: number;
+  anomalousAttempts: number;
+  successRate: number;
+  finalRiskScore: RiskScore;
+  suspiciousUsersMap: { [key: string]: SuspiciousUserMapEntry };
+}
 
 // Tipo para los datos de KPI
 export interface KpiData {
@@ -333,6 +382,20 @@ export interface AIRecommendation {
 // OBSERVED USERS TYPES
 // ============================================================================
 
+export interface ObservedUserRequest {
+  searchTerm?: string;
+  page?: number;
+  pageSize?: number;
+  sortField?: string;
+  sortDirection?: string;
+  filterType?: string;
+}
+
+export interface ObservedUserActionRequest {
+  observedUserId: string;
+  actionType: string;
+}
+
 // Interfaz para la respuesta completa de la Edge Function (alineada con get-observed-users EF)
 export interface ObservedUsersResponse {
   users: ObservedUser[];
@@ -377,6 +440,22 @@ export type ObservedUserSortField =
 // ============================================================================
 // OBSERVED USERS LOGS TYPES
 // ============================================================================
+
+export interface ObservedLogFilter {
+  startDate: string;
+  endDate: string;
+  searchTerm: string;
+  page: number;
+  pageSize: number;
+  sortField: string;
+  sortDirection: string;
+}
+
+export interface ObservedLogResponse {
+  logs: ObservedLog[];
+  totalCount: number;
+}
+
 export interface ObservedLog {
   id: string; // Log ID
   timestamp: string;
@@ -394,3 +473,85 @@ export type ObservedLogSortField =
 | "zone"
 | "status"
 | "isRegistered";
+
+// ============================================================================
+// FACE VALIDATION TYPES
+// ============================================================================
+
+export type UserInfo = {
+  id: string;
+  fullName: string | null;
+  userType: 'registered' | 'observed' | 'unknown';
+  role: string;
+  status: string;
+  accessZones: string[];
+  similarity: number;
+  hasAccess: boolean;
+  observedDetails?: {
+    firstSeenAt: string;
+    lastSeenAt: string;
+    accessCount: number;
+    alertTriggered: boolean;
+    expiresAt: string;
+    potentialMatchUserId: string | null;
+    faceImageUrl: string | null;
+  };
+};
+
+export interface FaceValidationRequest {
+  faceEmbedding: number[];
+  zoneId: string;
+  imageData: string;
+}
+
+export interface UnifiedValidationResponse {
+  user: {
+    id: string;
+    full_name: string | null;
+    user_type: 'registered' | 'observed' | 'unknown';
+    hasAccess: boolean;
+    similarity: number;
+    role_details: ItemWithNameAndId | null; // Null para observados
+    status_details: ItemWithNameAndId;
+    zones_accessed_details: ItemWithNameAndId[];
+
+    observed_details?: {
+      // Opcional, solo para usuarios observados
+      firstSeenAt: string;
+      lastSeenAt: string;
+      accessCount: number;
+      alertTriggered: boolean;
+      expiresAt: string;
+      potentialMatchUserId: string | null;
+      similarity: number; // Añadido
+      distance: number; // Añadido
+      faceImageUrl: string | null; // URL de la imagen de la cara
+    };
+  };
+  type:
+    | 'registered_user_matched'
+    | 'observed_user_updated'
+    | 'new_observed_user_registered'
+    | 'no_match_found'
+    | 'registered_user_access_denied'
+    | 'observed_user_access_denied_expired'
+    | 'observed_user_access_denied_status_expired'
+    | string;
+  message?: string;
+  error?: string;
+}
+
+// ============================================================================
+// UPLOAD TYPES
+// ============================================================================
+
+export interface UploadImageRequest {
+  userId: string;
+  imageData: string; // Base64 image data
+  isObservedUser: boolean;
+}
+
+export interface UploadImageResponse {
+  message: string;
+  imageUrl: string;
+}

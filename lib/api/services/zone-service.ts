@@ -1,25 +1,6 @@
-import { ZoneClient } from '../clients/zone-client';
-import { Zone } from '../types';
-import { extractArrayData, extractObjectData } from '../utils';
-
-export interface CreateZoneRequest {
-  name: string;
-  category?: string;
-  access_level?: number;
-}
-
-export interface UpdateZoneRequest {
-  name?: string;
-  category?: string;
-  access_level?: number;
-}
-
-export interface ZoneResponse {
-  success: boolean;
-  data?: Zone | Zone[];
-  error?: string;
-  message?: string;
-}
+import { ZoneClient } from '@/lib/api/clients/zone-client';
+import { CreateZoneRequest, UpdateZoneRequest, Zone } from '@/lib/api/types';
+import { extractArrayData, extractObjectData } from '@/lib/api/utils';
 
 // Create a singleton instance of ZoneClient
 const zoneClient = new ZoneClient();
@@ -27,6 +8,7 @@ const zoneClient = new ZoneClient();
 export class ZoneService {
   /**
    * Get all zones
+   * @returns The zones
    */
   static async getZones(): Promise<Zone[]> {
     const response = await zoneClient.getZones();
@@ -38,6 +20,8 @@ export class ZoneService {
 
   /**
    * Get a specific zone by ID
+   * @param id - The ID of the zone to fetch
+   * @returns The zone
    */
   static async getZone(id: string): Promise<Zone> {
     const response = await zoneClient.getZone(id);
@@ -49,6 +33,8 @@ export class ZoneService {
 
   /**
    * Create a new zone
+   * @param request - The request object containing the zone data
+   * @returns The created zone
    */
   static async createZone(request: CreateZoneRequest): Promise<Zone> {
     const response = await zoneClient.createZone(request);
@@ -60,6 +46,9 @@ export class ZoneService {
 
   /**
    * Update an existing zone
+   * @param id - The ID of the zone to update
+   * @param request - The request object containing the zone data
+   * @returns The updated zone
    */
   static async updateZone(id: string, request: UpdateZoneRequest): Promise<Zone> {
     const response = await zoneClient.updateZone(id, request);
@@ -71,6 +60,8 @@ export class ZoneService {
 
   /**
    * Delete a zone
+   * @param id - The ID of the zone to delete
+   * @returns The deleted zone
    */
   static async deleteZone(id: string): Promise<void> {
     const response = await zoneClient.deleteZone(id);
@@ -81,6 +72,8 @@ export class ZoneService {
 
   /**
    * Validate zone name
+   * @param name - The name of the zone to validate
+   * @returns The error message if the zone name is invalid, otherwise null
    */
   static validateZoneName(name: string): string | null {
     if (!name || typeof name !== 'string') {
@@ -97,6 +90,8 @@ export class ZoneService {
 
   /**
    * Validate access level
+   * @param accessLevel - The access level to validate
+   * @returns The error message if the access level is invalid, otherwise null
    */
   static validateAccessLevel(accessLevel?: number): string | null {
     if (accessLevel !== undefined && (typeof accessLevel !== 'number' || accessLevel < 0)) {
@@ -107,6 +102,8 @@ export class ZoneService {
 
   /**
    * Validate category
+   * @param category - The category to validate
+   * @returns The error message if the category is invalid, otherwise null
    */
   static validateCategory(category?: string): string | null {
     if (category !== undefined && (typeof category !== 'string' || category.trim().length === 0)) {
@@ -120,6 +117,8 @@ export class ZoneService {
 
   /**
    * Validate create zone request
+   * @param request - The request object containing the zone data
+   * @returns The error message if the request is invalid, otherwise null
    */
   static validateCreateRequest(request: CreateZoneRequest): string | null {
     const nameError = this.validateZoneName(request.name);
@@ -136,6 +135,8 @@ export class ZoneService {
 
   /**
    * Validate update zone request
+   * @param request - The request object containing the zone data
+   * @returns The error message if the request is invalid, otherwise null
    */
   static validateUpdateRequest(request: UpdateZoneRequest): string | null {
     if (request.name !== undefined) {

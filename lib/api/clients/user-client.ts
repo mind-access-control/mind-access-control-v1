@@ -1,13 +1,5 @@
 import { BaseApiClient } from './base-client';
-import { ApiResponse, Role } from '../types';
-import {
-  CreateUserRequest,
-  UpdateUserRequest,
-  DeleteUserRequest,
-  UserListRequest,
-  UserListResponse,
-  User,
-} from '../types';
+import { CreateUserRequest, UpdateUserRequest, DeleteUserRequest, UserListRequest, UserListResponse, User, UserForFilter, ApiResponse } from '@/lib/api/types';
 import { EDGE_FUNCTIONS, EMPTY_STRING } from '@/lib/constants';
 
 export class UserClient extends BaseApiClient {
@@ -78,4 +70,14 @@ export class UserClient extends BaseApiClient {
       params: { userId: userId },
     });
   }
-} 
+
+  /**
+   * Get all users for filter
+   */
+  async getAllUsersForFilter(): Promise<ApiResponse<UserForFilter[]>> {
+    return this.makeRequest(EDGE_FUNCTIONS.EF_USERS, {
+      method: 'GET',
+      params: { minimal: '1' },
+    });
+  }
+}

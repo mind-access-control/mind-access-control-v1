@@ -201,7 +201,19 @@ async function handleGet(req: Request) {
   try {
     const url = new URL(req.url);
     const userId = url.searchParams.get('id');
+    const minimal = url.searchParams.get('minimal');
     const supabase = createSupabaseClient();
+
+    // Minimal users list: ?minimal=1
+    if (minimal === '1') {
+      const { data, error } = await supabase.from('users').select('id, full_name');
+      if (error) {
+        return createCorsResponse({ error: error.message }, 500);
+      }
+      // Explicitly map to only id and full_name
+      const minimalUsers = (data || []).map((u: any) => ({ id: u.id, full_name: u.full_name }));
+      return createCorsResponse({ users: minimalUsers });
+    }
 
     // If userId is provided, get single user
     if (userId) {
