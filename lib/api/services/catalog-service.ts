@@ -1,6 +1,6 @@
-import { CatalogClient } from '../clients/catalog-client';
-import { Role, UserStatus, Zone } from '../types';
-import { extractArrayData } from '../utils';
+import { CatalogClient } from '@/lib/api/clients/catalog-client';
+import { Role, UserStatus, Zone } from '@/lib/api/types';
+import { extractArrayData } from '@/lib/api/utils';
 
 // Create a singleton instance of CatalogClient
 const catalogClient = new CatalogClient();
@@ -8,6 +8,7 @@ const catalogClient = new CatalogClient();
 export class CatalogService {
   /**
    * Get all roles
+   * @returns The roles
    */
   static async getRoles(): Promise<Role[]> {
     const response = await catalogClient.getRoles();
@@ -19,6 +20,7 @@ export class CatalogService {
 
   /**
    * Get all user statuses
+   * @returns The user statuses
    */
   static async getUserStatuses(): Promise<UserStatus[]> {
     const response = await catalogClient.getUserStatuses();
@@ -30,6 +32,7 @@ export class CatalogService {
 
   /**
    * Get all access zones
+   * @returns The access zones
    */
   static async getAccessZones(): Promise<Zone[]> {
     const response = await catalogClient.getAccessZones();

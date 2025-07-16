@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Zone } from '@/lib/api/types';
 import { ChevronDown, X } from 'lucide-react';
 import React from 'react';
-import { EMPTY_STRING } from '@/lib/constants.ts';
+import { EMPTY_STRING } from '@/lib/constants';
 
 interface ZoneSelectorProps {
   zones: Zone[];

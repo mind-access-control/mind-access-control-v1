@@ -26,14 +26,12 @@ import {
   ChevronUp,
   ChevronDown,
   UserCircle2,
-  CheckCircle,
   Loader2,
 } from "lucide-react";
-import { ObservedLog, ObservedLogSortField } from "@/lib/api/types";
+import { ObservedLog, ObservedLogFilter, ObservedLogSortField } from "@/lib/api/types";
 import { SortDirection } from "@/app/enums";
-import { EDGE_FUNCTIONS, EMPTY_STRING } from "@/lib/constants";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+import { EMPTY_STRING } from "@/lib/constants";
+import { AccessLogService } from "@/lib/api/services";
 
 const DetailedObservedLogsTab: React.FC = () => {
   const [logs, setLogs] = useState<ObservedLog[]>([]);
@@ -72,46 +70,18 @@ const DetailedObservedLogsTab: React.FC = () => {
     // only the refresh button will show loading state.
     setError(null);
     try {
-      const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GET_OBSERVED_USER_LOGS}`;
 
-      const url = new URL(edgeFunctionUrl);
-      url.searchParams.append("searchTerm", searchTerm);
-      url.searchParams.append("page", currentPage.toString());
-      url.searchParams.append("pageSize", itemsPerPage.toString());
-      url.searchParams.append("sortField", sortField); // Use the state's sortField
-      url.searchParams.append("sortDirection", sortDirection);
+      const filter: ObservedLogFilter = {
+        searchTerm,
+        page: currentPage,
+        pageSize: itemsPerPage,
+        sortField,
+        sortDirection,
+        startDate: startDate || EMPTY_STRING,
+        endDate: endDate || EMPTY_STRING,
+      };
 
-      if (startDate) {
-        url.searchParams.append("startDate", startDate);
-      }
-      if (endDate) {
-        url.searchParams.append("endDate", endDate);
-      }
-
-      console.log(
-        "Frontend: Attempting to fetch logs from URL:",
-        url.toString()
-      );
-
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorData: { error?: string; message?: string } =
-          await response.json();
-        throw new Error(
-          errorData.error ||
-            errorData.message ||
-            `HTTP Error: ${response.status}`
-        );
-      }
-
-      const result: { logs: ObservedLog[]; totalCount: number } =
-        await response.json();
+      const result = await AccessLogService.getObservedLogs(filter);  
 
       let processedLogs = result.logs;
 

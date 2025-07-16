@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react'; // Importar useState
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { EMPTY_STRING } from '@/lib/constants.ts';
+import { EMPTY_STRING } from '@/lib/constants';
 
 interface KpiCardProps {
   icon: React.ReactNode;

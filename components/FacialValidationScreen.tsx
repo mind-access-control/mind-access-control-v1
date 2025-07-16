@@ -3,53 +3,15 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import * as faceapi from 'face-api.js';
-import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '@/lib/supabase'; // Import the existing Supabase client
-import { EDGE_FUNCTIONS } from '@/lib/constants';
-import { ItemWithNameAndId, Zone } from '@/lib/api/types';
-
-interface UnifiedValidationResponse {
-  user: {
-    id: string;
-    full_name: string | null;
-    user_type: 'registered' | 'observed' | 'unknown';
-    hasAccess: boolean;
-    similarity: number;
-    role_details: ItemWithNameAndId | null; // Null para observados
-    status_details: ItemWithNameAndId;
-    zones_accessed_details: ItemWithNameAndId[];
-
-    observed_details?: {
-      // Opcional, solo para usuarios observados
-      firstSeenAt: string;
-      lastSeenAt: string;
-      accessCount: number;
-      alertTriggered: boolean;
-      expiresAt: string;
-      potentialMatchUserId: string | null;
-      similarity: number; // Añadido
-      distance: number; // Añadido
-      faceImageUrl: string | null; // URL de la imagen de la cara
-    };
-  };
-  type:
-    | 'registered_user_matched'
-    | 'observed_user_updated'
-    | 'new_observed_user_registered'
-    | 'no_match_found'
-    | 'registered_user_access_denied'
-    | 'observed_user_access_denied_expired'
-    | 'observed_user_access_denied_status_expired'
-    | string;
-  message?: string;
-  error?: string;
-}
-// --- FIN DE ACTUALIZACIÓN DE INTERFACES ---
+import { FaceValidationRequest, UserInfo, Zone } from '@/lib/api/types';
+import { ZoneService, FaceService } from '@/lib/api/services';
+import { EMPTY_STRING, NA_VALUE } from '@/lib/constants';
+import { CaptureMode } from '@/app/enums';
 
 const FacialValidationScreen: React.FC = () => {
   // --- ESTADOS ---
   const webcamRef = useRef<Webcam>(null);
-  const [captureMode, setCaptureMode] = useState<'manual' | 'automatic'>('manual');
+  const [captureMode, setCaptureMode] = useState<CaptureMode>(CaptureMode.MANUAL);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [faceApiModelsLoaded, setFaceApiModelsLoaded] = useState<boolean>(false);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
@@ -61,25 +23,7 @@ const FacialValidationScreen: React.FC = () => {
   const [isLoadingZones, setIsLoadingZones] = useState<boolean>(true);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
-  const [userInfo, setUserInfo] = useState<{
-    id: string;
-    fullName: string | null;
-    userType: 'registered' | 'observed' | 'unknown';
-    role: string;
-    status: string;
-    accessZones: string[];
-    similarity: number;
-    hasAccess: boolean;
-    observedDetails?: {
-      firstSeenAt: string;
-      lastSeenAt: string;
-      accessCount: number;
-      alertTriggered: boolean;
-      expiresAt: string;
-      potentialMatchUserId: string | null;
-      faceImageUrl: string | null;
-    };
-  } | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   const [intervalRestartTrigger, setIntervalRestartTrigger] = useState(false);
 
@@ -128,27 +72,10 @@ const FacialValidationScreen: React.FC = () => {
     const fetchZones = async () => {
       setIsLoadingZones(true);
       try {
-        const response = await fetch(process.env.NEXT_PUBLIC_SUPABASE_URL + EDGE_FUNCTIONS.GET_ACCESS_ZONES);
-        if (!response.ok) {
-          throw new Error('Failed to fetch zones');
-        }
-        const data = await response.json();
-
-        let zonesArray: Zone[] = [];
-        if (Array.isArray(data)) {
-          zonesArray = data;
-        } else if (data && Array.isArray(data.data)) {
-          zonesArray = data.data;
-        } else if (data && Array.isArray(data.zones)) {
-          zonesArray = data.zones;
-        } else if (data && data.id && data.name) {
-          zonesArray = [data];
-        }
-
-        setZones(zonesArray);
-
-        if (zonesArray.length > 0 && selectedZone === null) {
-          setSelectedZone(zonesArray[0].id);
+        const zones = await ZoneService.getZones();
+        setZones(zones);
+        if (zones.length > 0 && selectedZone === null) {
+          setSelectedZone(zones[0].id);
         }
       } catch (error) {
         console.error('❌ ERROR: Error al obtener zonas:', error);
@@ -266,28 +193,14 @@ const FacialValidationScreen: React.FC = () => {
       setImageSrc(capturedImageSrc);
 
       try {
-        const validateEdgeFunctionUrl = process.env.NEXT_PUBLIC_SUPABASE_URL + EDGE_FUNCTIONS.VALIDATE_USER_FACE;
-
-        const payload = {
+        const request: FaceValidationRequest = {
           faceEmbedding: Array.from(descriptor),
           zoneId: selectedZone,
           imageData: capturedImageSrc,
         };
 
-        const response = await fetch(validateEdgeFunctionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
+        const result = await FaceService.validateFace(request);
 
-        if (!response.ok) {
-          const errorData: { error?: string; message?: string } = await response.json();
-          throw new Error(errorData.error || errorData.message || `Error HTTP: ${response.status}`);
-        }
-
-        const result: UnifiedValidationResponse = await response.json();
         console.log('✅ VALIDACIÓN: Resultado de validación de rostro:', result);
 
         if (result.error) {
@@ -297,7 +210,7 @@ const FacialValidationScreen: React.FC = () => {
           return;
         }
 
-        let displayMessage = '';
+        let displayMessage = EMPTY_STRING;
         let userFullNameForDisplay = result.user.full_name;
 
         if (!userFullNameForDisplay || userFullNameForDisplay === 'System Error') {
@@ -320,8 +233,8 @@ const FacialValidationScreen: React.FC = () => {
           id: result.user.id,
           fullName: userFullNameForDisplay,
           userType: result.user.user_type,
-          role: result.user.role_details?.name || 'N/A',
-          status: result.user.status_details?.name || 'N/A',
+          role: result.user.role_details?.name || NA_VALUE,
+          status: result.user.status_details?.name || NA_VALUE,
           accessZones: result.user.zones_accessed_details.map((z) => z.name || 'Zona Desconocida'),
           similarity: result.user.similarity,
           hasAccess: result.user.hasAccess,
@@ -333,7 +246,7 @@ const FacialValidationScreen: React.FC = () => {
             lastSeenAt: result.user.observed_details.lastSeenAt,
             accessCount: result.user.observed_details.accessCount,
             alertTriggered: result.user.observed_details.alertTriggered,
-            expiresAt: result.user.observed_details.expiresAt || '',
+            expiresAt: result.user.observed_details.expiresAt || EMPTY_STRING,
             potentialMatchUserId: result.user.observed_details.potentialMatchUserId,
             faceImageUrl: result.user.observed_details.faceImageUrl || null,
           };
@@ -444,7 +357,7 @@ const FacialValidationScreen: React.FC = () => {
     resetStateAndClearTimers();
 
     if (
-      captureMode !== 'automatic' ||
+      captureMode !== CaptureMode.AUTOMATIC ||
       !faceApiModelsLoaded ||
       isLoadingModels ||
       !selectedDeviceId ||
@@ -453,16 +366,16 @@ const FacialValidationScreen: React.FC = () => {
       webcamRef.current.video.readyState !== 4 ||
       !selectedZone
     ) {
-      if (captureMode === 'automatic' && (!faceApiModelsLoaded || isLoadingModels)) {
+      if (captureMode === CaptureMode.AUTOMATIC && (!faceApiModelsLoaded || isLoadingModels)) {
         setValidationMessage('Esperando modelos o cámara lista para modo automático...');
       } else if (
-        captureMode === 'automatic' &&
+        captureMode === CaptureMode.AUTOMATIC &&
         (!selectedDeviceId || !webcamRef.current || !webcamRef.current.video || webcamRef.current.video.readyState !== 4)
       ) {
         setValidationMessage('Cámara no lista para modo automático. Asegúrese de los permisos.');
-      } else if (captureMode !== 'automatic') {
+      } else if (captureMode !== CaptureMode.AUTOMATIC) {
         setValidationMessage('Seleccione modo de captura y zona.');
-      } else if (captureMode === 'automatic' && !selectedZone) {
+      } else if (captureMode === CaptureMode.AUTOMATIC && !selectedZone) {
         setValidationMessage('Seleccione una zona de acceso para el modo automático.');
       }
       clearAllTimersAndFlags();
@@ -598,7 +511,7 @@ const FacialValidationScreen: React.FC = () => {
             <select
               id="camera-select"
               data-cy="camera-select"
-              value={selectedDeviceId || ''}
+              value={selectedDeviceId || EMPTY_STRING}
               onChange={handleDeviceChange}
               className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm"
             >
@@ -626,7 +539,7 @@ const FacialValidationScreen: React.FC = () => {
             <select
               id="zone-select"
               data-cy="zone-select"
-              value={selectedZone || ''}
+              value={selectedZone || EMPTY_STRING}
               onChange={(e) => {
                 setSelectedZone(e.target.value);
                 resetStateAndClearTimers();
@@ -664,9 +577,9 @@ const FacialValidationScreen: React.FC = () => {
                 data-cy="manual-mode-radio"
                 name="captureMode"
                 value="manual"
-                checked={captureMode === 'manual'}
+                checked={captureMode === CaptureMode.MANUAL}
                 onChange={() => {
-                  setCaptureMode('manual');
+                  setCaptureMode(CaptureMode.MANUAL);
                   resetStateAndClearTimers();
                   setIntervalRestartTrigger((prev) => !prev);
                 }}
@@ -681,9 +594,9 @@ const FacialValidationScreen: React.FC = () => {
                 data-cy="automatic-mode-radio"
                 name="captureMode"
                 value="automatic"
-                checked={captureMode === 'automatic'}
+                checked={captureMode === CaptureMode.AUTOMATIC}
                 onChange={() => {
-                  setCaptureMode('automatic');
+                  setCaptureMode(CaptureMode.AUTOMATIC);
                   resetStateAndClearTimers();
                   setIntervalRestartTrigger((prev) => !prev);
                 }}
@@ -721,7 +634,7 @@ const FacialValidationScreen: React.FC = () => {
             !faceApiModelsLoaded ||
             isProcessingFace ||
             !selectedDeviceId ||
-            captureMode === 'automatic' ||
+            captureMode === CaptureMode.AUTOMATIC ||
             isProcessingAttemptRef.current ||
             !selectedZone ||
             isLoadingZones
@@ -730,14 +643,14 @@ const FacialValidationScreen: React.FC = () => {
             faceApiModelsLoaded &&
             !isProcessingFace &&
             selectedDeviceId &&
-            captureMode === 'manual' &&
+            captureMode === CaptureMode.MANUAL &&
             !isProcessingAttemptRef.current &&
             selectedZone &&
             !isLoadingZones
               ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md transition duration-300'
               : 'bg-gray-400 text-gray-700 cursor-not-allowed'
           }`}
-          style={{ display: captureMode === 'automatic' ? 'none' : 'block' }}
+          style={{ display: captureMode === CaptureMode.AUTOMATIC ? 'none' : 'block' }}
         >
           {isProcessingFace ? 'Procesando...' : 'Capturar Foto'}
         </button>
@@ -816,7 +729,7 @@ const FacialValidationScreen: React.FC = () => {
               <strong>Acceso Concedido:</strong> {userInfo.hasAccess ? 'Sí' : 'No'}
             </p>
             <p data-cy="user-zones-accessed">
-              <strong>Zonas Accedidas:</strong> {userInfo.accessZones.length > 0 ? userInfo.accessZones.join(', ') : 'N/A'}
+              <strong>Zonas Accedidas:</strong> {userInfo.accessZones.length > 0 ? userInfo.accessZones.join(', ') : NA_VALUE}
             </p>
 
             {/* Mostrar la imagen si es un Observed User y tiene faceImageUrl */}

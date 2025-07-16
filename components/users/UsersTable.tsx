@@ -97,7 +97,7 @@ const UsersTable: React.FC = () => {
     try {
       setLoadingUsers(true);
 
-      const payload: UpdateUserRequest = {
+      const request: UpdateUserRequest = {
         userId: editingUserId || undefined,
         fullName: editingUser.name,
         roleName: editingUser.role,
@@ -105,7 +105,7 @@ const UsersTable: React.FC = () => {
         accessZoneNames: editingAccessZones,
       };
 
-      const result = await UserService.updateUser(payload);
+      const result = await UserService.updateUser(request);
 
       if (result.message) {
         // Refresh the users list to get updated data
