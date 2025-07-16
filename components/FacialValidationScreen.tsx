@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from "react";
-import Webcam from "react-webcam";
-import * as faceapi from "face-api.js";
-import { FaceValidationRequest, UserInfo, Zone } from "@/lib/api/types";
-import { ZoneService, FaceService } from "@/lib/api/services";
-import { EMPTY_STRING, NA_VALUE } from "@/lib/constants";
-import { CaptureMode } from "@/app/enums";
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import Webcam from 'react-webcam';
+import * as faceapi from 'face-api.js';
+import { FaceValidationRequest, UserInfo, Zone } from '@/lib/api/types';
+import { ZoneService, FaceService } from '@/lib/api/services';
+import { EMPTY_STRING, NA_VALUE } from '@/lib/constants';
+import { CaptureMode } from '@/app/enums';
 
 const FacialValidationScreen: React.FC = () => {
   // --- ESTADOS ---
