@@ -244,6 +244,8 @@ const FacialValidationScreen: React.FC = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''}`,
           },
           body: JSON.stringify(payload),
         });
@@ -255,6 +257,28 @@ const FacialValidationScreen: React.FC = () => {
 
         const result: UnifiedValidationResponse = await response.json();
         console.log('✅ VALIDACIÓN: Resultado de validación de rostro:', result);
+
+        // --- Enviar mensaje al microservicio MQTT (ngrok) cuando se detecta un rostro ---
+        fetch('http://localhost:3001/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'face_detected', full_name: result.user.full_name }),
+        })
+          .then(res => res.json())
+          .then(data => console.log('Respuesta microservicio (face_detected):', data))
+          .catch(err => console.error('Error enviando a microservicio (face_detected):', err));
+
+        // --- Enviar mensaje al microservicio MQTT (ngrok) cuando hasAccess es true ---
+        if (result.user.hasAccess) {
+          fetch('http://localhost:3001/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hasAccess: true, full_name: result.user.full_name }),
+          })
+            .then(res => res.json())
+            .then(data => console.log('Respuesta microservicio (hasAccess):', data))
+            .catch(err => console.error('Error enviando a microservicio (hasAccess):', err));
+        }
 
         if (result.error) {
           setFaceDetectionError(`Error de Validación: ${result.error}`);

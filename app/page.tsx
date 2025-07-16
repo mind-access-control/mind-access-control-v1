@@ -79,6 +79,10 @@ export default function Page() {
     // console.log("app/page.tsx: HAY sesión. Mostrando AdminDashboard.");
     // Nota: AdminDashboard internamente necesitará el objeto 'supabase' y posiblemente el 'session'
     // Puedes pasarlos como props si tu AdminDashboard los usa directamente
-    return <AdminDashboard supabase={supabase} session={session} />;
+    return (
+      <>
+        <AdminDashboard supabase={supabase} session={session} />
+      </>
+    );
   }
 }

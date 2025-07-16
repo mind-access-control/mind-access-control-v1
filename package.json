@@ -70,5 +70,22 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3"
-  }
+  },
+  "description": "*Automatically synced with your [v0.dev](https://v0.dev) deployments*",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mind-access-control/mind-access-control-v1.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mind-access-control/mind-access-control-v1/issues"
+  },
+  "homepage": "https://github.com/mind-access-control/mind-access-control-v1#readme"
 }
