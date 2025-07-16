@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from "react";
-import Webcam from "react-webcam";
-import * as faceapi from "face-api.js";
-import { v4 as uuidv4 } from "uuid";
-import { supabase } from "@/lib/supabase"; // Import the existing Supabase client
-import { EDGE_FUNCTIONS } from "@/lib/constants";
-import { ItemWithNameAndId, Zone } from "@/lib/api/types";
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import Webcam from 'react-webcam';
+import * as faceapi from 'face-api.js';
+import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/lib/supabase'; // Import the existing Supabase client
+import { EDGE_FUNCTIONS } from '@/lib/constants';
+import { ItemWithNameAndId, Zone } from '@/lib/api/types';
 
 interface UnifiedValidationResponse {
   user: {
