@@ -13,7 +13,8 @@ INSERT INTO user_statuses_catalog (id, name) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'blocked'),
     ('660e8400-e29b-41d4-a716-446655440003', 'inactive'),
     ('660e8400-e29b-41d4-a716-446655440004', 'pending_approval'),
-    ('660e8400-e29b-41d4-a716-446655440005', 'active_temporal')
+    ('660e8400-e29b-41d4-a716-446655440005', 'active_temporal'),
+    ('660e8400-e29b-41d4-a716-446655440006', 'expired')
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert default zones (note: zones table only has id, name, access_level - no description column)

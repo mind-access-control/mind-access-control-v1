@@ -7,7 +7,7 @@ import { UserService } from '@/lib/api/services/user-service';
 import { ZoneService } from '@/lib/api/services/zone-service';
 import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
-import { EMPTY_STRING } from '@/lib/constants.ts';
+import { EMPTY_STRING } from '@/lib/constants';
 
 // Create a simple event system for user updates
 const userUpdateCallbacks: (() => void)[] = [];

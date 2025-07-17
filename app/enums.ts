@@ -15,6 +15,7 @@ export enum LogDecision {
   ACCESS_DENIED = 'access_denied',
   ERROR = 'error',
   UNKNOWN = 'unknown',
+  ALLOWED = 'allowed',
 }
 
 export enum UserType {
@@ -28,4 +29,9 @@ export enum RiskStatus {
   LOW = 'low',
   MODERATE = 'moderate',
   HIGH = 'high',
+}
+
+export enum CaptureMode {
+  MANUAL = 'manual',
+  AUTOMATIC = 'automatic',
 }

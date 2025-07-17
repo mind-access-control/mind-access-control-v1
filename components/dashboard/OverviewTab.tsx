@@ -1,21 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AlertTriangle, Users, Shield, Zap, TrendingUp } from 'lucide-react'; // Iconos
 import RiskScoreCard from './cards/RiskScoreCard';
 import KpiCard from './cards/KpiCard';
 import SuspiciousUserList from './lists/SuspiciousUserList';
 import AIRecommendationList from './lists/AIRecommendationList';
 import AIDetailsModal from './modals/AIDetailsModal'; // Importar el modal
-import { AIRecommendation, KpiData, RiskScore, SuspiciousUserForDisplay, SuspiciousUserMapEntry } from '@/lib/api/types';
-import { LogDecision, RiskStatus, UserType } from '@/app/enums';
-import { EDGE_FUNCTIONS } from '@/lib/constants';
-
-// Supabase Client Configuration
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+import { AIRecommendation, AIRecommendationRequest, KpiData, RiskScore, SuspiciousUserForDisplay } from '@/lib/api/types';
+import { RiskStatus } from '@/app/enums';
+import { OverviewService } from '@/lib/api/services';
 
 const OverviewTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -43,143 +37,28 @@ const OverviewTab: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    const today = new Date();
-    const todayStartUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0));
-    const todayEndUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999));
-
     try {
-      // 1. Total Users
-      const { count: registeredUsersCount, error: usersError } = await supabase.from('users').select('*', { count: 'exact', head: true });
-      if (usersError) throw usersError;
-
-      const { data: observedLogsForUsers, error: observedLogsError } = await supabase
-        .from('logs')
-        .select('observed_user_id, user_type')
-        .not('observed_user_id', 'is', null)
-        .eq('user_type', 'new_observed');
-
-      if (observedLogsError) throw observedLogsError;
-      const uniqueObservedUsers = new Set(observedLogsForUsers.map((log) => log.observed_user_id));
-      const totalUsers = (registeredUsersCount || 0) + uniqueObservedUsers.size;
-
-      // 2. Active Zones
-      const { count: activeZonesCount, error: zonesError } = await supabase.from('zones').select('*', { count: 'exact', head: true });
-      if (zonesError) throw zonesError;
-
-      // 3. Accesses Today, Active Alerts, Anomalous Attempts, Success Rate
-      const { data: todayLogs, error: todayLogsError } = await supabase
-        .from('logs')
-        .select(`timestamp, decision, reason, user_id, observed_user_id, user_type`)
-        .gte('timestamp', todayStartUTC.toISOString())
-        .lte('timestamp', todayEndUTC.toISOString());
-      if (todayLogsError) throw todayLogsError;
-
-      const accessesToday = todayLogs?.length || 0;
-      let successfulAccesses = 0;
-      let failedAccesses = 0;
-      let activeAlerts = 0;
-      let anomalousAttempts = 0;
-      const suspiciousUsersMap: { [key: string]: SuspiciousUserMapEntry } = {};
-
-      const allRegisteredUserIds = new Set<string>();
-      const allObservedUserIds = new Set<string>();
-      todayLogs?.forEach((log) => {
-        if (log.user_type === UserType.REGISTERED && log.user_id) allRegisteredUserIds.add(log.user_id);
-        if ((log.user_type === UserType.OBSERVED || log.user_type === UserType.NEW_OBSERVED) && log.observed_user_id) allObservedUserIds.add(log.observed_user_id);
-      });
-
-      // Obtener detalles de usuarios registrados
-      const { data: registeredUsersData, error: fetchRegisteredUsersError } = await supabase.from('users').select('id, full_name, profile_picture_url');
-      if (fetchRegisteredUsersError) console.error('Error fetching registered user details:', fetchRegisteredUsersError);
-      const registeredUserDetailsMap = new Map(registeredUsersData?.map((user) => [user.id, { name: user.full_name, photo: user.profile_picture_url }]) || []);
-
-      // Obtener detalles de usuarios observados
-      const { data: observedUsersData, error: fetchObservedUsersError } = await supabase.from('observed_users').select('id, face_image_url');
-      if (fetchObservedUsersError) console.error('Error fetching observed user details:', fetchObservedUsersError);
-      const observedUserDetailsMap = new Map(
-        observedUsersData?.map((user) => [user.id, { name: `Observed User ${user.id.substring(0, 8)}`, photo: user.face_image_url }]) || []
-      );
-
-      todayLogs?.forEach((log) => {
-        if (log.decision === LogDecision.ACCESS_GRANTED) {
-          successfulAccesses++;
-        } else if (log.decision === LogDecision.ACCESS_DENIED || log.decision === LogDecision.ERROR) {
-          failedAccesses++;
-
-          if (log.reason?.includes('Alert triggered: true')) {
-            activeAlerts++;
-          }
-
-          const consecutiveAttemptsMatch = log.reason?.match(/Consecutive denied attempts: (\d+)/);
-          if (consecutiveAttemptsMatch && parseInt(consecutiveAttemptsMatch[1]) >= 3) {
-            anomalousAttempts++;
-
-            let currentUserId: string; // Ahora no es null
-            let currentUserName: string;
-            let currentUserPhotoUrl: string | null = null;
-
-            // Determinar si es usuario registrado u observado
-            if (log.user_type === UserType.REGISTERED && log.user_id) {
-              currentUserId = log.user_id;
-              const userDetails = registeredUserDetailsMap.get(currentUserId);
-              currentUserName = userDetails?.name || currentUserId;
-              currentUserPhotoUrl = userDetails?.photo || null;
-            } else if ((log.user_type === UserType.OBSERVED || log.user_type === UserType.NEW_OBSERVED) && log.observed_user_id) {
-              currentUserId = log.observed_user_id;
-              const userDetails = observedUserDetailsMap.get(currentUserId);
-              currentUserName = userDetails?.name || `Observed User ${currentUserId.substring(0, 8)}`;
-              currentUserPhotoUrl = userDetails?.photo || null;
-            } else {
-              // Si user_type es 'unknown' o IDs son null, generar un ID temporal
-              currentUserId = `unknown_user_${Date.now()}`;
-              currentUserName = `Unknown User ${currentUserId.substring(0, 8)}`;
-            }
-
-            // currentUserId ya es string aquí, no necesita comprobación de null
-            if (!suspiciousUsersMap[currentUserId] || suspiciousUsersMap[currentUserId].count < parseInt(consecutiveAttemptsMatch[1])) {
-              suspiciousUsersMap[currentUserId] = {
-                id: currentUserId,
-                name: currentUserName,
-                reason: `Multiple denied attempts (${consecutiveAttemptsMatch[1]})`,
-                details: log,
-                count: parseInt(consecutiveAttemptsMatch[1]),
-                photoUrl: currentUserPhotoUrl,
-              };
-            }
-          }
-        }
-      });
-
-      const successRate = accessesToday > 0 ? (successfulAccesses / accessesToday) * 100 : 0;
-
-      // 4. Overall Risk Score (Heurística simple)
-      const riskScoreValue = failedAccesses * 0.7 + activeAlerts * 0.3;
-      let riskStatus = RiskStatus.LOW;
-      if (riskScoreValue > 10)  riskStatus = RiskStatus.HIGH;
-      else if (riskScoreValue > 3) riskStatus = RiskStatus.MODERATE;
-      const finalRiskScore = { score: parseFloat(riskScoreValue.toFixed(1)), status: riskStatus };
-      setRiskScore(finalRiskScore);
+      const result = await OverviewService.getOverview();
+      setRiskScore(result.finalRiskScore);
 
       const finalKpiData = {
-        totalUsers: totalUsers,
-        activeZones: activeZonesCount || 0,
-        accessesToday: accessesToday,
-        activeAlerts: activeAlerts,
-        anomalousAttempts: anomalousAttempts,
-        successRate: parseFloat(successRate.toFixed(1)),
+        totalUsers: result.totalUsers,
+        activeZones: result.activeZonesCount || 0,
+        accessesToday: result.accessesToday,
+        activeAlerts: result.activeAlerts,
+        anomalousAttempts: result.anomalousAttempts,
+        successRate: parseFloat(result.successRate.toFixed(1)),
       };
       setKpiData(finalKpiData);
 
       // ¡CAMBIO CLAVE! Mapear a SuspiciousUserForDisplay antes de setear el estado
-      const finalSuspiciousUsers: SuspiciousUserForDisplay[] = Object.values(suspiciousUsersMap).map(({ count, ...rest }) => rest);
+      const finalSuspiciousUsers: SuspiciousUserForDisplay[] = Object.values(result.suspiciousUsersMap).map(({ count, ...rest }) => rest);
       setSuspiciousUsers(finalSuspiciousUsers);
 
       setLoadingAI(true);
       try {
-        const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GENERATE_DASHBOARD_RECOMMENDATIONS}`;
-
-        const payload = {
-          riskScore: finalRiskScore,
+        const request: AIRecommendationRequest = {
+          riskScore: result.finalRiskScore,
           kpiData: finalKpiData,
           suspiciousUsers: finalSuspiciousUsers.map((u) => ({
             id: u.id,
@@ -188,22 +67,7 @@ const OverviewTab: React.FC = () => {
             photoUrl: u.photoUrl,
           })),
         };
-
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(`Edge Function error: ${errorData.error || response.statusText}`);
-        }
-
-        const aiRecommendationsData: AIRecommendation[] = await response.json();
+        const aiRecommendationsData = await OverviewService.getAIRecommendations(request);
         setAIRecommendations(aiRecommendationsData);
         console.log('DEBUG: AI Recommendations from Edge Function:', aiRecommendationsData);
       } catch (aiError: any) {
@@ -221,7 +85,7 @@ const OverviewTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchDashboardData();

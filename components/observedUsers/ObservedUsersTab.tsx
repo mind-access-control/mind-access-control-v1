@@ -1,15 +1,13 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { AlertTriangle, Eye, UserCircle2 } from 'lucide-react';
 import ObservedUsersOverviewCards from '@/components/observedUsers/ObservedUsersOverviewCards';
 import ObservedUsersTable from '@/components/observedUsers/ObservedUsersTable';
 
-import { EDGE_FUNCTIONS, EMPTY_STRING } from '@/lib/constants';
+import { EMPTY_STRING } from '@/lib/constants';
 import { SortDirection } from '@/app/enums';
-import { ObservedUsersResponse, ObservedUser, ObservedUserSortField } from '@/lib/api/types';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+import { ObservedUser, ObservedUserSortField, ObservedUserRequest, ObservedUserActionRequest } from '@/lib/api/types';
+import { ObservedUserService } from '@/lib/api/services';
 
 const ObservedUsersTab: React.FC = () => {
   const [observedUsers, setObservedUsers] = useState<ObservedUser[]>([]);
@@ -44,31 +42,16 @@ const ObservedUsersTab: React.FC = () => {
     setError(null);
 
     try {
-      const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.GET_OBSERVED_USERS}`;
+      const request: ObservedUserRequest = {
+        searchTerm,
+        page: currentPage,
+        pageSize: itemsPerPage,
+        sortField: observedSortField,
+        sortDirection: observedSortDirection,
+        filterType,
+      };
 
-      const url = new URL(edgeFunctionUrl);
-      url.searchParams.append('searchTerm', searchTerm);
-      url.searchParams.append('page', currentPage.toString());
-      url.searchParams.append('pageSize', itemsPerPage.toString());
-      url.searchParams.append('sortField', observedSortField);
-      url.searchParams.append('sortDirection', observedSortDirection);
-      if (filterType) {
-        url.searchParams.append('filterType', filterType);
-      }
-
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData: { error?: string; message?: string } = await response.json();
-        throw new Error(errorData.error || errorData.message || `HTTP Error: ${response.status}`);
-      }
-
-      const result: ObservedUsersResponse = await response.json();
+      const result = await ObservedUserService.getObservedUsers(request);
 
       setObservedUsers(result.users);
       setTotalObservedUsersCount(result.totalCount); // Conteo para la tabla
@@ -154,24 +137,11 @@ const ObservedUsersTab: React.FC = () => {
       setActionMessage(null);
 
       try {
-        const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.MANAGE_OBSERVED_USER_ACTIONS}`;
-
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            observedUserId: userId,
-            actionType: actionType,
-          }),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.error || `Error HTTP: ${response.status}`);
-        }
+        const request: ObservedUserActionRequest = {
+          observedUserId: userId,
+          actionType: actionType,
+        };
+        const result = await ObservedUserService.manageObservedUserAction(request);
 
         setActionMessage(result.message || `Action ${actionType} successful.`);
         actionMessageTimeoutRef.current = setTimeout(() => {
