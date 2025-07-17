@@ -1,16 +1,6 @@
-import { UploadClient } from '../clients/upload-client';
+import { UploadClient } from '@/lib/api/clients/upload-client';
 import { supabase } from '@/lib/supabase';
-
-export interface UploadImageRequest {
-  userId: string;
-  imageData: string; // Base64 image data
-  isObservedUser: boolean;
-}
-
-export interface UploadImageResponse {
-  message: string;
-  imageUrl: string;
-}
+import { UploadImageRequest, UploadImageResponse } from '@/lib/api/types';
 
 // Create a singleton instance of UploadClient
 const uploadClient = new UploadClient();
@@ -18,6 +8,8 @@ const uploadClient = new UploadClient();
 export class UploadService {
   /**
    * Upload an image using the upload-face-image edge function
+   * @param request - The request object containing the user ID, image data, and whether the image is for an observed user
+   * @returns The response object containing the message and image URL
    */
   static async uploadFaceImage(request: UploadImageRequest): Promise<UploadImageResponse> {
     // Make API call
@@ -31,6 +23,8 @@ export class UploadService {
 
   /**
    * Generate a signed URL for an existing face image
+   * @param imageUrl - The URL of the image to generate a signed URL for
+   * @returns The signed URL
    */
   static async getSignedImageUrl(imageUrl: string): Promise<string> {
     try {
@@ -53,6 +47,8 @@ export class UploadService {
 
   /**
    * Convert a File/Blob to base64 string
+   * @param file - The file to convert to base64
+   * @returns The base64 string
    */
   static async fileToBase64(file: File | Blob): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -65,6 +61,10 @@ export class UploadService {
 
   /**
    * Upload profile picture for a user
+   * @param userId - The ID of the user to upload the profile picture for
+   * @param imageData - The image data to upload
+   * @param isObservedUser - Whether the image is for an observed user
+   * @returns The response object containing the message and image URL
    */
   static async uploadProfilePicture(userId: string, imageData: string | File | Blob, isObservedUser: boolean = false): Promise<UploadImageResponse> {
     // Convert to base64 if it's a File/Blob

@@ -5,12 +5,15 @@ import {
   ValidationError,
 } from '../types';
 
+import { EMPTY_STRING } from '@/lib/constants';
+
 // ============================================================================
 // API CLIENT CONFIGURATION
 // ============================================================================
 
 export interface ApiClientConfig {
   baseUrl: string;
+  baseAnonKey: string;
   timeout: number;
   retries: number;
   retryDelay: number;
@@ -19,6 +22,7 @@ export interface ApiClientConfig {
 
 const DEFAULT_CONFIG: ApiClientConfig = {
   baseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
+  baseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || EMPTY_STRING,
   timeout: 30000, // 30 seconds
   retries: 3,
   retryDelay: 1000, // 1 second
@@ -93,6 +97,45 @@ export abstract class BaseApiClient {
     }
   }
 
+  /**
+   * Returns the headers for the request. Override in subclasses for custom headers.
+   */
+  protected async getHeaders(
+    requestId: string,
+    extraHeaders: Record<string, string>
+  ): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('No active session found');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      'X-Request-ID': requestId,
+      ...extraHeaders,
+    };
+  }
+
+  /**
+   * Builds the request context, including headers. Override to customize headers.
+   */
+  protected async buildRequestContext(
+    method: string,
+    url: string,
+    body: any,
+    headers: Record<string, string>,
+    requestId: string,
+    timestamp: string
+  ): Promise<RequestContext> {
+    const finalHeaders = await this.getHeaders(requestId, headers);
+    return {
+      method,
+      url,
+      body,
+      headers: finalHeaders,
+      requestId,
+      timestamp,
+    };
+  }
+
   // ============================================================================
   // CORE HTTP METHODS
   // ============================================================================
@@ -118,26 +161,15 @@ export abstract class BaseApiClient {
       });
     }
 
-    // Get session for authentication
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error('No active session found');
-    }
-
-    // Prepare request context
-    const requestContext: RequestContext = {
+    // Build the request context (can be overridden)
+    const requestContext = await this.buildRequestContext(
       method,
-      url: url.toString(),
+      url.toString(),
       body,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-        'X-Request-ID': requestId,
-        ...headers,
-      },
+      headers,
       requestId,
-      timestamp,
-    };
+      timestamp
+    );
 
     // Apply request interceptors
     const interceptedRequest = this.requestInterceptors.reduce(
@@ -237,5 +269,26 @@ export abstract class BaseApiClient {
     if (index > -1) {
       this.responseInterceptors.splice(index, 1);
     }
+  }
+}
+
+// ============================================================================
+// ANON KEY API CLIENT (for edge functions that require anon key)
+// ============================================================================
+
+export abstract class AnonKeyApiClient extends BaseApiClient {
+  protected async getHeaders(
+    requestId: string,
+    extraHeaders: Record<string, string>
+  ): Promise<Record<string, string>> {
+    const SUPABASE_ANON_KEY = this.config.baseAnonKey;
+    if (!SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not configured');
+    // Omit X-Request-ID
+    const { ['X-Request-ID']: _, ...filteredHeaders } = extraHeaders;
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      ...filteredHeaders,
+    };
   }
 } 

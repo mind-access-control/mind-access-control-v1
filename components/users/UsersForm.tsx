@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 
-import { CreateUserRequest, UploadService, UserService } from '@/lib/api';
+import { UploadService, UserService } from '@/lib/api/services';
+import { CreateUserRequest } from '@/lib/api/types';
 import { EMAIL_REGEX, EMPTY_STRING, NA_VALUE } from '@/lib/constants';
 import { AlertCircle, Camera, Check, RotateCcw, Upload, X } from 'lucide-react';
 import React, { useCallback, useRef, useState } from 'react';
@@ -188,7 +189,7 @@ const UsersForm: React.FC = () => {
       // Step 1: Create user first (without profile picture)
       setShowStatusMessage('Creating user...');
 
-      const payload: CreateUserRequest = {
+      const request: CreateUserRequest = {
         fullName: fullName,
         email: email,
         roleName: selectedRole,
@@ -197,7 +198,7 @@ const UsersForm: React.FC = () => {
         faceEmbedding: Array.from(faceEmbedding!), // Convierte Float32Array a un Array<number> estándar para JSON.
       };
 
-      const result = await UserService.createUser(payload);
+      const result = await UserService.createUser(request);
       console.log('User registration successful:', result);
 
       // Step 2: Upload image if we have one, using the created user ID

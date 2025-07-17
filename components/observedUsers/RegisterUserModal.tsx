@@ -16,20 +16,19 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 // import { Checkbox } from "@/components/ui/checkbox";
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { UserCircle2, X, Check, Upload, Camera, RotateCcw, AlertCircle } from 'lucide-react';
+import { X, Check, Upload, Camera, RotateCcw, AlertCircle } from 'lucide-react';
 
 // Import shared types
 import { ZoneSelector } from '@/components/ui/zone-selector';
-import { Zone, ObservedUser } from '@/lib/api/types';
+import { Zone, ObservedUser, CreateUserRequest, Role, UserStatus } from '@/lib/api/types';
 
 // Import Face-API.js
 import * as faceapi from 'face-api.js';
 
 // Import the CameraCapture component
 import { CameraCapture } from '@/components/camera-capture';
-import { EDGE_FUNCTIONS, EMAIL_REGEX, EMPTY_STRING, NA_VALUE } from '@/lib/constants';
-import { CatalogService } from '@/lib/api/services';
-import { ZoneService } from '@/lib/api/services/zone-service';
+import { EMAIL_REGEX, EMPTY_STRING, NA_VALUE } from '@/lib/constants';
+import { CatalogService, UserService, ZoneService } from '@/lib/api/services';
 
 // Define the props for the modal
 interface RegisterUserModalProps {
@@ -38,8 +37,6 @@ interface RegisterUserModalProps {
   observedUser: ObservedUser | null; // The observed user to be registered
   onUserRegistered: () => void; // Callback when the user is successfully registered
 }
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, observedUser, onUserRegistered }) => {
   // --- New User Form States ---
@@ -52,18 +49,15 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
 
   // --- Catalog Loading States (roles, zones, user statuses) ---
   // Using a generic type for roles and userStatuses if they don't have 'category'
-  interface CatalogItem {
-    id: string;
-    name: string;
-  }
-  const [roles, setRoles] = useState<CatalogItem[]>([]);
+
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [errorRoles, setErrorRoles] = useState<string | null>(null);
   // KEY CHANGE! Use Zone[] type for zonesData
   const [zonesData, setZonesData] = useState<Zone[]>([]);
   const [loadingZones, setLoadingZones] = useState(true);
   const [errorZones, setErrorZones] = useState<string | null>(null);
-  const [userStatuses, setUserStatuses] = useState<CatalogItem[]>([]);
+  const [userStatuses, setUserStatuses] = useState<UserStatus[]>([]);
   const [loadingUserStatuses, setLoadingUserStatuses] = useState(true);
   const [errorUserStatuses, setErrorUserStatuses] = useState<string | null>(null);
 
@@ -287,7 +281,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
       console.error('Selected file is not an image.');
       setFaceDetectionError('Please select an image file (e.g., JPG, PNG).');
     }
-    e.target.value = '';
+    e.target.value = EMPTY_STRING;
   }, []);
 
   const clearImage = useCallback(() => {
@@ -296,7 +290,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
     setFaceEmbedding(null);
     setFaceDetectionError(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = EMPTY_STRING;
     }
   }, []);
 
@@ -362,7 +356,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
     setShowStatusMessage('Registering user...');
 
     try {
-      const payload = {
+      const request: CreateUserRequest = {
         fullName: fullName,
         email: trimmedEmail,
         roleName: selectedRole,
@@ -373,22 +367,8 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
         observedUserId: observedUser?.id || null,
       };
 
-      const edgeFunctionUrl = `${SUPABASE_URL}${EDGE_FUNCTIONS.REGISTER_NEW_USER}`;
+      const result = await UserService.createUser(request);
 
-      const response = await fetch(edgeFunctionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP Error: ${response.status}`);
-      }
-
-      const result = await response.json();
       setShowStatusMessage(`User registered successfully! ID: ${result.userId || NA_VALUE}`);
       console.log('User registration successful:', result);
 

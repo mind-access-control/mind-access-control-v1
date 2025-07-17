@@ -1,5 +1,6 @@
 // Constants for the Mind Access Control System
 
+import { LogDecision } from "@/app/enums";
 import { Column, LogSortField, SummarySortField  } from "./api/types";
 
 // ============================================================================
@@ -112,12 +113,13 @@ export const LOG_COLUMNS: Column[] = [
 export const PAGINATION_OPTIONS = [10, 25, 50, 100] as const;
 
 // Status filter options
-export const STATUS_FILTER_OPTIONS = [
+export const DECISION_FILTER_OPTIONS = [
   { value: 'all', label: 'All Status' },
-  { value: 'access_granted', label: 'Access Granted' },
-  { value: 'access_denied', label: 'Access Denied' },
-  { value: 'unknown', label: 'Unknown' },
-  { value: 'error', label: 'Error' },
+  { value: LogDecision.ACCESS_GRANTED, label: 'Access Granted' },
+  { value: LogDecision.ACCESS_DENIED, label: 'Access Denied' },
+  { value: LogDecision.UNKNOWN, label: 'Unknown' },
+  { value: LogDecision.ERROR, label: 'Error' },
+  { value: LogDecision.ALLOWED, label: 'Allowed' },
 ] as const;
 
 // Summary status filter options
@@ -140,8 +142,8 @@ export const DEFAULT_FILTER_VALUES = {
   dateFrom: EMPTY_STRING,
   dateTo: EMPTY_STRING,
   selectedLogUserId: SELECT_ALL_VALUE,
-  selectedLogZone: SELECT_ALL_VALUE,
-  selectedLogStatus: SELECT_ALL_VALUE,
+  selectedLogZoneId: SELECT_ALL_VALUE,
+  selectedLogDecisionId: SELECT_ALL_VALUE,
   summarySearchTerm: EMPTY_STRING,
   summaryStatusFilter: SELECT_ALL_VALUE,
 };

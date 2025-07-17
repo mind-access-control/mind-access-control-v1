@@ -1,12 +1,13 @@
-import { CameraClient } from '../clients/camera-client';
-import { Camera } from '../types';
-import { extractArrayData, extractObjectData } from '../utils';
+import { Camera } from '@/lib/api/types';
+import { extractArrayData, extractObjectData } from '@/lib/api/utils';
+import { CameraClient } from '@/lib/api/clients/camera-client';
 
 const cameraClient = new CameraClient();
 
 export class CameraService {
   /**
    * Get all cameras
+   * @returns The cameras
    */
   static async getCameras(): Promise<Camera[]> {
     const response = await cameraClient.getCameras();
@@ -16,6 +17,8 @@ export class CameraService {
 
   /**
    * Create a new camera
+   * @param data - The camera data
+   * @returns The created camera
    */
   static async createCamera(data: Partial<Camera>) {
     const response = await cameraClient.createCamera(data);
@@ -25,6 +28,9 @@ export class CameraService {
 
   /**
    * Update an existing camera
+   * @param id - The camera ID
+   * @param data - The camera data
+   * @returns The updated camera
    */
   static async updateCamera(id: string, data: Partial<Camera>) {
     const response = await cameraClient.updateCamera(id, data);
@@ -34,6 +40,8 @@ export class CameraService {
 
   /**
    * Delete a camera
+   * @param id - The camera ID
+   * @returns The deleted camera
    */
   static async deleteCamera(id: string) {
     const response = await cameraClient.deleteCamera(id);
