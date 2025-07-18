@@ -31,8 +31,8 @@ interface ObservedUserFromDB {
   alert_triggered: boolean;
   expires_at: string | null;
   potential_match_user_id: string | null;
-  face_image_url: string | null;
-  ai_action: string | null; // Asegurarse de que este campo está presente
+  face_image_url: string | null; // Este campo es para observed_users
+  ai_action: string | null;
   consecutive_denied_accesses: number;
   distance?: number;
   similarity?: number;
@@ -48,8 +48,8 @@ interface UnifiedValidationResponse {
     role_details: ItemWithNameAndId | null;
     status_details: ItemWithNameAndId;
     zones_accessed_details: ItemWithNameAndId[];
-    // Añadido para usuarios registrados también
-    faceImageUrl?: string | null;
+    // CAMBIO: Para usuarios registrados, ahora se espera profilePictureUrl
+    profilePictureUrl?: string | null;
     observed_details?: {
       firstSeenAt: string;
       lastSeenAt: string;
@@ -59,8 +59,8 @@ interface UnifiedValidationResponse {
       potentialMatchUserId: string | null;
       similarity: number;
       distance: number;
-      faceImageUrl: string | null;
-      aiAction: string | null; // Asegurarse de que este campo está presente en la respuesta
+      faceImageUrl: string | null; // Este sigue siendo para observed_details
+      aiAction: string | null;
     };
   };
   type:
@@ -90,6 +90,8 @@ function isErrorWithMessage(error: unknown): error is { message: string } {
 }
 
 // --- Helper para subir imagen (centralizado) ---
+// Esta función sigue usando 'face_image_url' para observed_users y el parámetro genérico 'isObservedUser'
+// para determinar si se actualiza 'users.profile_picture_url' o 'observed_users.face_image_url'
 async function uploadFaceImage(userId: string, imageData: string, isObservedUser: boolean): Promise<string | null> {
   if (!imageData) {
     console.warn(`WARNING: No imageData provided for userId: ${userId}. Skipping image upload.`);
@@ -134,7 +136,7 @@ async function uploadFaceImage(userId: string, imageData: string, isObservedUser
   } catch (uploadCallError) {
     console.error(`❌ ERROR en la llamada a upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}:`, uploadCallError);
     console.warn(
-      `WARNING: No se pudo subir la imagen del rostro para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}. face_image_url no se actualizará.`
+      `WARNING: No se pudo subir la imagen del rostro para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}. La URL de la imagen no se actualizará.`
     );
     return null; // Retornar null en caso de error en la subida
   }
@@ -154,7 +156,6 @@ async function generateAISuggestion(user: ObservedUserFromDB, context: 'new' | '
 
   Recommendation:`;
 
-  // CAMBIO CLAVE AQUÍ: Leer la clave de API de las variables de entorno de Deno
   const apiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
 
   if (!apiKey) {
@@ -205,7 +206,6 @@ serve(async (req) => {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        // AÑADIDO: Permitir 'x-request-id' en los encabezados CORS
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
@@ -317,7 +317,7 @@ serve(async (req) => {
             zones_accessed_details,
             alert_triggered,
             consecutive_denied_accesses,
-            face_image_url
+            profile_picture_url 
           `
           )
           .eq('id', matchedUser.user_id)
@@ -334,14 +334,14 @@ serve(async (req) => {
 
           if (hasZoneAccess && !isAccessDenied) {
             // Lógica para subir/actualizar la imagen del rostro para usuarios registrados
-            let uploadedImageUrl: string | null = data.face_image_url; // Mantener la actual por defecto
+            let uploadedImageUrl: string | null = data.profile_picture_url;
             if (imageData) {
-              uploadedImageUrl = await uploadFaceImage(data.id, imageData, false); // False para usuario registrado
+              uploadedImageUrl = await uploadFaceImage(data.id, imageData, false);
               if (uploadedImageUrl) {
-                // Actualizar la URL en la tabla 'users' si la subida fue exitosa
-                const { error: updateImgUrlError } = await supabaseClient.from('users').update({ face_image_url: uploadedImageUrl }).eq('id', data.id);
+                // Actualizar profile_picture_url en la tabla 'users'
+                const { error: updateImgUrlError } = await supabaseClient.from('users').update({ profile_picture_url: uploadedImageUrl }).eq('id', data.id);
                 if (updateImgUrlError) {
-                  console.error('❌ ERROR al actualizar face_image_url para usuario registrado:', updateImgUrlError);
+                  console.error('❌ ERROR al actualizar profile_picture_url para usuario registrado:', updateImgUrlError);
                 }
               }
             }
@@ -355,7 +355,7 @@ serve(async (req) => {
               role_details: data.role_details,
               status_details: data.status_details,
               zones_accessed_details: data.zones_accessed_details,
-              faceImageUrl: uploadedImageUrl, // Incluir la URL de la imagen en la respuesta
+              profilePictureUrl: uploadedImageUrl,
             };
             logEntry.result = true;
             logEntry.decision = 'access_granted';
@@ -375,7 +375,7 @@ serve(async (req) => {
               role_details: data.role_details,
               status_details: data.status_details,
               zones_accessed_details: data.zones_accessed_details,
-              faceImageUrl: data.face_image_url, // Mantener la URL existente si el acceso es denegado
+              profilePictureUrl: data.profile_picture_url,
             };
             logEntry.result = false;
             logEntry.decision = 'access_denied';

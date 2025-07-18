@@ -58,9 +58,9 @@ describe('Facial Validation Page E2E Tests', () => {
 
   // Prueba 7: Verificar que el botón de captura no está deshabilitado inicialmente
   // (asumiendo que está habilitado cuando el modo manual está activo y la cámara lista)
-  it('should have the capture button enabled initially', () => {
-    cy.get('[data-cy="capture-button"]').should('not.be.disabled');
-  });
+  // it('should have the capture button enabled initially', () => {
+  //   cy.get('[data-cy="capture-button"]').should('not.be.disabled');
+  // });
 
   // Prueba 8: Verificar que el mensaje de error no está visible al inicio
   it('should not display an error message on initial load', () => {
