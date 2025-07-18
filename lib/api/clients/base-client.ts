@@ -109,7 +109,7 @@ export abstract class BaseApiClient {
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session.access_token}`,
-      'X-Request-ID': requestId,
+      // 'X-Request-ID': requestId, // Eliminado para evitar problemas de CORS
       ...extraHeaders,
     };
   }
