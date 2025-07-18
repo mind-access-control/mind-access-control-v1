@@ -2,6 +2,79 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 console.log('Edge Function "validate-user-face" started!');
+
+// --- Definiciones de Tipos para Supabase Data ---
+interface ItemWithNameAndId {
+  id: string;
+  name: string;
+}
+
+interface SupabaseUserResponse {
+  id: string;
+  full_name: string;
+  role_details: ItemWithNameAndId | null;
+  status_details: ItemWithNameAndId | null;
+  zones_accessed_details: ItemWithNameAndId[];
+  alert_triggered: boolean;
+  consecutive_denied_accesses: number;
+}
+
+interface ObservedUserFromDB {
+  id: string;
+  embedding: number[];
+  first_seen_at: string;
+  last_seen_at: string;
+  access_count: number;
+  last_accessed_zones: string[] | null;
+  status_id: string;
+  alert_triggered: boolean;
+  expires_at: string | null;
+  potential_match_user_id: string | null;
+  face_image_url: string | null; // Este campo es para observed_users
+  ai_action: string | null;
+  consecutive_denied_accesses: number;
+  distance?: number;
+  similarity?: number;
+}
+
+interface UnifiedValidationResponse {
+  user: {
+    id: string;
+    full_name: string | null;
+    user_type: 'registered' | 'observed' | 'unknown';
+    hasAccess: boolean;
+    similarity: number;
+    role_details: ItemWithNameAndId | null;
+    status_details: ItemWithNameAndId;
+    zones_accessed_details: ItemWithNameAndId[];
+    // CAMBIO: Para usuarios registrados, ahora se espera profilePictureUrl
+    profilePictureUrl?: string | null;
+    observed_details?: {
+      firstSeenAt: string;
+      lastSeenAt: string;
+      accessCount: number;
+      alertTriggered: boolean;
+      expiresAt: string;
+      potentialMatchUserId: string | null;
+      similarity: number;
+      distance: number;
+      faceImageUrl: string | null; // Este sigue siendo para observed_details
+      aiAction: string | null;
+    };
+  };
+  type:
+    | 'registered_user_matched'
+    | 'observed_user_updated'
+    | 'new_observed_user_registered'
+    | 'no_match_found'
+    | 'registered_user_access_denied'
+    | 'observed_user_access_denied_expired'
+    | 'observed_user_access_denied_status_expired'
+    | string;
+  message?: string;
+  error?: string;
+}
+
 // --- Constantes de Configuración ---
 const USER_MATCH_THRESHOLD_DISTANCE = 0.15;
 const OBSERVED_USER_MATCH_THRESHOLD_DISTANCE = 0.08;
@@ -15,7 +88,7 @@ function isErrorWithMessage(error) {
 // --- Helper para subir imagen (centralizado) ---
 // Esta función sigue usando 'face_image_url' para observed_users y el parámetro genérico 'isObservedUser'
 // para determinar si se actualiza 'users.profile_picture_url' o 'observed_users.face_image_url'
-async function uploadFaceImage(userId, imageData, isObservedUser) {
+async function uploadFaceImage(userId: string, imageData: string, isObservedUser: boolean): Promise<string | null> {
   if (!imageData) {
     console.warn(`WARNING: No imageData provided for userId: ${userId}. Skipping image upload.`);
     return null;
@@ -47,12 +120,14 @@ async function uploadFaceImage(userId, imageData, isObservedUser) {
     return uploadResult.imageUrl;
   } catch (uploadCallError) {
     console.error(`❌ ERROR en la llamada a upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}:`, uploadCallError);
-    console.warn(`WARNING: No se pudo subir la imagen del rostro para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}. La URL de la imagen no se actualizará.`);
+    console.warn(
+      `WARNING: No se pudo subir la imagen del rostro para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}. La URL de la imagen no se actualizará.`
+    );
     return null; // Retornar null en caso de error en la subida
   }
 }
 // --- Helper para notificar al microservicio MQTT en la nube ---
-async function notifyMqttMicroservice(data) {
+async function notifyMqttMicroservice(data: any) {
   try {
     const response = await fetch('https://micro-service-kyr9.onrender.com/publish', {
       method: 'POST',
@@ -244,14 +319,12 @@ serve(async (req)=>{
           const isAccessDenied = data.status_details?.id === ACCESS_DENIED_STATUS_ID;
           if (hasZoneAccess && !isAccessDenied) {
             // Lógica para subir/actualizar la imagen del rostro para usuarios registrados
-            let uploadedImageUrl = data.profile_picture_url;
+            let uploadedImageUrl: string | null = data.profile_picture_url;
             if (imageData) {
               uploadedImageUrl = await uploadFaceImage(data.id, imageData, false);
               if (uploadedImageUrl) {
                 // Actualizar profile_picture_url en la tabla 'users'
-                const { error: updateImgUrlError } = await supabaseClient.from('users').update({
-                  profile_picture_url: uploadedImageUrl
-                }).eq('id', data.id);
+                const { error: updateImgUrlError } = await supabaseClient.from('users').update({ profile_picture_url: uploadedImageUrl }).eq('id', data.id);
                 if (updateImgUrlError) {
                   console.error('❌ ERROR al actualizar profile_picture_url para usuario registrado:', updateImgUrlError);
                 }
@@ -266,7 +339,7 @@ serve(async (req)=>{
               role_details: data.role_details,
               status_details: data.status_details,
               zones_accessed_details: data.zones_accessed_details,
-              profilePictureUrl: uploadedImageUrl
+              profilePictureUrl: uploadedImageUrl,
             };
             logEntry.result = true;
             logEntry.decision = 'access_granted';
@@ -289,7 +362,7 @@ serve(async (req)=>{
               role_details: data.role_details,
               status_details: data.status_details,
               zones_accessed_details: data.zones_accessed_details,
-              profilePictureUrl: data.profile_picture_url
+profilePictureUrl: data.profile_picture_url,
             };
             logEntry.result = false;
             logEntry.decision = 'access_denied';
