@@ -82,8 +82,8 @@ const NEW_OBSERVED_USER_STATUS_ID = 'c70bbe40-afe3-4357-8454-16b457705db5';
 const ACCESS_DENIED_STATUS_ID = 'b7d6c8b9-5f21-4f1d-8c1a-9a0e6d5f4c3b';
 const ACCESS_DENIED_CONSECUTIVE_THRESHOLD = 3;
 // --- Función Helper para manejar errores con mensaje ---
-function isErrorWithMessage(error) {
-  return typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string';
+function isErrorWithMessage(error: unknown): error is { message: string } {
+  return typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message?: unknown }).message === 'string';
 }
 // --- Helper para subir imagen (centralizado) ---
 // Esta función sigue usando 'face_image_url' para observed_users y el parámetro genérico 'isObservedUser'
@@ -102,21 +102,29 @@ async function uploadFaceImage(userId: string, imageData: string, isObservedUser
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
       },
       body: JSON.stringify({
         userId: userId,
         imageData: imageData,
-        isObservedUser: isObservedUser
-      })
+        isObservedUser: isObservedUser,
+      }),
     });
     if (!uploadResponse.ok) {
       const errorBody = await uploadResponse.json();
-      console.error(`❌ ERROR al llamar a upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}:`, uploadResponse.status, errorBody);
-      throw new Error(`Failed to upload image via Edge Function for ${isObservedUser ? 'observado' : 'registrado'} user: ${errorBody.error || uploadResponse.statusText}`);
+      console.error(
+        `❌ ERROR al llamar a upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}:`,
+        uploadResponse.status,
+        errorBody
+      );
+      throw new Error(
+        `Failed to upload image via Edge Function for ${isObservedUser ? 'observado' : 'registrado'} user: ${errorBody.error || uploadResponse.statusText}`
+      );
     }
     const uploadResult = await uploadResponse.json();
-    console.log(`DEBUG: URL de imagen obtenida de upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}: ${uploadResult.imageUrl}`);
+    console.log(
+      `DEBUG: URL de imagen obtenida de upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}: ${uploadResult.imageUrl}`
+    );
     return uploadResult.imageUrl;
   } catch (uploadCallError) {
     console.error(`❌ ERROR en la llamada a upload-face-image para ${isObservedUser ? 'observado' : 'registrado'} ID: ${userId}:`, uploadCallError);
@@ -127,7 +135,7 @@ async function uploadFaceImage(userId: string, imageData: string, isObservedUser
   }
 }
 // --- Helper para notificar al microservicio MQTT en la nube ---
-async function notifyMqttMicroservice(data: any) {
+async function notifyMqttMicroservice(data: Record<string, unknown>) {
   try {
     const response = await fetch('https://micro-service-kyr9.onrender.com/publish', {
       method: 'POST',
@@ -142,7 +150,7 @@ async function notifyMqttMicroservice(data: any) {
   }
 }
 // --- NUEVA FUNCIÓN: Generar recomendación de IA ---
-async function generateAISuggestion(user, context) {
+async function generateAISuggestion(user: ObservedUserFromDB, context: string) {
   const prompt = `Given the following observed user data, provide a concise (max 20 words) administrative action recommendation.
   User ID: ${user.id}
   Status ID: ${user.status_id}
@@ -166,23 +174,29 @@ async function generateAISuggestion(user, context) {
         role: 'user',
         parts: [
           {
-            text: prompt
-          }
-        ]
-      }
+            text: prompt,
+          },
+        ],
+      },
     ];
     const payload = {
-      contents: chatHistory
+      contents: chatHistory,
     };
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
     const result = await response.json();
-    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
+    if (
+      result.candidates &&
+      result.candidates.length > 0 &&
+      result.candidates[0].content &&
+      result.candidates[0].content.parts &&
+      result.candidates[0].content.parts.length > 0
+    ) {
       const text = result.candidates[0].content.parts[0].text;
       console.log('DEBUG: AI Recommendation generated:', text);
       return text;
@@ -196,7 +210,7 @@ async function generateAISuggestion(user, context) {
   }
 }
 // --- Manejador Principal de la Función Edge ---
-serve(async (req)=>{
+serve(async (req) => {
   // Manejar solicitudes OPTIONS (preflight CORS)
   if (req.method === 'OPTIONS') {
     console.log('DEBUG: Handling OPTIONS preflight request for validate-user-face');
@@ -205,19 +219,31 @@ serve(async (req)=>{
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
     });
   }
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
     global: {
       headers: {
-        'x-my-custom-header': 'validate-user-face'
-      }
-    }
+        'x-my-custom-header': 'validate-user-face',
+      },
+    },
   });
   // Objeto para registrar la entrada de log de la operación
-  const logEntry = {
+  const logEntry: {
+    user_id: string | null;
+    camera_id: string | null;
+    result: boolean;
+    observed_user_id: string | null;
+    user_type: string;
+    vector_attempted: number[] | null;
+    match_status: string;
+    decision: string;
+    reason: string;
+    confidence_score: number | null;
+    requested_zone_id: string | null;
+  } = {
     user_id: null,
     camera_id: null,
     result: false,
@@ -228,7 +254,7 @@ serve(async (req)=>{
     decision: 'access_denied',
     reason: 'No match found.',
     confidence_score: null,
-    requested_zone_id: null
+    requested_zone_id: null,
   };
   try {
     // Parsear el cuerpo de la solicitud JSON
@@ -244,7 +270,7 @@ serve(async (req)=>{
     const { data: userData, error: userRpcError } = await supabaseClient.rpc('match_user_face_embedding', {
       match_count: 1,
       match_threshold: USER_MATCH_THRESHOLD_DISTANCE,
-      query_embedding: faceEmbedding
+      query_embedding: faceEmbedding,
     });
     if (userRpcError) {
       console.error('❌ ERROR RPC match_user_face_embedding:', userRpcError);
@@ -277,30 +303,31 @@ serve(async (req)=>{
               role_details: null,
               status_details: {
                 id: 'error',
-                name: 'Error'
+                name: 'Error',
               },
-              zones_accessed_details: []
+              zones_accessed_details: [],
             },
             type: 'registered_user_data_error',
             message: 'Registered user matched, but user ID was invalid.',
-            error: logEntry.reason
+            error: logEntry.reason,
           };
-          await supabaseClient.from('logs').insert([
-            logEntry
-          ]);
+          await supabaseClient.from('logs').insert([logEntry]);
           return new Response(JSON.stringify(errorResponse), {
             status: 500,
             headers: {
               'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
-            }
+              'Access-Control-Allow-Origin': '*',
+            },
           });
         }
         userMatched = true;
         logEntry.user_id = matchedUser.user_id;
         logEntry.user_type = 'registered';
         logEntry.confidence_score = matchSimilarity;
-        const { data, error: fullUserError } = await supabaseClient.from('user_full_details_view').select(`
+        const { data, error: fullUserError } = await supabaseClient
+          .from('user_full_details_view')
+          .select(
+            `
             id,
             full_name,
             role_details,
@@ -309,13 +336,16 @@ serve(async (req)=>{
             alert_triggered,
             consecutive_denied_accesses,
             profile_picture_url 
-          `).eq('id', matchedUser.user_id).maybeSingle();
+          `
+          )
+          .eq('id', matchedUser.user_id)
+          .maybeSingle();
         if (fullUserError) {
           console.error('❌ ERROR fetching full user details from view:', fullUserError);
           throw fullUserError;
         }
         if (data) {
-          const hasZoneAccess = data.zones_accessed_details.some((zone)=>zone.id === zoneId);
+          const hasZoneAccess = data.zones_accessed_details.some((zone: ItemWithNameAndId) => zone.id === zoneId);
           const isAccessDenied = data.status_details?.id === ACCESS_DENIED_STATUS_ID;
           if (hasZoneAccess && !isAccessDenied) {
             // Lógica para subir/actualizar la imagen del rostro para usuarios registrados
@@ -348,9 +378,12 @@ serve(async (req)=>{
             // --- Notificar acceso concedido ---
             await notifyMqttMicroservice({ hasAccess: true, full_name: data.full_name });
             if (data.consecutive_denied_accesses > 0) {
-              await supabaseClient.from('users').update({
-                consecutive_denied_accesses: 0
-              }).eq('id', data.id);
+              await supabaseClient
+                .from('users')
+                .update({
+                  consecutive_denied_accesses: 0,
+                })
+                .eq('id', data.id);
             }
           } else {
             userMatchDetails = {
@@ -362,19 +395,25 @@ serve(async (req)=>{
               role_details: data.role_details,
               status_details: data.status_details,
               zones_accessed_details: data.zones_accessed_details,
-profilePictureUrl: data.profile_picture_url,
+              profilePictureUrl: data.profile_picture_url,
             };
             logEntry.result = false;
             logEntry.decision = 'access_denied';
             logEntry.reason = isAccessDenied ? 'Registered user status denies access.' : 'Registered user does not have access to requested zone.';
             logEntry.match_status = isAccessDenied ? 'registered_user_access_denied_status' : 'registered_user_access_denied_zone';
-            await supabaseClient.from('users').update({
-              consecutive_denied_accesses: data.consecutive_denied_accesses + 1
-            }).eq('id', data.id);
+            await supabaseClient
+              .from('users')
+              .update({
+                consecutive_denied_accesses: data.consecutive_denied_accesses + 1,
+              })
+              .eq('id', data.id);
             if (data.consecutive_denied_accesses + 1 >= ACCESS_DENIED_CONSECUTIVE_THRESHOLD && !data.alert_triggered) {
-              await supabaseClient.from('users').update({
-                alert_triggered: true
-              }).eq('id', data.id);
+              await supabaseClient
+                .from('users')
+                .update({
+                  alert_triggered: true,
+                })
+                .eq('id', data.id);
               logEntry.reason += ' Alert triggered for consecutive denied accesses.';
             }
           }
@@ -393,7 +432,7 @@ profilePictureUrl: data.profile_picture_url,
       const { data: observedUserData, error: observedRpcError } = await supabaseClient.rpc('match_observed_face_embedding', {
         match_count: 1,
         match_threshold: OBSERVED_USER_MATCH_THRESHOLD_DISTANCE,
-        query_embedding: faceEmbedding
+        query_embedding: faceEmbedding,
       });
       if (observedRpcError) {
         console.error('❌ ERROR RPC match_observed_face_embedding:', observedRpcError);
@@ -430,7 +469,7 @@ profilePictureUrl: data.profile_picture_url,
               role_details: null,
               status_details: {
                 id: matchedObservedUser.status_id,
-                name: 'Estado Desconocido'
+                name: 'Estado Desconocido',
               },
               zones_accessed_details: [],
               observed_details: {
@@ -443,27 +482,36 @@ profilePictureUrl: data.profile_picture_url,
                 similarity: matchSimilarity,
                 distance: actualDistance,
                 faceImageUrl: matchedObservedUser.face_image_url,
-                aiAction: aiSuggestedAction
-              }
+                aiAction: aiSuggestedAction,
+              },
             };
             logEntry.result = false;
             logEntry.decision = 'access_denied';
             logEntry.reason = hasExpired ? 'Observed user access expired.' : 'Observed user status denies access.';
             logEntry.match_status = hasExpired ? 'observed_user_access_denied_expired' : 'observed_user_access_denied_status_expired';
-            await supabaseClient.from('observed_users').update({
-              consecutive_denied_accesses: (matchedObservedUser.consecutive_denied_accesses || 0) + 1,
-              ai_action: aiSuggestedAction
-            }).eq('id', matchedObservedUser.id);
+            await supabaseClient
+              .from('observed_users')
+              .update({
+                consecutive_denied_accesses: (matchedObservedUser.consecutive_denied_accesses || 0) + 1,
+                ai_action: aiSuggestedAction,
+              })
+              .eq('id', matchedObservedUser.id);
             if ((matchedObservedUser.consecutive_denied_accesses || 0) + 1 >= ACCESS_DENIED_CONSECUTIVE_THRESHOLD && !matchedObservedUser.alert_triggered) {
-              await supabaseClient.from('observed_users').update({
-                alert_triggered: true
-              }).eq('id', matchedObservedUser.id);
+              await supabaseClient
+                .from('observed_users')
+                .update({
+                  alert_triggered: true,
+                })
+                .eq('id', matchedObservedUser.id);
               logEntry.reason += ' Alert triggered for consecutive denied accesses.';
             }
-            await supabaseClient.from('observed_users').update({
-              last_seen_at: new Date().toISOString(),
-              last_accessed_zones: newLastAccessedZones
-            }).eq('id', matchedObservedUser.id);
+            await supabaseClient
+              .from('observed_users')
+              .update({
+                last_seen_at: new Date().toISOString(),
+                last_accessed_zones: newLastAccessedZones,
+              })
+              .eq('id', matchedObservedUser.id);
           } else {
             // Generar recomendación de IA para acceso concedido
             aiSuggestedAction = await generateAISuggestion(matchedObservedUser, 'existing');
@@ -476,19 +524,26 @@ profilePictureUrl: data.profile_picture_url,
             if (imageData) {
               uploadedImageUrl = await uploadFaceImage(matchedObservedUser.id, imageData, true); // True para usuario observado
             }
-            const { data: updatedObservedUser, error: updateError } = await supabaseClient.from('observed_users').update({
-              access_count: newAccessCount,
-              last_seen_at: new Date().toISOString(),
-              last_accessed_zones: newLastAccessedZones,
-              consecutive_denied_accesses: 0,
-              face_image_url: uploadedImageUrl,
-              ai_action: aiSuggestedAction
-            }).eq('id', matchedObservedUser.id).select(`
+            const { data: updatedObservedUser, error: updateError } = await supabaseClient
+              .from('observed_users')
+              .update({
+                access_count: newAccessCount,
+                last_seen_at: new Date().toISOString(),
+                last_accessed_zones: newLastAccessedZones,
+                consecutive_denied_accesses: 0,
+                face_image_url: uploadedImageUrl,
+                ai_action: aiSuggestedAction,
+              })
+              .eq('id', matchedObservedUser.id)
+              .select(
+                `
                 id, embedding, first_seen_at, last_seen_at, access_count, last_accessed_zones,
                 status_id, alert_triggered, expires_at, potential_match_user_id, face_image_url,
                 ai_action,
                 consecutive_denied_accesses
-              `).maybeSingle();
+              `
+              )
+              .maybeSingle();
             if (updateError) {
               console.error('❌ ERROR updating observed user:', updateError);
               throw updateError;
@@ -503,7 +558,7 @@ profilePictureUrl: data.profile_picture_url,
                 role_details: null,
                 status_details: {
                   id: updatedObservedUser.status_id,
-                  name: 'Estado Desconocido'
+                  name: 'Estado Desconocido',
                 },
                 zones_accessed_details: [],
                 observed_details: {
@@ -516,8 +571,8 @@ profilePictureUrl: data.profile_picture_url,
                   similarity: matchSimilarity,
                   distance: actualDistance,
                   faceImageUrl: updatedObservedUser.face_image_url,
-                  aiAction: updatedObservedUser.ai_action
-                }
+                  aiAction: updatedObservedUser.ai_action,
+                },
               };
             }
           }
@@ -539,34 +594,36 @@ profilePictureUrl: data.profile_picture_url,
           first_seen_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
           access_count: 1,
-          last_accessed_zones: [
-            zoneId
-          ],
+          last_accessed_zones: [zoneId],
           status_id: NEW_OBSERVED_USER_STATUS_ID,
           alert_triggered: false,
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           potential_match_user_id: null,
           face_image_url: uploadedImageUrl,
           ai_action: null,
-          consecutive_denied_accesses: 0
+          consecutive_denied_accesses: 0,
         };
         const aiSuggestedActionForNew = await generateAISuggestion(tempObservedUserForAI, 'new');
-        const { data: newObservedUser, error: insertError } = await supabaseClient.from('observed_users').insert({
-          embedding: faceEmbedding,
-          status_id: NEW_OBSERVED_USER_STATUS_ID,
-          last_accessed_zones: [
-            zoneId
-          ],
-          face_image_url: uploadedImageUrl,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          consecutive_denied_accesses: 0,
-          ai_action: aiSuggestedActionForNew
-        }).select(`
+        const { data: newObservedUser, error: insertError } = await supabaseClient
+          .from('observed_users')
+          .insert({
+            embedding: faceEmbedding,
+            status_id: NEW_OBSERVED_USER_STATUS_ID,
+            last_accessed_zones: [zoneId],
+            face_image_url: uploadedImageUrl,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            consecutive_denied_accesses: 0,
+            ai_action: aiSuggestedActionForNew,
+          })
+          .select(
+            `
             id, embedding, first_seen_at, last_seen_at, access_count, last_accessed_zones,
             status_id, alert_triggered, expires_at, potential_match_user_id, face_image_url,
             ai_action,
             consecutive_denied_accesses
-          `).maybeSingle();
+          `
+          )
+          .maybeSingle();
         if (insertError) {
           console.error('❌ ERROR al insertar nuevo usuario observado:', insertError);
           throw insertError;
@@ -584,7 +641,7 @@ profilePictureUrl: data.profile_picture_url,
             role_details: null,
             status_details: {
               id: newObservedUser.status_id,
-              name: 'Estado Desconocido'
+              name: 'Estado Desconocido',
             },
             zones_accessed_details: [],
             observed_details: {
@@ -597,8 +654,8 @@ profilePictureUrl: data.profile_picture_url,
               similarity: 0,
               distance: 0,
               faceImageUrl: newObservedUser.face_image_url,
-              aiAction: newObservedUser.ai_action
-            }
+              aiAction: newObservedUser.ai_action,
+            },
           };
           logEntry.observed_user_id = newObservedUser.id;
           logEntry.user_type = 'observed';
@@ -631,14 +688,18 @@ profilePictureUrl: data.profile_picture_url,
         role_details: null,
         status_details: {
           id: 'unknown',
-          name: 'Desconocido'
+          name: 'Desconocido',
         },
-        zones_accessed_details: []
+        zones_accessed_details: [],
       };
     }
     // 5. Obtener detalles de rol y estado si userMatchDetails.status_details o role_details son solo ID
     if (userMatchDetails.user_type === 'registered' && userMatchDetails.role_details && userMatchDetails.role_details.id) {
-      const { data: roleData, error: roleError } = await supabaseClient.from('roles_catalog').select('name').eq('id', userMatchDetails.role_details.id).maybeSingle();
+      const { data: roleData, error: roleError } = await supabaseClient
+        .from('roles_catalog')
+        .select('name')
+        .eq('id', userMatchDetails.role_details.id)
+        .maybeSingle();
       if (roleData) {
         userMatchDetails.role_details.name = roleData.name;
       } else if (roleError) {
@@ -646,7 +707,11 @@ profilePictureUrl: data.profile_picture_url,
       }
     }
     if (userMatchDetails.status_details && userMatchDetails.status_details.id) {
-      const { data: statusData, error: statusError } = await supabaseClient.from('user_statuses_catalog').select('name').eq('id', userMatchDetails.status_details.id).maybeSingle();
+      const { data: statusData, error: statusError } = await supabaseClient
+        .from('user_statuses_catalog')
+        .select('name')
+        .eq('id', userMatchDetails.status_details.id)
+        .maybeSingle();
       if (statusData) {
         userMatchDetails.status_details.name = statusData.name;
       } else if (statusError) {
@@ -654,20 +719,18 @@ profilePictureUrl: data.profile_picture_url,
       }
     }
     // 6. Insertar log de la operación
-    await supabaseClient.from('logs').insert([
-      logEntry
-    ]);
+    await supabaseClient.from('logs').insert([logEntry]);
     // 7. Preparar y enviar respuesta al frontend
     const responseBody = {
       user: userMatchDetails,
       type: logEntry.match_status,
-      message: logEntry.reason
+      message: logEntry.reason,
     };
     return new Response(JSON.stringify(responseBody), {
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+        'Access-Control-Allow-Origin': '*',
+      },
     });
   } catch (catchError) {
     let errorMessage = 'An unexpected error occurred.';
@@ -675,6 +738,8 @@ profilePictureUrl: data.profile_picture_url,
       errorMessage = catchError.message;
     } else if (typeof catchError === 'string') {
       errorMessage = catchError;
+    } else if (typeof catchError === 'object' && catchError !== null && typeof (catchError as object).toString === 'function') {
+      errorMessage = (catchError as object).toString();
     }
     console.error('🔥 CRITICAL ERROR in Edge Function (unhandled):', catchError);
     const finalLogEntry = {
@@ -682,11 +747,9 @@ profilePictureUrl: data.profile_picture_url,
       result: false,
       decision: 'error',
       reason: `Validation failed due to unhandled internal error: ${errorMessage}`,
-      match_status: 'unhandled_exception'
+      match_status: 'unhandled_exception',
     };
-    const { error: finalLogInsertError } = await supabaseClient.from('logs').insert([
-      finalLogEntry
-    ]);
+    const { error: finalLogInsertError } = await supabaseClient.from('logs').insert([finalLogEntry]);
     if (finalLogInsertError) {
       console.error('Error logging unhandled validation error (final catch):', finalLogInsertError);
     }
@@ -700,20 +763,20 @@ profilePictureUrl: data.profile_picture_url,
         role_details: null,
         status_details: {
           id: 'error',
-          name: 'Error'
+          name: 'Error',
         },
-        zones_accessed_details: []
+        zones_accessed_details: [],
       },
       type: 'error',
       message: 'An internal server error occurred during validation.',
-      error: errorMessage
+      error: errorMessage,
     };
     return new Response(JSON.stringify(errorResponse), {
       status: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+        'Access-Control-Allow-Origin': '*',
+      },
     });
   }
 });
