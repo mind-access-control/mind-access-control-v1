@@ -32,7 +32,7 @@ interface ObservedUserFromDB {
   expires_at: string | null;
   potential_match_user_id: string | null;
   face_image_url: string | null;
-  ai_action: string | null;
+  ai_action: string | null; // Asegurarse de que este campo está presente
   consecutive_denied_accesses: number;
   distance?: number;
   similarity?: number;
@@ -60,6 +60,7 @@ interface UnifiedValidationResponse {
       similarity: number;
       distance: number;
       faceImageUrl: string | null;
+      aiAction: string | null; // Asegurarse de que este campo está presente en la respuesta
     };
   };
   type:
@@ -122,7 +123,7 @@ async function uploadFaceImage(userId: string, imageData: string, isObservedUser
         errorBody
       );
       throw new Error(
-        `Failed to upload image via Edge Function for ${isObservedUser ? 'observed' : 'registered'} user: ${errorBody.error || uploadResponse.statusText}`
+        `Failed to upload image via Edge Function for ${isObservedUser ? 'observado' : 'registrado'} user: ${errorBody.error || uploadResponse.statusText}`
       );
     }
     const uploadResult = await uploadResponse.json();
@@ -139,6 +140,62 @@ async function uploadFaceImage(userId: string, imageData: string, isObservedUser
   }
 }
 
+// --- NUEVA FUNCIÓN: Generar recomendación de IA ---
+async function generateAISuggestion(user: ObservedUserFromDB, context: 'new' | 'existing'): Promise<string> {
+  const prompt = `Given the following observed user data, provide a concise (max 20 words) administrative action recommendation.
+  User ID: ${user.id}
+  Status ID: ${user.status_id}
+  Access Count: ${user.access_count}
+  Last Seen: ${user.last_seen_at}
+  Expires At: ${user.expires_at}
+  Alert Triggered: ${user.alert_triggered}
+  Consecutive Denied Accesses: ${user.consecutive_denied_accesses}
+  Context: ${context === 'new' ? 'New observed user detected.' : 'Existing observed user updated.'}
+
+  Recommendation:`;
+
+  // CAMBIO CLAVE AQUÍ: Leer la clave de API de las variables de entorno de Deno
+  const apiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
+
+  if (!apiKey) {
+    console.error('❌ ERROR: GEMINI_API_KEY no está configurada en las variables de entorno de la función Edge.');
+    return 'AI suggestion failed: API Key missing.';
+  }
+
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  try {
+    const chatHistory = [{ role: 'user', parts: [{ text: prompt }] }];
+    const payload = { contents: chatHistory };
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+
+    if (
+      result.candidates &&
+      result.candidates.length > 0 &&
+      result.candidates[0].content &&
+      result.candidates[0].content.parts &&
+      result.candidates[0].content.parts.length > 0
+    ) {
+      const text = result.candidates[0].content.parts[0].text;
+      console.log('DEBUG: AI Recommendation generated:', text);
+      return text;
+    } else {
+      console.warn('WARNING: No AI recommendation candidates found.', result);
+      return 'No AI recommendation available.';
+    }
+  } catch (error) {
+    console.error('❌ ERROR calling Gemini API for AI recommendation:', error);
+    return 'Error generating AI recommendation.';
+  }
+}
+
 // --- Manejador Principal de la Función Edge ---
 serve(async (req) => {
   // Manejar solicitudes OPTIONS (preflight CORS)
@@ -148,7 +205,8 @@ serve(async (req) => {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        // AÑADIDO: Permitir 'x-request-id' en los encabezados CORS
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
     });
@@ -254,12 +312,12 @@ serve(async (req) => {
             `
             id,
             full_name,
-            role_details,          
-            status_details,        
+            role_details,
+            status_details,
             zones_accessed_details,
-            alert_triggered,             
+            alert_triggered,
             consecutive_denied_accesses,
-            face_image_url  
+            face_image_url
           `
           )
           .eq('id', matchedUser.user_id)
@@ -374,11 +432,19 @@ serve(async (req) => {
           logEntry.confidence_score = matchSimilarity;
 
           const newAccessCount = matchedObservedUser.access_count + 1;
-          const newLastAccessedZones = Array.isArray(matchedObservedUser.last_accessed_zones) ? [...matchedObservedUser.last_accessed_zones, zoneId] : [zoneId];
+          // Deduplicar las zonas accedidas
+          const existingZones = new Set(Array.isArray(matchedObservedUser.last_accessed_zones) ? matchedObservedUser.last_accessed_zones : []);
+          existingZones.add(zoneId); // Añadir la nueva zona
+          const newLastAccessedZones = Array.from(existingZones); // Convertir Set de nuevo a Array
 
           const hasExpired = matchedObservedUser.expires_at && new Date(matchedObservedUser.expires_at) < new Date();
 
+          let aiSuggestedAction: string | null = null; // Variable para almacenar la acción de IA
+
           if (hasExpired || matchedObservedUser.status_id !== NEW_OBSERVED_USER_STATUS_ID) {
+            // Generar recomendación de IA para acceso denegado
+            aiSuggestedAction = await generateAISuggestion(matchedObservedUser, 'existing');
+
             userMatchDetails = {
               id: matchedObservedUser.id,
               full_name: `Observado ${matchedObservedUser.id.substring(0, 8)}`,
@@ -398,6 +464,7 @@ serve(async (req) => {
                 similarity: matchSimilarity,
                 distance: actualDistance,
                 faceImageUrl: matchedObservedUser.face_image_url,
+                aiAction: aiSuggestedAction, // Incluir la acción de IA
               },
             };
             logEntry.result = false;
@@ -407,7 +474,10 @@ serve(async (req) => {
 
             await supabaseClient
               .from('observed_users')
-              .update({ consecutive_denied_accesses: (matchedObservedUser.consecutive_denied_accesses || 0) + 1 })
+              .update({
+                consecutive_denied_accesses: (matchedObservedUser.consecutive_denied_accesses || 0) + 1,
+                ai_action: aiSuggestedAction, // Guardar la acción de IA
+              })
               .eq('id', matchedObservedUser.id);
 
             if ((matchedObservedUser.consecutive_denied_accesses || 0) + 1 >= ACCESS_DENIED_CONSECUTIVE_THRESHOLD && !matchedObservedUser.alert_triggered) {
@@ -419,10 +489,13 @@ serve(async (req) => {
               .from('observed_users')
               .update({
                 last_seen_at: new Date().toISOString(),
-                last_accessed_zones: newLastAccessedZones,
+                last_accessed_zones: newLastAccessedZones, // Usar el array deduplicado
               })
               .eq('id', matchedObservedUser.id);
           } else {
+            // Generar recomendación de IA para acceso concedido
+            aiSuggestedAction = await generateAISuggestion(matchedObservedUser, 'existing');
+
             logEntry.result = true;
             logEntry.decision = 'access_granted';
             logEntry.reason = 'Observed user matched and has active temporary access.';
@@ -439,16 +512,18 @@ serve(async (req) => {
               .update({
                 access_count: newAccessCount,
                 last_seen_at: new Date().toISOString(),
-                last_accessed_zones: newLastAccessedZones,
+                last_accessed_zones: newLastAccessedZones, // Usar el array deduplicado
                 consecutive_denied_accesses: 0,
                 face_image_url: uploadedImageUrl, // Actualizar con la nueva URL
+                ai_action: aiSuggestedAction, // Guardar la acción de IA
               })
               .eq('id', matchedObservedUser.id)
               .select(
                 `
                 id, embedding, first_seen_at, last_seen_at, access_count, last_accessed_zones,
                 status_id, alert_triggered, expires_at, potential_match_user_id, face_image_url,
-                ai_action, consecutive_denied_accesses
+                ai_action,
+                consecutive_denied_accesses
               `
               )
               .maybeSingle();
@@ -478,70 +553,59 @@ serve(async (req) => {
                   similarity: matchSimilarity,
                   distance: actualDistance,
                   faceImageUrl: updatedObservedUser.face_image_url,
+                  aiAction: updatedObservedUser.ai_action, // Asegurarse de que se toma del objeto actualizado
                 },
               };
             }
           }
         }
       } else {
-        console.log('DEBUG: No se encontró coincidencia en usuarios observados. Registrando como nuevo usuario observado...');
+        console.log('DEBUG: No se encontró coincidencia en usuarios registrados. Registrando como nuevo usuario observado...');
         logEntry.match_status = 'no_match_found_observed';
 
         let uploadedImageUrl: string | null = null;
-        // La lógica de subida de imagen para nuevos usuarios observados ya estaba aquí
         if (imageData) {
-          const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-          const uploadFunctionUrl = `${supabaseUrl}/functions/v1/upload-face-image`;
-          console.log('DEBUG: Llamando a upload-face-image en:', uploadFunctionUrl);
-
-          try {
-            const tempUserId = crypto.randomUUID();
-            const uploadResponse = await fetch(uploadFunctionUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-              },
-              body: JSON.stringify({
-                userId: tempUserId,
-                imageData: imageData,
-                isObservedUser: true,
-              }),
-            });
-
-            if (!uploadResponse.ok) {
-              const errorBody = await uploadResponse.json();
-              console.error('❌ ERROR al llamar a upload-face-image:', uploadResponse.status, errorBody);
-              throw new Error(`Failed to upload image via Edge Function: ${errorBody.error || uploadResponse.statusText}`);
-            }
-            const uploadResult = await uploadResponse.json();
-            uploadedImageUrl = uploadResult.imageUrl;
-            console.log('DEBUG: URL de imagen obtenida de upload-face-image:', uploadedImageUrl);
-          } catch (uploadCallError) {
-            console.error('❌ ERROR en la llamada a upload-face-image:', uploadCallError);
-            console.warn('WARNING: No se pudo subir la imagen del rostro para el nuevo usuario observado. face_image_url será nulo.');
-            uploadedImageUrl = null;
-          }
+          uploadedImageUrl = await uploadFaceImage(crypto.randomUUID(), imageData, true); // True para usuario observado
         } else {
           console.warn('WARNING: No se proporcionó imageData para el nuevo usuario observado. face_image_url será nulo.');
         }
+
+        // Generar recomendación de IA para nuevo usuario observado (acceso concedido)
+        // Creamos un objeto ObservedUserFromDB temporal con los datos que tenemos antes de la inserción.
+        const tempObservedUserForAI: ObservedUserFromDB = {
+          id: 'temp-new-user', // ID temporal para la recomendación
+          embedding: faceEmbedding,
+          first_seen_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          access_count: 1, // Será 1 después de la inserción
+          last_accessed_zones: [zoneId],
+          status_id: NEW_OBSERVED_USER_STATUS_ID,
+          alert_triggered: false,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          potential_match_user_id: null,
+          face_image_url: uploadedImageUrl,
+          ai_action: null, // Se llenará a continuación
+          consecutive_denied_accesses: 0,
+        };
+        const aiSuggestedActionForNew = await generateAISuggestion(tempObservedUserForAI, 'new');
 
         const { data: newObservedUser, error: insertError } = await supabaseClient
           .from('observed_users')
           .insert({
             embedding: faceEmbedding,
             status_id: NEW_OBSERVED_USER_STATUS_ID,
-            last_accessed_zones: [zoneId],
+            last_accessed_zones: [zoneId], // Para nuevos usuarios, la zona siempre es única al inicio
             face_image_url: uploadedImageUrl,
             expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             consecutive_denied_accesses: 0,
+            ai_action: aiSuggestedActionForNew, // Guardar la acción de IA para el nuevo usuario
           })
           .select(
             `
             id, embedding, first_seen_at, last_seen_at, access_count, last_accessed_zones,
             status_id, alert_triggered, expires_at, potential_match_user_id, face_image_url,
-            ai_action, consecutive_denied_accesses
+            ai_action,
+            consecutive_denied_accesses
           `
           )
           .maybeSingle();
@@ -575,6 +639,7 @@ serve(async (req) => {
               similarity: 0,
               distance: 0,
               faceImageUrl: newObservedUser.face_image_url,
+              aiAction: newObservedUser.ai_action, // Asegurarse de que se toma del objeto actualizado
             },
           };
           logEntry.observed_user_id = newObservedUser.id;
