@@ -205,26 +205,10 @@ const FacialValidationScreen: React.FC = () => {
         console.log('✅ VALIDACIÓN: Resultado de validación de rostro:', result);
 
         // --- Enviar mensaje al microservicio MQTT (ngrok) cuando se detecta un rostro ---
-        fetch('http://localhost:3001/publish', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ event: 'face_detected', full_name: result.user.full_name }),
-        })
-          .then(res => res.json())
-          .then(data => console.log('Respuesta microservicio (face_detected):', data))
-          .catch(err => console.error('Error enviando a microservicio (face_detected):', err));
+        // (Eliminado: ahora se envía desde el backend)
 
         // --- Enviar mensaje al microservicio MQTT (ngrok) cuando hasAccess es true ---
-        if (result.user.hasAccess) {
-          fetch('http://localhost:3001/publish', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hasAccess: true, full_name: result.user.full_name }),
-          })
-            .then(res => res.json())
-            .then(data => console.log('Respuesta microservicio (hasAccess):', data))
-            .catch(err => console.error('Error enviando a microservicio (hasAccess):', err));
-        }
+        // (Eliminado: ahora se envía desde el backend)
 
         if (result.error) {
           setFaceDetectionError(`Error de Validación: ${result.error}`);
