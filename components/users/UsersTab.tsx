@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { csvTemplateContent } from '@/mock-data';
 import { AlertCircle, Check, Download, FileSpreadsheet, X } from 'lucide-react';
 import React, { useRef, useState } from 'react';
-import UsersForm from './UsersForm';
 import UsersTable from './UsersTable';
 import { EMPTY_STRING } from '@/lib/constants';
 import { UploadStatus } from '@/app/enums';
@@ -118,8 +117,7 @@ const UsersTab: React.FC = () => {
     <div className="space-y-8">
       <div>
         <h2 className="text-3xl font-bold text-white mb-2">User Management</h2>
-      </div>
-      <UsersForm />
+      </div>      
       <UsersTable />
       {/* Enhanced Bulk Onboarding Section */}
       <Card className="bg-white shadow-lg">

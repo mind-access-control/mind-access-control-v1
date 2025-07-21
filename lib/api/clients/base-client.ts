@@ -3,7 +3,7 @@ import {
   ApiResponse, 
   ApiError, 
   ValidationError,
-} from '../types';
+} from '@/lib/api/types';
 
 import { EMPTY_STRING } from '@/lib/constants';
 

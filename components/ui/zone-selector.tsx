@@ -6,13 +6,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Zone } from '@/lib/api/types';
 import { ChevronDown, X } from 'lucide-react';
 import React from 'react';
-import { EMPTY_STRING } from '@/lib/constants';
+import { DEFAULT_ZONE_CATEGORY, EMPTY_STRING } from '@/lib/constants';
 
 interface ZoneSelectorProps {
   zones: Zone[];
-  selectedZones: string[];
-  onZoneToggle: (zoneName: string) => void;
-  onSelectAll?: (zoneNames: string[]) => void;
+  selectedZones: string[]; // Array of zone IDs
+  onZoneToggle: (zoneId: string) => void;
+  onSelectAll?: (zoneIds: string[]) => void;
   loading?: boolean;
   error?: string | null;
   disabled?: boolean;
@@ -36,16 +36,12 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
   // Group zones by category
   const zonesByCategory = React.useMemo(() => {
     const grouped: Record<string, Zone[]> = {};
-    
-    // Handle cases where zones might be undefined, null, or not an array
     if (!zones || !Array.isArray(zones)) {
       return grouped;
     }
-    
     zones.forEach((zone) => {
-      // Ensure zone is a valid object with required properties
       if (zone && typeof zone === 'object' && zone.name) {
-        const category = zone.category || 'Employee';
+        const category = zone.category || DEFAULT_ZONE_CATEGORY;
         if (!grouped[category]) {
           grouped[category] = [];
         }
@@ -62,83 +58,64 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
 
   // Get selected zone objects for display
   const selectedZoneObjects = React.useMemo(() => {
-    // Handle cases where zones might be undefined, null, or not an array
     if (!zones || !Array.isArray(zones)) {
       return [];
     }
-    
-    return zones.filter((zone) => zone && typeof zone === 'object' && zone.name && selectedZones.includes(zone.name));
+    return zones.filter((zone) => zone && typeof zone === 'object' && zone.name && selectedZones.includes(zone.id));
   }, [zones, selectedZones]);
 
-  const handleZoneToggle = (zoneName: string) => {
-    onZoneToggle(zoneName);
+  const handleZoneToggle = (zoneId: string) => {
+    onZoneToggle(zoneId);
   };
 
-  const removeZone = (zoneName: string) => {
-    onZoneToggle(zoneName);
+  const removeZone = (zoneId: string) => {
+    onZoneToggle(zoneId);
   };
 
-  const handleSelectAll = (zoneNames: string[]) => {
+  const handleSelectAll = (zoneIds: string[]) => {
     if (onSelectAll) {
-      onSelectAll(zoneNames);
+      onSelectAll(zoneIds);
     }
   };
 
   const handleSelectAllInCategory = (category: string) => {
     const categoryZones = zonesByCategory[category];
-    
-    // Handle cases where categoryZones might be undefined or empty
     if (!categoryZones || !Array.isArray(categoryZones)) {
       return;
     }
-    
-    const categoryZoneNames = categoryZones
-      .filter((zone) => zone && typeof zone === 'object' && zone.name)
-      .map((zone) => zone.name);
-    
-    const allSelectedInCategory = categoryZoneNames.every((name) => selectedZones.includes(name));
-
+    const categoryZoneIds = categoryZones.filter((zone) => zone && typeof zone === 'object' && zone.name).map((zone) => zone.id);
+    const allSelectedInCategory = categoryZoneIds.every((id) => selectedZones.includes(id));
     if (allSelectedInCategory) {
-      // Deselect all in category
-      categoryZoneNames.forEach((name) => {
-        if (selectedZones.includes(name)) {
-          onZoneToggle(name);
+      categoryZoneIds.forEach((id) => {
+        if (selectedZones.includes(id)) {
+          onZoneToggle(id);
         }
       });
     } else {
-      // Select all in category
-      categoryZoneNames.forEach((name) => {
-        if (!selectedZones.includes(name)) {
-          onZoneToggle(name);
+      categoryZoneIds.forEach((id) => {
+        if (!selectedZones.includes(id)) {
+          onZoneToggle(id);
         }
       });
     }
   };
 
   const handleSelectAllZones = () => {
-    // Handle cases where zones might be undefined, null, or not an array
     if (!zones || !Array.isArray(zones)) {
       return;
     }
-    
-    const allZoneNames = zones
-      .filter((zone) => zone && typeof zone === 'object' && zone.name)
-      .map((zone) => zone.name);
-    
-    const allSelected = allZoneNames.every((name) => selectedZones.includes(name));
-
+    const allZoneIds = zones.filter((zone) => zone && typeof zone === 'object' && zone.name).map((zone) => zone.id);
+    const allSelected = allZoneIds.every((id) => selectedZones.includes(id));
     if (allSelected) {
-      // Deselect all
-      allZoneNames.forEach((name) => {
-        if (selectedZones.includes(name)) {
-          onZoneToggle(name);
+      allZoneIds.forEach((id) => {
+        if (selectedZones.includes(id)) {
+          onZoneToggle(id);
         }
       });
     } else {
-      // Select all
-      allZoneNames.forEach((name) => {
-        if (!selectedZones.includes(name)) {
-          onZoneToggle(name);
+      allZoneIds.forEach((id) => {
+        if (!selectedZones.includes(id)) {
+          onZoneToggle(id);
         }
       });
     }
@@ -160,10 +137,10 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
               {loading
                 ? 'Loading zones...'
                 : error
-                ? `Error: ${error}`
-                : selectedZones.length > 0
-                ? `${selectedZones.length} zone${selectedZones.length > 1 ? 's' : EMPTY_STRING} selected`
-                : placeholder}
+                  ? `Error: ${error}`
+                  : selectedZones.length > 0
+                    ? `${selectedZones.length} zone${selectedZones.length > 1 ? 's' : EMPTY_STRING} selected`
+                    : placeholder}
             </span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
@@ -181,7 +158,7 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="select-all-zones"
-                      checked={zones.length > 0 && zones.every((zone) => selectedZones.includes(zone.name))}
+                      checked={zones.length > 0 && zones.every((zone) => selectedZones.includes(zone.id))}
                       onCheckedChange={handleSelectAllZones}
                     />
                     <label
@@ -197,8 +174,8 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
                 {/* Categories */}
                 {categories.map((category) => {
                   const categoryZones = zonesByCategory[category];
-                  const categoryZoneNames = categoryZones.map((zone) => zone.name);
-                  const allSelectedInCategory = categoryZoneNames.every((name) => selectedZones.includes(name));
+                  const categoryZoneIds = categoryZones.map((zone) => zone.id);
+                  const allSelectedInCategory = categoryZoneIds.every((id) => selectedZones.includes(id));
 
                   return (
                     <div key={category} className="space-y-2">
@@ -224,7 +201,7 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
                       <div className="space-y-1 ml-2">
                         {categoryZones.map((zone) => (
                           <div key={zone.id} className="flex items-center space-x-2">
-                            <Checkbox id={`zone-${zone.id}`} checked={selectedZones.includes(zone.name)} onCheckedChange={() => handleZoneToggle(zone.name)} />
+                            <Checkbox id={`zone-${zone.id}`} checked={selectedZones.includes(zone.id)} onCheckedChange={() => handleZoneToggle(zone.id)} />
                             <label
                               htmlFor={`zone-${zone.id}`}
                               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
@@ -252,7 +229,7 @@ export const ZoneSelector: React.FC<ZoneSelectorProps> = ({
             <Badge key={zone.id} variant="secondary" className="bg-slate-100">
               <span className="text-xs text-gray-600 mr-1">[{zone.category}]</span>
               {zone.name}
-              <button className="ml-1 hover:text-red-500" onClick={() => removeZone(zone.name)}>
+              <button className="ml-1 hover:text-red-500" onClick={() => removeZone(zone.id)}>
                 <X className="w-3 h-3" />
               </button>
             </Badge>

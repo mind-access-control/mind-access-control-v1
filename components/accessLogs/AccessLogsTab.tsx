@@ -189,12 +189,7 @@ const AccessLogsTab: React.FC = () => {
         selectedLogZoneId,
         generalSearchTerm,
       };
-      const result = await AccessLogService.getAccessLogs(
-        filter,
-        roles,
-        userStatuses,
-        zonesList
-      );
+      const result = await AccessLogService.getAccessLogs(filter);
 
       setAccessLogs(result || []);
       // console.log('DEBUG: fetchAccessLogs FINISHED successfully. Final filtered logs count:', result.length);

@@ -11,6 +11,9 @@ export const SELECT_ALL_VALUE = 'all';
 export const NA_VALUE = 'N/A';
 export const DEFAULT_ZONE_CATEGORY = 'Employee';
 export const DEFAULT_USER_STATUS = 'active';
+export const DEFAULT_USER_ROLE = 'user';
+export const DEFAULT_PAGE_NUMBER = 1;
+export const DEFAULT_ITEMS_PER_PAGE = 10;
 
 // ============================================================================
 // EDGE FUNCTIONS
@@ -22,11 +25,9 @@ export const EDGE_FUNCTIONS = {
   GET_USER_ROLES: '/functions/v1/get-user-roles',
   GET_USER_STATUSES: '/functions/v1/get-user-statuses',
   GET_USER_ROLE_BY_ID: '/functions/v1/get-user-role-by-id',
-  GET_USER_EMAILS: '/functions/v1/get-user-emails',
 
   // Zone management
   EF_ZONES: '/functions/v1/ef-zones',
-  GET_ACCESS_ZONES: '/functions/v1/get-access-zones',
 
   // Camera management
   EF_CAMERAS: '/functions/v1/ef-cameras',
@@ -43,6 +44,9 @@ export const EDGE_FUNCTIONS = {
 
   // Dashboard
   GENERATE_DASHBOARD_RECOMMENDATIONS: '/functions/v1/generate-dashboard-recommendations',
+
+  // Access logs
+  EF_LOGS: '/functions/v1/ef-logs',
 } as const;
 
 // ============================================================================

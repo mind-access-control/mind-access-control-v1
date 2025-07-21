@@ -76,14 +76,27 @@ serve(async (req: Request): Promise<Response> => {
     // Obtener la URL pública de la imagen
     const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(path);
 
-    const imageUrl = publicUrlData.publicUrl;
+    let imageUrl = publicUrlData.publicUrl;
     console.log(`DEBUG (upload-face-image): Public URL obtained: ${imageUrl}`);
+
+     // Fix the URL for local development - replace kong:8000 with localhost:54321     
+    if (imageUrl.includes('kong:8000')) {
+      imageUrl = imageUrl.replace('kong:8000', '127.0.0.1:54321');
+    }
+     
+     // Alternative: Construct URL manually for local development
+    if (!imageUrl || imageUrl.includes('kong:8000')) {
+      const baseUrl = Deno.env.get("SUPABASE_URL") ?? "http://127.0.0.1:54321";
+      imageUrl = `${baseUrl}/storage/v1/object/public/${bucketName}/${path}`;
+    }
+    console.log('🔍 Generated image URL:', imageUrl);
 
     // Actualizar la URL de la imagen en la base de datos (observed_users o users)
     const tableToUpdate = isObservedUser ? 'observed_users' : 'users';
+    const columnToUpdate = isObservedUser ? "face_image_url" : "profile_picture_url";
     console.log(`DEBUG (upload-face-image): Attempting to update table: ${tableToUpdate} for userId: ${userId}`);
 
-    const { error: updateDbError } = await supabase.from(tableToUpdate).update({ face_image_url: imageUrl }).eq('id', userId);
+    const { error: updateDbError } = await supabase.from(tableToUpdate).update({ [columnToUpdate]: imageUrl }).eq('id', userId);
 
     if (updateDbError) {
       console.error(`❌ ERROR (upload-face-image): Error updating ${tableToUpdate} table:`, updateDbError);

@@ -1,6 +1,6 @@
-import { BaseApiClient } from './base-client';
-import { ApiResponse, FaceValidationRequest, UnifiedValidationResponse } from '../types';
 import { EDGE_FUNCTIONS } from '@/lib/constants';
+import { ApiResponse, FaceValidationRequest, UnifiedValidationResponse } from '@/lib/api/types';
+import { BaseApiClient } from '@/lib/api/clients/base-client';
 
 export class FaceClient extends BaseApiClient {
   /**

@@ -1,6 +1,6 @@
 import { EDGE_FUNCTIONS } from '@/lib/constants';
-import { ApiResponse, Camera } from '../types';
-import { BaseApiClient } from './base-client';
+import { ApiResponse, Camera } from '@/lib/api/types';
+import { BaseApiClient } from '@/lib/api/clients/base-client';
 
 export class CameraClient extends BaseApiClient {
   /**

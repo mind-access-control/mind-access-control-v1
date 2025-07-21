@@ -1,6 +1,6 @@
 import { LogDecision } from '@/app/enums';
 import { supabase } from '@/lib/supabase';
-import { DailyTrendEntry, LogData, AnalyticResponse } from '../types';
+import { DailyTrendEntry, LogData, AnalyticResponse } from '@/lib/api/types';
 import { EMPTY_STRING } from '@/lib/constants';
 
 export class AnalyticService {
