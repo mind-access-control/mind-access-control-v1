@@ -7,8 +7,7 @@ import { UserService } from '@/lib/api/services/user-service';
 import { ZoneService } from '@/lib/api/services/zone-service';
 import { Role, UserStatus, Zone } from '@/lib/api/types';
 import * as faceapi from 'face-api.js';
-import { EMPTY_STRING } from '@/lib/constants';
-
+import { EMPTY_STRING, DEFAULT_USER_STATUS, DEFAULT_USER_ROLE } from '@/lib/constants';
 // Create a simple event system for user updates
 const userUpdateCallbacks: (() => void)[] = [];
 
@@ -19,8 +18,9 @@ const notifyUserUpdate = () => {
 
 export function useUserActions() {
   // --- New User Form States ---
-  const [selectedRole, setSelectedRole] = useState<string>(EMPTY_STRING);
-  const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive'); // Default to 'Inactive'
+  const [selectedRoleId, setSelectedRoleId] = useState<string>(EMPTY_STRING);
+  const [selectedStatusId, setSelectedStatusId] = useState<string>(EMPTY_STRING);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>(EMPTY_STRING);
   // States for data fetched from Edge Functions
   const [roles, setRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
@@ -110,8 +110,13 @@ export function useUserActions() {
 
         const result = await CatalogService.getRoles();
         setRoles(result || []);
-        if (result && result.length > 0 && !selectedRole) {
-          setSelectedRole(result[0].name);
+        if (result && result.length > 0) {
+          const userRole = result.find((role: { name: string }) => role.name.toLowerCase() === DEFAULT_USER_ROLE);
+          if (userRole) {
+            setSelectedRoleId(userRole.id);
+          } else {
+            setSelectedRoleId(result[0].id);
+          }
         }
       } catch (error: any) {
         console.error('Error al obtener roles de Edge Function:', error);
@@ -132,11 +137,11 @@ export function useUserActions() {
         const result = await CatalogService.getUserStatuses();
         setUserStatuses(result || []);
         if (result && result.length > 0) {
-          const inactiveStatus = result.find((status: { name: string }) => status.name === 'Inactive');
-          if (inactiveStatus) {
-            setSelectedUserStatus(inactiveStatus.name);
-          } else if (!selectedUserStatus) {
-            setSelectedUserStatus(result[0].name); // Fallback al primero si no existe Inactive y no hay selección previa
+          const activeStatus = result.find((status: { name: string }) => status.name.toLowerCase() === DEFAULT_USER_STATUS);
+          if (activeStatus) {
+            setSelectedStatusId(activeStatus.id);
+          } else if (!selectedStatusId) {
+            setSelectedStatusId(result[0].id);
           }
         }
       } catch (error: any) {
@@ -232,10 +237,12 @@ export function useUserActions() {
 
   return {
     // Form states
-    selectedRole,
-    setSelectedRole,
-    selectedUserStatus,
-    setSelectedUserStatus,
+    selectedRoleId,
+    setSelectedRoleId,
+    selectedStatusId,
+    setSelectedStatusId,
+    selectedZoneId,
+    setSelectedZoneId,
     // Data states
     roles,
     loadingRoles,

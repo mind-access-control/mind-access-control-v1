@@ -48,9 +48,12 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  role: string; // Changed from Role object to string (name)
-  status?: string; // Changed from UserStatus object to string (name), made optional
-  accessZones: string[]; // Changed from Zone[] to string[] (zone names)
+  roleId: string;
+  role: string;
+  statusId?: string;
+  status?: string;
+  accessZoneIds: string[];
+  accessZones: string[];
   faceEmbedding?: number[];
   profilePictureUrl?: string;
   accessMethod?: 'facial' | 'card' | 'pin';
@@ -59,7 +62,7 @@ export type User = {
   deletedAt?: string;
 };
 
-export type UserSortField = 'name' | 'email' | 'role';
+export type UserSortField = 'name' | 'email' | 'role' | 'status';
 
 export interface CreateUserRequest {
   fullName: string;
@@ -77,9 +80,9 @@ export interface UpdateUserRequest {
   userId?: string;
   fullName?: string;
   email?: string;
-  roleName?: string;
-  statusName?: string;
-  accessZoneNames?: string[];
+  roleId?: string;
+  statusId?: string;
+  accessZoneIds?: string[];
   faceEmbedding?: number[];
   profilePictureUrl?: string;
 }
@@ -93,9 +96,9 @@ export interface UserListRequest {
   page?: number;
   limit?: number;
   search?: string;
-  role?: string;
-  status?: string;
-  zone?: string;
+  roleId?: string;
+  statusId?: string;
+  zoneId?: string;
   sortBy?: 'name' | 'email' | 'role' | 'status' | 'created_at';
   sortOrder?: 'asc' | 'desc';
 }
@@ -103,11 +106,6 @@ export interface UserListRequest {
 export interface UserListResponse extends PaginatedResponse<User> {
   filters: {
     applied: Partial<UserListRequest>;
-    available: {
-      roles: Role[];
-      statuses: UserStatus[];
-      zones: Zone[];
-    };
   };
 }
 

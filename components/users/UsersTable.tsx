@@ -9,67 +9,86 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ZoneSelector } from '@/components/ui/zone-selector';
 import { useUserActions } from '@/hooks/user.hooks';
 import { UserService } from '@/lib/api/services/user-service';
-import { UpdateUserRequest, User } from '@/lib/api/types';
-import { DEFAULT_USER_STATUS, EMPTY_STRING } from '@/lib/constants';
+import { User, UserListRequest } from '@/lib/api/types';
+import { DEFAULT_ITEMS_PER_PAGE, DEFAULT_PAGE_NUMBER, DEFAULT_USER_STATUS, EMPTY_STRING, PAGINATION_OPTIONS, SELECT_ALL_VALUE } from '@/lib/constants';
 import { UserSortField } from '@/lib/api/types';
-import { AlertCircle, ChevronDown, ChevronUp, Edit, RotateCcw, Save, Search, Trash2, UserCheck, UserX, X } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import { AlertCircle, ChevronDown, ChevronUp, Edit, Plus, Search, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import React, { useCallback, useEffect, useState } from 'react';
+import UsersForm from './UsersForm';
 
 const UsersTable: React.FC = () => {
   //States
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [editingAccessZones, setEditingAccessZones] = useState<string[]>([]);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
+  const [userFormModalOpen, setUserFormModalOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<User | null>(null);
 
   // --- Global UI Status / Feedback ---
-  const [showStatusMessage, setShowStatusMessage] = useState<string | null>(null); // Mensajes de éxito/error al guardar/procesar
-  // --- Dashboard Filtering/Sorting States (mantener tus existentes) ---
+  const [showStatusMessage, setShowStatusMessage] = useState<string | null>(null);
+
+  // --- Server-side filtering and pagination states ---
   const [userSearchTerm, setUserSearchTerm] = useState(EMPTY_STRING);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(5);
-  // Nuevo estado para el ordenamiento de la tabla de usuarios
-  const [sortField, setSortField] = useState<UserSortField>('name'); // Campo de ordenamiento por defecto
-  const [sortDirection, setSortDirection] = useState<SortDirection>(SortDirection.ASC); // Dirección de ordenamiento por defecto
+  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE_NUMBER);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+  const [sortField, setSortField] = useState<UserSortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>(SortDirection.ASC);
 
-  const { users, loadingUsers, errorUsers, setLoadingUsers, loadUsersAndNotify, zonesData, loadingZones, errorZones } = useUserActions();
+  // Filter states
+  const [selectedRoleId, setSelectedRoleId] = useState<string>(SELECT_ALL_VALUE);
+  const [selectedStatusId, setSelectedStatusId] = useState<string>(SELECT_ALL_VALUE);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>(SELECT_ALL_VALUE);
 
-  // Derived States
-  const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => {
-      if (sortField === 'name') {
-        return sortDirection === SortDirection.ASC ? a.name?.localeCompare(b.name) : b.name?.localeCompare(a.name);
-      }
-      if (sortField === 'email') {
-        return sortDirection === SortDirection.ASC ? a.email?.localeCompare(b.email) : b.email?.localeCompare(a.email);
-      }
-      if (sortField === 'role') {
-        return sortDirection === SortDirection.ASC ? a.role?.localeCompare(b.role) : b.role?.localeCompare(a.role);
-      }
-      return 0;
-    });
-  }, [users, sortField, sortDirection]);
+  // Server response states
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [errorUsers, setErrorUsers] = useState<string | null>(null);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
-  const filteredUsers = useMemo(() => {
-    return sortedUsers.filter(
-      (user) => user.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) || user.email?.toLowerCase().includes(userSearchTerm.toLowerCase())
-    );
-  }, [sortedUsers, userSearchTerm]);
+  const { zonesData, roles, userStatuses } = useUserActions();
 
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+  // Load users with server-side filtering
+  const loadUsers = useCallback(async () => {
+    try {
+      setLoadingUsers(true);
+      setErrorUsers(null);
+
+      const request: UserListRequest = {
+        page: currentPage,
+        limit: itemsPerPage,
+        search: userSearchTerm || undefined,
+        roleId: selectedRoleId && selectedRoleId !== SELECT_ALL_VALUE ? selectedRoleId : undefined,
+        statusId: selectedStatusId && selectedStatusId !== SELECT_ALL_VALUE ? selectedStatusId : undefined,
+        zoneId: selectedZoneId && selectedZoneId !== SELECT_ALL_VALUE ? selectedZoneId : undefined,
+        sortBy: sortField,
+        sortOrder: sortDirection === SortDirection.ASC ? SortDirection.ASC : SortDirection.DESC,
+      };
+
+      const result = await UserService.getUsers(request);
+      setUsers(result.data || []);
+      setTotalUsers(result.pagination.total);
+      setTotalPages(result.pagination.totalPages);
+    } catch (error: any) {
+      console.error('Error loading users:', error);
+      setErrorUsers(error.message || 'Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [currentPage, itemsPerPage, userSearchTerm, selectedRoleId, selectedStatusId, selectedZoneId, sortField, sortDirection]);
+
+  // Load users when filters change
+  useEffect(() => {
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [userSearchTerm, selectedRoleId, selectedStatusId, selectedZoneId]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   // Handlers
-  const toggleEditingAccessZone = (zoneName: string) => {
-    setEditingAccessZones((prev) => (prev.includes(zoneName) ? prev.filter((name) => name !== zoneName) : [...prev, zoneName]));
-  };
-
   const handleSort = (field: UserSortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC);
@@ -79,52 +98,24 @@ const UsersTable: React.FC = () => {
     }
   };
 
-  const startEditing = (user: User) => {
-    setEditingUserId(user.id);
-    setEditingUser({ ...user }); // Copia del usuario para editar
-    setEditingAccessZones([...user.accessZones]); // Copia de zonas
+  const openAddUserModal = () => {
+    setUserToEdit(null);
+    setUserFormModalOpen(true);
   };
 
-  const cancelEditing = () => {
-    setEditingUserId(null);
-    setEditingUser(null);
-    setEditingAccessZones([]);
+  const openEditUserModal = (user: User) => {
+    setUserToEdit(user);
+    setUserFormModalOpen(true);
   };
 
-  const saveEditing = async () => {
-    if (!editingUser) return;
-
-    try {
-      setLoadingUsers(true);
-
-      const request: UpdateUserRequest = {
-        userId: editingUserId || undefined,
-        fullName: editingUser.name,
-        roleName: editingUser.role,
-        statusName: editingUser.status || DEFAULT_USER_STATUS,
-        accessZoneNames: editingAccessZones,
-      };
-
-      const result = await UserService.updateUser(request);
-
-      if (result.message) {
-        // Refresh the users list to get updated data
-        await loadUsersAndNotify();
-        cancelEditing();
-        setShowStatusMessage('User updated successfully!');
-      } /*else {
-        setShowStatusMessage(`Failed to update user: ${result.error || 'Unknown error'}`);
-      }*/
-    } catch (error: any) {
-      console.error('Error updating user:', error);
-      setShowStatusMessage(`Failed to update user: ${error.message}`);
-    } finally {
-      setLoadingUsers(false);
-    }
+  const closeUserFormModal = () => {
+    setUserFormModalOpen(false);
+    setUserToEdit(null);
   };
 
-  const updateEditingUser = (field: string, value: any) => {
-    setEditingUser((prev: any) => ({ ...prev, [field]: value }));
+  const handleUserFormSuccess = () => {
+    loadUsers();
+    setShowStatusMessage('User operation completed successfully!');
   };
 
   const openDeleteModal = (user: User) => {
@@ -143,13 +134,11 @@ const UsersTable: React.FC = () => {
 
       if (result.message) {
         // Refresh the users list to get updated data
-        await loadUsersAndNotify();
+        await loadUsers();
         setDeleteModalOpen(false);
         setUserToDelete(null);
         setShowStatusMessage('User deleted successfully!');
-      } /*else {
-        setShowStatusMessage(`Failed to delete user: ${result.error || 'Unknown error'}`);
-      }*/
+      }
     } catch (error: any) {
       console.error('Error deleting user:', error);
       setShowStatusMessage(`Failed to delete user: ${error.message}`);
@@ -165,18 +154,61 @@ const UsersTable: React.FC = () => {
 
   return (
     <>
-      {/* Enhanced Existing Users List with Search and Pagination */}
+      {/* Enhanced Existing Users List with Server-side Search and Pagination */}
       <Card className="bg-white shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Existing Users</span>
             <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" onClick={loadUsersAndNotify} disabled={loadingUsers} className="mr-2">
-                <RotateCcw className={`w-4 h-4 ${loadingUsers ? 'animate-spin' : EMPTY_STRING}`} />
-                Refresh
-              </Button>
               <Search className="w-4 h-4 text-gray-400" />
               <Input placeholder="Search users..." value={userSearchTerm} onChange={(e) => setUserSearchTerm(e.target.value)} className="w-64" />
+
+              {/* Filter dropdowns */}
+              <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedStatusId} onValueChange={setSelectedStatusId}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {userStatuses.map((status) => (
+                    <SelectItem key={status.id} value={status.id}>
+                      {status.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedZoneId} onValueChange={setSelectedZoneId}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Zone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Zones</SelectItem>
+                  {zonesData.map((zone) => (
+                    <SelectItem key={zone.id} value={zone.id}>
+                      {zone.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="default" size="sm" onClick={openAddUserModal} className="bg-teal-600 hover:bg-teal-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
             </div>
           </CardTitle>
         </CardHeader>
@@ -193,7 +225,7 @@ const UsersTable: React.FC = () => {
               <AlertTitle className="text-red-800">Error Loading Users</AlertTitle>
               <AlertDescription className="text-red-700">
                 {errorUsers}
-                <Button variant="outline" size="sm" onClick={loadUsersAndNotify} className="ml-2">
+                <Button variant="outline" size="sm" onClick={loadUsers} className="ml-2">
                   Retry
                 </Button>
               </AlertDescription>
@@ -204,85 +236,43 @@ const UsersTable: React.FC = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="text-center">Photo</TableHead>
                     <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSort('name')}>
                       <div className="flex items-center">
                         Name
-                        {sortField === 'name' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                        {sortField === 'name' &&
+                          (sortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                       </div>
                     </TableHead>
                     <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSort('email')}>
                       <div className="flex items-center">
                         Email
-                        {sortField === 'email' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                        {sortField === 'email' &&
+                          (sortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                       </div>
                     </TableHead>
                     <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSort('role')}>
                       <div className="flex items-center">
                         Role
-                        {sortField === 'role' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                        {sortField === 'role' &&
+                          (sortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
+                      </div>
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-gray-50 select-none" onClick={() => handleSort('status')}>
+                      <div className="flex items-center">
+                        Status
+                        {sortField === 'status' &&
+                          (sortDirection === SortDirection.ASC ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />)}
                       </div>
                     </TableHead>
                     <TableHead>Access Zones</TableHead>
-                    <TableHead className="text-center">Face</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedUsers.length > 0 ? (
-                    paginatedUsers.map((user) => (
+                  {users.length > 0 ? (
+                    users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell>
-                          {editingUserId === user.id ? (
-                            <Input value={editingUser.name} onChange={(e) => updateEditingUser('name', e.target.value)} className="h-8" />
-                          ) : (
-                            user.name
-                          )}
-                        </TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>
-                          {editingUserId === user.id ? (
-                            <Select value={editingUser.role} onValueChange={(value) => updateEditingUser('role', value)}>
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Admin">Admin</SelectItem>
-                                <SelectItem value="User">User</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            user.role
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingUserId === user.id ? (
-                            <div className="w-64">
-                              <ZoneSelector
-                                zones={zonesData}
-                                selectedZones={editingAccessZones}
-                                onZoneToggle={toggleEditingAccessZone}
-                                onSelectAll={(zoneNames) => {
-                                  // Add all zones that aren't already selected
-                                  zoneNames.forEach(zoneName => {
-                                    if (!editingAccessZones.includes(zoneName)) {
-                                      setEditingAccessZones(prev => [...prev, zoneName]);
-                                    }
-                                  });
-                                }}
-                                loading={loadingZones}
-                                error={errorZones}
-                                placeholder="Select access zones"
-                                className="text-sm"
-                              />
-                            </div>
-                          ) : (
-                            <>
-                              {user.accessZones.length > 2
-                                ? `${user.accessZones.slice(0, 2).join(', ')} +${user.accessZones.length - 2}`
-                                : user.accessZones.join(', ')}
-                            </>
-                          )}
-                        </TableCell>
                         <TableCell className="text-center">
                           {user.profilePictureUrl ? (
                             <div className="flex items-center justify-center">
@@ -326,27 +316,42 @@ const UsersTable: React.FC = () => {
                             </div>
                           )}
                         </TableCell>
+                        <TableCell>{user.name}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={user.role === 'Admin' ? 'default' : 'secondary'}>{user.role}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={user.status === DEFAULT_USER_STATUS ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}
+                          >
+                            {user.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                            {(() => {
+                              if (!user.accessZones || user.accessZones.length === 0) {
+                                return 'No zones assigned';
+                              }
+                              const zoneNames = user.accessZones.filter(Boolean);
+                              if (zoneNames.length > 0) {
+                                return zoneNames.join(', ');
+                              } else {
+                                return `Zones assigned: ${JSON.stringify(user.accessZones)}`;
+                              }
+                            })()}
+                          </Badge>
+                        </TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
-                            {editingUserId === user.id ? (
-                              <>
-                                <Button size="sm" variant="outline" onClick={saveEditing} className="text-green-600 hover:text-green-700">
-                                  <Save className="w-4 h-4" />
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={cancelEditing} className="text-gray-600 hover:text-gray-700">
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button size="sm" variant="outline" onClick={() => startEditing(user)}>
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => openDeleteModal(user)} className="text-red-600 hover:text-red-700">
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </>
-                            )}
+                            <Button size="sm" variant="outline" onClick={() => openEditUserModal(user)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => openDeleteModal(user)} className="text-red-600 hover:text-red-700">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -354,7 +359,12 @@ const UsersTable: React.FC = () => {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        {userSearchTerm ? 'No users found matching your search.' : 'No users found.'}
+                        {userSearchTerm ||
+                        (selectedRoleId && selectedRoleId !== SELECT_ALL_VALUE) ||
+                        (selectedStatusId && selectedStatusId !== SELECT_ALL_VALUE) ||
+                        (selectedZoneId && selectedZoneId !== SELECT_ALL_VALUE)
+                          ? 'No users found matching your filters.'
+                          : 'No users found.'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -370,17 +380,18 @@ const UsersTable: React.FC = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
+                      {PAGINATION_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option.toString()}>
+                          {option}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600">
-                    Showing {startIndex + 1} to {Math.min(endIndex, filteredUsers.length)} of {filteredUsers.length} users
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalUsers)} of {totalUsers} users
                   </span>
                 </div>
 
@@ -417,6 +428,10 @@ const UsersTable: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* User Form Modal */}
+      <UsersForm isOpen={userFormModalOpen} onClose={closeUserFormModal} editingUser={userToEdit} onSuccess={handleUserFormSuccess} />
+
       {/* Delete Confirmation Modal */}
       <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
         <DialogContent className="sm:max-w-[425px]">

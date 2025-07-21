@@ -330,9 +330,9 @@ serve(async (req) => {
             `
             id,
             full_name,
-            role_details,
-            status_details,
-            zones_accessed_details,
+            roles,
+            statuses,
+            zones,
             alert_triggered,
             consecutive_denied_accesses,
             profile_picture_url 
@@ -345,8 +345,8 @@ serve(async (req) => {
           throw fullUserError;
         }
         if (data) {
-          const hasZoneAccess = data.zones_accessed_details.some((zone: ItemWithNameAndId) => zone.id === zoneId);
-          const isAccessDenied = data.status_details?.id === ACCESS_DENIED_STATUS_ID;
+          const hasZoneAccess = data.zones.some((zone: ItemWithNameAndId) => zone.id === zoneId);
+          const isAccessDenied = data.statuses?.id === ACCESS_DENIED_STATUS_ID;
           if (hasZoneAccess && !isAccessDenied) {
             // Lógica para subir/actualizar la imagen del rostro para usuarios registrados
             let uploadedImageUrl: string | null = data.profile_picture_url;
@@ -366,9 +366,9 @@ serve(async (req) => {
               user_type: 'registered',
               hasAccess: true,
               similarity: matchSimilarity,
-              role_details: data.role_details,
-              status_details: data.status_details,
-              zones_accessed_details: data.zones_accessed_details,
+              role_details: data.roles,
+              status_details: data.statuses,
+              zones_accessed_details: data.zones,
               profilePictureUrl: uploadedImageUrl,
             };
             logEntry.result = true;
@@ -392,9 +392,9 @@ serve(async (req) => {
               user_type: 'registered',
               hasAccess: false,
               similarity: matchSimilarity,
-              role_details: data.role_details,
-              status_details: data.status_details,
-              zones_accessed_details: data.zones_accessed_details,
+              role_details: data.roles,
+              status_details: data.statuses,
+              zones_accessed_details: data.zones,
               profilePictureUrl: data.profile_picture_url,
             };
             logEntry.result = false;

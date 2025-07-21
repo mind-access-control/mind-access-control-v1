@@ -29,16 +29,4 @@ export class CatalogService {
     }
     return extractArrayData<UserStatus>(response, 'statuses');
   }
-
-  /**
-   * Get all access zones
-   * @returns The access zones
-   */
-  static async getAccessZones(): Promise<Zone[]> {
-    const response = await catalogClient.getAccessZones();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to fetch access zones');
-    }
-    return extractArrayData<Zone>(response, 'zones');
-  }
 }

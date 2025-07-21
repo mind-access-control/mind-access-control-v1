@@ -1,8 +1,17 @@
 import { EDGE_FUNCTIONS } from '@/lib/constants';
-import { ApiResponse, ObservedLogFilter, ObservedLogResponse } from '@/lib/api/types';
+import { AccessLogFilter, ApiResponse, DisplayLog, ObservedLogFilter, ObservedLogResponse } from '@/lib/api/types';
 import { BaseApiClient } from './base-client';
 
 export class AccessLogClient extends BaseApiClient {
+  /**
+   * Get the access logs
+   * @param filter - The filter object containing the filter criteria
+   * @returns The access logs
+   */
+  async getAccessLogs(filter: AccessLogFilter): Promise<ApiResponse<DisplayLog[]>> {
+    return this.makeRequest(EDGE_FUNCTIONS.EF_LOGS, { method: 'POST', body: filter });
+  }
+
   /**
    * Get the observed logs
    * @param filter - The filter object containing the filter criteria
