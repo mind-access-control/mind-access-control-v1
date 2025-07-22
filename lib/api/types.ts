@@ -1,7 +1,7 @@
 // API Types for Edge Functions
 // This file contains all the TypeScript interfaces for requests and responses
 
-import { RiskStatus } from "@/app/enums";
+import { RiskStatus } from '@/app/enums';
 
 // ============================================================================
 // COMMON TYPES
@@ -69,7 +69,7 @@ export interface CreateUserRequest {
   email: string;
   roleName: string;
   statusName: string;
-  accessZoneNames: string[];
+  accessZoneIds: string[]; // IDs de zonas para registro moderno
   faceEmbedding?: number[];
   profilePictureUrl?: string | null;
   accessMethod?: 'facial' | 'card' | 'pin';
@@ -115,7 +115,7 @@ export interface UserListResponse extends PaginatedResponse<User> {
 
 export type Role = {
   id: string;
-  name: string;  
+  name: string;
 };
 
 // ============================================================================
@@ -207,13 +207,13 @@ export type AccessLogFilter = {
   dateTo: string;
   selectedLogDecisionId: string;
   selectedLogUserId: string;
-  selectedLogZoneId: string;  
+  selectedLogZoneId: string;
   generalSearchTerm: string;
 };
 
-export type UserForFilter = { 
-  id: string; 
-  full_name: string; 
+export type UserForFilter = {
+  id: string;
+  full_name: string;
 };
 
 // Main log type from database
@@ -277,7 +277,7 @@ export type Column = {
   key: string;
   label: string;
   sortable: boolean;
-}; 
+};
 
 // ============================================================================
 // ANALYTICS TYPES
@@ -426,14 +426,7 @@ export interface ObservedUser {
 }
 
 // Tipos para el ordenamiento de la tabla
-export type ObservedUserSortField =
-  | "id"
-  | "firstSeen"
-  | "lastSeen"
-  | "tempAccesses"
-  | "accessedZones"
-  | "status"
-  | "aiAction";
+export type ObservedUserSortField = 'id' | 'firstSeen' | 'lastSeen' | 'tempAccesses' | 'accessedZones' | 'status' | 'aiAction';
 
 // ============================================================================
 // OBSERVED USERS LOGS TYPES
@@ -465,12 +458,7 @@ export interface ObservedLog {
   isRegistered: boolean; // Indicates if the observed user is registered
 }
 // Type for table sort fields, now including 'isRegistered'
-export type ObservedLogSortField =
-| "timestamp"
-| "observedUserId"
-| "zone"
-| "status"
-| "isRegistered";
+export type ObservedLogSortField = 'timestamp' | 'observedUserId' | 'zone' | 'status' | 'isRegistered';
 
 // ============================================================================
 // FACE VALIDATION TYPES

@@ -246,15 +246,15 @@ export const userValidationRules: ValidationRule<any>[] = [
     maxLength: 50,
   },
   {
-    field: 'accessZoneNames',
+    field: 'accessZoneIds',
     required: true,
     type: 'array',
     custom: (value) => {
       if (!Array.isArray(value) || value.length === 0) {
-        return 'At least one access zone must be selected';
+        return 'Debes seleccionar al menos una zona de acceso';
       }
       if (!value.every((zone) => typeof zone === 'string' && zone.length > 0)) {
-        return 'All access zones must be valid strings';
+        return 'Todos los IDs de zona deben ser strings válidos';
       }
       return null;
     },
@@ -285,6 +285,18 @@ export const userValidationRules: ValidationRule<any>[] = [
         } catch {
           return 'Profile picture URL must be a valid URL';
         }
+      }
+      return null;
+    },
+  },
+  {
+    field: 'observedUserId',
+    type: 'string',
+    required: false,
+    maxLength: 100,
+    custom: (value) => {
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        return 'observedUserId must be a string or empty';
       }
       return null;
     },

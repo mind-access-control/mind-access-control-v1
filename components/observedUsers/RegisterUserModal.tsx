@@ -45,6 +45,7 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
   const [emailError, setEmailError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>(EMPTY_STRING);
   const [selectedUserStatus, setSelectedUserStatus] = useState<string>('Inactive');
+  // Almacena los IDs de zona seleccionados (zone.id)
   const [selectedAccessZones, setSelectedAccessZones] = useState<string[]>([]);
 
   // --- Catalog Loading States (roles, zones, user statuses) ---
@@ -325,9 +326,9 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
     }
   };
 
-  // KEY CHANGE! The toggleAccessZone function remains the same
-  const toggleAccessZone = (zoneName: string) => {
-    setSelectedAccessZones((prev) => (prev.includes(zoneName) ? prev.filter((name) => name !== zoneName) : [...prev, zoneName]));
+  // toggleAccessZone para trabajar con IDs
+  const toggleAccessZone = (zoneId: string) => {
+    setSelectedAccessZones((prev) => (prev.includes(zoneId) ? prev.filter((id) => id !== zoneId) : [...prev, zoneId]));
   };
 
   const handleRegisterUser = async () => {
@@ -356,20 +357,34 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
     setShowStatusMessage('Registering user...');
 
     try {
+      // Construir el request solo con los campos requeridos y válidos
       const request: CreateUserRequest = {
         fullName: fullName,
         email: trimmedEmail,
         roleName: selectedRole,
         statusName: selectedUserStatus,
-        accessZoneNames: selectedAccessZones,
+        accessZoneIds: selectedAccessZones,
         faceEmbedding: Array.from(faceEmbedding!),
-        profilePictureUrl: observedUser?.faceImage || null,
-        observedUserId: observedUser?.id || null,
+        // Siempre enviar observedUserId como string (vacío si no hay)
+        observedUserId: observedUser && typeof observedUser.id === 'string' && observedUser.id.length > 0 ? observedUser.id : '',
       };
+      // Agregar opcionales solo si existen
+      if (observedUser?.faceImage) request.profilePictureUrl = observedUser.faceImage;
+      // Log explícito para depuración: mostrar el objeto antes de serializar
+      console.log('RegisterUserModal - Objeto request antes de serializar:', request);
+      const payloadString = JSON.stringify(request);
+      console.log('RegisterUserModal - Payload enviado a createUser (JSON):', payloadString);
+      // Validación extra: asegurar que observedUserId SIEMPRE está presente
+      if (!Object.prototype.hasOwnProperty.call(request, 'observedUserId')) {
+        console.error('ERROR: observedUserId NO está presente en el objeto request!');
+      }
+      if (!payloadString.includes('"observedUserId"')) {
+        console.error('ERROR: observedUserId NO está presente en el JSON final!');
+      }
 
       const result = await UserService.createUser(request);
 
-      setShowStatusMessage(`User registered successfully! ID: ${result.userId || NA_VALUE}`);
+      setShowStatusMessage(`¡Usuario registrado exitosamente! ID: ${result.userId || NA_VALUE}`);
       console.log('User registration successful:', result);
 
       setFullName(EMPTY_STRING);
@@ -384,9 +399,11 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
       setIsSavingUser(false);
       onUserRegistered();
       onClose();
-    } catch (error: any) {
-      console.error('Error during user registration:', error);
-      setShowStatusMessage(`Failed to register user: ${error.message}`);
+    } catch (error) {
+      // Tipado seguro para error
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('Error durante el registro de usuario:', error);
+      setShowStatusMessage(`Error al registrar usuario: ${errMsg}`);
       setIsSavingUser(false);
     }
   };
@@ -514,8 +531,8 @@ const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, onClose, 
             zones={zonesData}
             selectedZones={selectedAccessZones}
             onZoneToggle={toggleAccessZone}
-            // onSelectAll is not needed here, as ZoneSelector handles the internal
-            // "Select All" logic by calling onZoneToggle for each zone.
+            // IMPORTANTE: ZoneSelector debe pasar zone.name a onZoneToggle
+            // Si ZoneSelector usa zone.id, modifícalo para que pase zone.name
             loading={loadingZones}
             error={errorZones}
             placeholder="Select access zones"
