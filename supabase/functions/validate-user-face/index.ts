@@ -60,6 +60,7 @@ interface UnifiedValidationResponse {
       distance: number;
       faceImageUrl: string | null; // Este sigue siendo para observed_details
       aiAction: string | null;
+      consecutiveDeniedAccesses: number;
     };
   };
   type:
@@ -401,12 +402,14 @@ serve(async (req) => {
             logEntry.decision = 'access_denied';
             logEntry.reason = isAccessDenied ? 'Registered user status denies access.' : 'Registered user does not have access to requested zone.';
             logEntry.match_status = isAccessDenied ? 'registered_user_access_denied_status' : 'registered_user_access_denied_zone';
+            console.log(`DEBUG: Usuario ${data.id} - consecutive_denied_accesses ANTES: ${data.consecutive_denied_accesses}`);
             await supabaseClient
               .from('users')
               .update({
                 consecutive_denied_accesses: data.consecutive_denied_accesses + 1,
               })
               .eq('id', data.id);
+            console.log(`DEBUG: Usuario ${data.id} - consecutive_denied_accesses DESPUÉS de intento fallido.`);
             if (data.consecutive_denied_accesses + 1 >= ACCESS_DENIED_CONSECUTIVE_THRESHOLD && !data.alert_triggered) {
               await supabaseClient
                 .from('users')
@@ -483,12 +486,14 @@ serve(async (req) => {
                 distance: actualDistance,
                 faceImageUrl: matchedObservedUser.face_image_url,
                 aiAction: aiSuggestedAction,
+                consecutiveDeniedAccesses: matchedObservedUser.consecutive_denied_accesses,
               },
             };
             logEntry.result = false;
             logEntry.decision = 'access_denied';
             logEntry.reason = hasExpired ? 'Observed user access expired.' : 'Observed user status denies access.';
             logEntry.match_status = hasExpired ? 'observed_user_access_denied_expired' : 'observed_user_access_denied_status_expired';
+            console.log(`DEBUG: Observado ${matchedObservedUser.id} - consecutive_denied_accesses ANTES: ${matchedObservedUser.consecutive_denied_accesses}`);
             await supabaseClient
               .from('observed_users')
               .update({
@@ -496,6 +501,7 @@ serve(async (req) => {
                 ai_action: aiSuggestedAction,
               })
               .eq('id', matchedObservedUser.id);
+            console.log(`DEBUG: Observado ${matchedObservedUser.id} - consecutive_denied_accesses DESPUÉS de intento fallido.`);
             if ((matchedObservedUser.consecutive_denied_accesses || 0) + 1 >= ACCESS_DENIED_CONSECUTIVE_THRESHOLD && !matchedObservedUser.alert_triggered) {
               await supabaseClient
                 .from('observed_users')
@@ -519,7 +525,7 @@ serve(async (req) => {
             logEntry.decision = 'access_granted';
             logEntry.reason = 'Observed user matched and has active temporary access.';
             logEntry.match_status = 'observed_user_updated';
-            // Lógica para subir/actualizar la imagen del rostro para usuarios observados existentes
+            // Lógica para subir/actualizar la imagen del rostro para usuarios observados existentes 1
             let uploadedImageUrl = matchedObservedUser.face_image_url; // Mantener la actual por defecto
             if (imageData) {
               uploadedImageUrl = await uploadFaceImage(matchedObservedUser.id, imageData, true); // True para usuario observado
@@ -572,6 +578,7 @@ serve(async (req) => {
                   distance: actualDistance,
                   faceImageUrl: updatedObservedUser.face_image_url,
                   aiAction: updatedObservedUser.ai_action,
+                  consecutiveDeniedAccesses: updatedObservedUser.consecutive_denied_accesses,
                 },
               };
             }
