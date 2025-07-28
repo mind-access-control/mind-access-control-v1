@@ -1,6 +1,5 @@
 const express = require('express');
 const mqtt = require('mqtt');
-require('dotenv').config(); // Soporte para variables de entorno locales
 const app = express();
 
 app.use(express.json());
@@ -16,15 +15,15 @@ app.use((req, res, next) => {
   next();
 });
 // --- FIN CORS ---
-
-// Configura la conexión al broker MQTT usando variables de entorno
+console.log('Microservicio iniciado, esperando conexiones...');
+// Configura la IP y puerto del broker MQTT (Raspberry Pi o broker en la nube)
 const mqttClient = mqtt.connect({
   host: process.env.MQTT_HOST,
   port: process.env.MQTT_PORT,
   username: process.env.MQTT_USER,
   password: process.env.MQTT_PASS,
   protocol: 'mqtt'
-});
+}); 
 
 mqttClient.on('connect', () => {
   console.log('Conectado al broker MQTT');
@@ -66,4 +65,4 @@ app.post('/publish', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Microservicio MQTT escuchando en http://0.0.0.0:${PORT}/publish`);
-}); 
+});

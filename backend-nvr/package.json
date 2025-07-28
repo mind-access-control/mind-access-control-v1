@@ -1,0 +1,19 @@
+{
+  "name": "backend-nvr",
+  "version": "1.0.0",
+  "description": "Backend NVR para Raspberry Pi: reconocimiento facial, Supabase y MQTT",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@vladmandic/face-api": "^1.11.7",
+    "@tensorflow/tfjs-node": "^4.16.0",
+    "canvas": "^2.11.2",
+    "fluent-ffmpeg": "^2.1.2",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^2.6.7",
+    "mqtt": "^5.3.6",
+    "@supabase/supabase-js": "^2.39.7"
+  }
+} 
