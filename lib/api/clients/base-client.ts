@@ -1,9 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { 
-  ApiResponse, 
-  ApiError, 
-  ValidationError,
-} from '@/lib/api/types';
+import { ApiResponse, ApiError, ValidationError } from '@/lib/api/types';
 
 import { EMPTY_STRING } from '@/lib/constants';
 
@@ -22,7 +18,9 @@ export interface ApiClientConfig {
 
 const DEFAULT_CONFIG: ApiClientConfig = {
   baseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
-  baseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || EMPTY_STRING,
+  baseAnonKey:
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
   timeout: 30000, // 30 seconds
   retries: 3,
   retryDelay: 1000, // 1 second
@@ -100,15 +98,14 @@ export abstract class BaseApiClient {
   /**
    * Returns the headers for the request. Override in subclasses for custom headers.
    */
-  protected async getHeaders(
-    requestId: string,
-    extraHeaders: Record<string, string>
-  ): Promise<Record<string, string>> {
-    const { data: { session } } = await supabase.auth.getSession();
+  protected async getHeaders(requestId: string, extraHeaders: Record<string, string>): Promise<Record<string, string>> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) throw new Error('No active session found');
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${session.access_token}`,
       // 'X-Request-ID': requestId, // Eliminado para evitar problemas de CORS
       ...extraHeaders,
     };
@@ -162,27 +159,17 @@ export abstract class BaseApiClient {
     }
 
     // Build the request context (can be overridden)
-    const requestContext = await this.buildRequestContext(
-      method,
-      url.toString(),
-      body,
-      headers,
-      requestId,
-      timestamp
-    );
+    const requestContext = await this.buildRequestContext(method, url.toString(), body, headers, requestId, timestamp);
 
     // Apply request interceptors
-    const interceptedRequest = this.requestInterceptors.reduce(
-      (context, interceptor) => interceptor(context),
-      requestContext
-    );
+    const interceptedRequest = this.requestInterceptors.reduce((context, interceptor) => interceptor(context), requestContext);
 
     // Make request with retry logic
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
       try {
         const startTime = Date.now();
-        
+
         const response = await fetch(interceptedRequest.url, {
           method: interceptedRequest.method,
           headers: interceptedRequest.headers,
@@ -204,10 +191,7 @@ export abstract class BaseApiClient {
         };
 
         // Apply response interceptors
-        const interceptedResponse = this.responseInterceptors.reduce(
-          (context, interceptor) => interceptor(context),
-          responseContext
-        );
+        const interceptedResponse = this.responseInterceptors.reduce((context, interceptor) => interceptor(context), responseContext);
 
         // Handle different response types
         if (!response.ok) {
@@ -225,18 +209,17 @@ export abstract class BaseApiClient {
           timestamp: interceptedResponse.timestamp,
           requestId,
         };
-
       } catch (error) {
         lastError = error as Error;
-        
+
         // Don't retry on certain errors
         if (error instanceof TypeError && error.message.includes('fetch')) {
           break;
         }
-        
+
         // Wait before retry (except on last attempt)
         if (attempt < this.config.retries) {
-          await new Promise(resolve => setTimeout(resolve, this.config.retryDelay * (attempt + 1)));
+          await new Promise((resolve) => setTimeout(resolve, this.config.retryDelay * (attempt + 1)));
         }
       }
     }
@@ -277,18 +260,15 @@ export abstract class BaseApiClient {
 // ============================================================================
 
 export abstract class AnonKeyApiClient extends BaseApiClient {
-  protected async getHeaders(
-    requestId: string,
-    extraHeaders: Record<string, string>
-  ): Promise<Record<string, string>> {
+  protected async getHeaders(requestId: string, extraHeaders: Record<string, string>): Promise<Record<string, string>> {
     const SUPABASE_ANON_KEY = this.config.baseAnonKey;
     if (!SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not configured');
     // Omit X-Request-ID
     const { ['X-Request-ID']: _, ...filteredHeaders } = extraHeaders;
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       ...filteredHeaders,
     };
   }
-} 
+}

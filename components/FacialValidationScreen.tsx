@@ -10,6 +10,7 @@ import { CaptureMode } from '@/app/enums';
 
 const FacialValidationScreen: React.FC = () => {
   // --- ESTADOS ---
+  const [isClient, setIsClient] = useState(false);
   const webcamRef = useRef<Webcam>(null);
   const [captureMode, setCaptureMode] = useState<CaptureMode>(CaptureMode.MANUAL);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -26,6 +27,11 @@ const FacialValidationScreen: React.FC = () => {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   const [intervalRestartTrigger, setIntervalRestartTrigger] = useState(false);
+
+  // --- Verificar que estamos en el cliente ---
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // --- REFERENCIAS (para valores mutables que no disparan re-renders) ---
   const detectionIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
@@ -198,7 +204,6 @@ const FacialValidationScreen: React.FC = () => {
           zoneId: selectedZone,
           imageData: capturedImageSrc,
         };
-
 
         const result = await FaceService.validateFace(request);
 
@@ -493,6 +498,11 @@ const FacialValidationScreen: React.FC = () => {
     webcamRef,
     selectedZone,
   ]);
+
+  // --- Renderizado condicional para evitar errores de hidratación ---
+  if (!isClient) {
+    return null; // No mostrar nada hasta que esté en el cliente
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4 font-inter">

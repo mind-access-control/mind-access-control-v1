@@ -1,8 +1,8 @@
 import { EDGE_FUNCTIONS } from '@/lib/constants';
 import { ApiResponse, CreateZoneRequest, UpdateZoneRequest, Zone } from '@/lib/api/types';
-import { BaseApiClient } from './base-client';
+import { AnonKeyApiClient } from './base-client';
 
-export class ZoneClient extends BaseApiClient {
+export class ZoneClient extends AnonKeyApiClient {
   /**
    * Get all zones
    * @returns The zones
