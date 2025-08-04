@@ -1,8 +1,8 @@
 import { EDGE_FUNCTIONS } from '@/lib/constants';
 import { ApiResponse, FaceValidationRequest, UnifiedValidationResponse } from '@/lib/api/types';
-import { BaseApiClient } from '@/lib/api/clients/base-client';
+import { AnonKeyApiClient } from '@/lib/api/clients/base-client';
 
-export class FaceClient extends BaseApiClient {
+export class FaceClient extends AnonKeyApiClient {
   /**
    * Validate a face
    * @param request - The request object containing the face embedding, zone ID, and image data
